@@ -1,3 +1,7 @@
+# Project specific
+/Vue/
+../Vue/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -119,6 +123,8 @@ pids
 *.db
 *.sqlite
 *.sqlite3
+*.sql
+dump-*.sql
 
 # Temporary files
 *.tmp
