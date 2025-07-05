@@ -62,6 +62,9 @@ export const apiService = {
   countries: {
     getAll: () =>
       api.get('/api/rmt/countries'),
+    
+    getById: (id: number) =>
+      api.get(`/api/rmt/countries/${id}`),
   },
 
   // RMT endpoints

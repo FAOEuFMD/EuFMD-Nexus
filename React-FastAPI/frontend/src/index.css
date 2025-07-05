@@ -5,6 +5,7 @@
 @layer base {
   html {
     font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px; /* Slightly reduced from browser default of 16px */
   }
   
   body {
@@ -48,70 +49,78 @@
     @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
   
+  /* RMT step container style matching Vue app */
+  .rmt-step {
+    @apply p-5 rounded-lg bg-white;
+    border: 4mm ridge rgba(211, 220, 50, 0.6);
+    border-width: thick;
+    border-radius: 10px;
+  }
+  
   /* RMT Color-coding styles matching Vue app */
-  .score-ok {
+  .score-ok, select.score-ok {
     background-color: rgb(228, 251, 228);
   }
 
-  .score-warning1 {
+  .score-warning1, select.score-warning1 {
     background-color: rgb(255, 251, 195);
   }
 
-  .score-warning2 {
+  .score-warning2, select.score-warning2 {
     background-color: rgb(255, 235, 181);
   }
 
-  .score-warning3 {
+  .score-warning3, select.score-warning3 {
     background-color: rgb(251, 219, 201);
   }
 
-  .score-warning4 {
+  .score-warning4, select.score-warning4 {
     background-color: rgb(255, 212, 207);
   }
 
-  .score-urgent {
+  .score-urgent, select.score-urgent {
     background-color: rgb(255, 184, 184);
   }
 
-  .score-na {
+  .score-na, select.score-na {
     background-color: rgb(226, 232, 240); /* light gray for N/A values */
   }
 
   /* Connection Color-coding styles - Original gray/neutral theme */
-  .connection-none {
+  .connection-none, select.connection-none {
     background-color: rgb(249, 250, 251); /* very light gray for 0 */
   }
 
-  .connection-low {
+  .connection-low, select.connection-low {
     background-color: rgb(243, 244, 246); /* light gray for 1 */
   }
 
-  .connection-medium {
+  .connection-medium, select.connection-medium {
     background-color: rgb(229, 231, 235); /* medium gray for 2 */
   }
 
-  .connection-high {
+  .connection-high, select.connection-high {
     background-color: rgb(209, 213, 219); /* darker gray for 3 */
   }
 
-  .connection-very-high {
+  .connection-very-high, select.connection-very-high {
     background-color: rgb(156, 163, 175); /* darkest gray for 4+ */
   }
 
   /* Pathway Color-coding styles - Blue theme matching Vue app */
-  .pathway-zero {
+  .pathway-zero, select.pathway-zero {
     background-color: rgb(240, 249, 255); /* lightest blue */
   }
 
-  .pathway-one {
+  .pathway-one, select.pathway-one {
     background-color: rgb(191, 219, 254); /* light blue */
   }
 
-  .pathway-two {
+  .pathway-two, select.pathway-two {
     background-color: rgb(147, 197, 253); /* medium blue */
   }
 
-  .pathway-three {
+  .pathway-three, select.pathway-three {
     background-color: rgb(59, 130, 246); /* darkest blue */
   }
   
@@ -157,6 +166,172 @@
 
   .bg-greens {
     @apply bg-green-greenMain;
+  }
+
+  /* RMT info/legend table styling to match Vue app */
+  .rmt-info-table {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .rmt-info-table thead, .rmt-table thead {
+    background-color: var(--color-green-greenMain, #15736d);
+    color: white;
+  }
+
+  .rmt-info-table th {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    border-bottom: 1px solid white;
+    font-weight: 500;
+    font-size: 0.75rem; /* Reduced from 0.875rem */
+  }
+
+  .rmt-info-table td {
+    padding: 0.5rem;
+    border: 1px solid #e2e8f0;
+    font-size: 0.8rem; /* Reduced from 0.875rem */
+  }
+
+  .rmt-info-box {
+    padding: 1rem;
+    background-color: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    height: 100%; /* Make sure the box takes up full height of its container */
+  }
+
+  .rmt-info-title {
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem; /* Added smaller font size */
+  }
+
+  .rmt-legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem; /* Added smaller font size */
+  }
+
+  .rmt-legend-color {
+    width: 1.3rem;
+    height: 1.3rem;
+    margin-right: 0.6rem;
+    border-radius: 0.2rem;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+  }
+  
+  /* RMT table styling */
+  .rmt-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+  
+  .rmt-table th {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    text-align: center;
+    border: 1px solid white;
+  }
+  
+  .rmt-table td {
+    padding: 0.4rem;
+    font-size: 0.8rem;
+    border: 1px solid #e2e8f0;
+  }
+  
+  .rmt-score {
+    padding: 0.4rem 0.8rem;
+    margin: 0.2rem 0.6rem;
+    border-radius: 0.25rem;
+    display: inline-block;
+    text-align: center;
+    min-width: 2.5rem;
+    font-size: 0.8rem;
+  }
+
+  /* Apply these styles only to select elements with the rmt-score class */
+  select.rmt-score {
+    padding-right: 1.5rem; /* Extra space for the dropdown arrow */
+    min-width: 4rem; /* Wider to fit both number and arrow */
+    appearance: none; /* Remove default dropdown appearance */
+    -webkit-appearance: none; /* Safari */
+    -moz-appearance: none; /* Firefox */
+    text-align: center;
+    text-indent: 0; /* Ensure text is not indented */
+    border: 1px solid #e2e8f0; /* Consistent border */
+    position: relative; /* For arrow positioning */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); /* Custom arrow */
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1em;
+  }
+  
+  /* We're now using direct styling on these elements in their respective class definitions */
+  
+  /* Firefox-specific fix */
+  @-moz-document url-prefix() {
+    select.rmt-score {
+      text-align: -moz-center; /* Firefox centering */
+      padding-right: 2rem; /* Extra padding in Firefox */
+    }
+  }
+  
+  /* Edge/IE fix */
+  select.rmt-score:focus::-ms-value {
+    background-color: transparent; /* Prevent color change on focus in Edge/IE */
+    color: inherit;
+  }
+  
+  /* Custom styling for select dropdown arrows */
+  select.rmt-score::-ms-expand {
+    display: none; /* Remove default arrow in IE */
+  }
+  
+  /* We're using background-image for the arrow instead of a pseudo-element */
+
+  /* Special class for RMT score numbers (no dropdown) */
+  .rmt-score-number {
+    padding: 0.4rem 0.8rem;
+    margin: 0.2rem 0.6rem;
+    border-radius: 0.25rem;
+    display: inline-block;
+    text-align: center;
+    min-width: 2.5rem;
+    font-size: 0.8rem;
+  }
+  
+  /* Grid layout for RMT sections to align elements */
+  .rmt-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  /* Media query for larger screens */
+  @media (min-width: 768px) {
+    .rmt-grid {
+      grid-template-columns: 2fr 1fr;
+      align-items: start;
+    }
   }
 
   .bg-login {
@@ -228,6 +403,78 @@
 
   .has-tooltip:hover .tooltip {
     @apply visible z-50;
+  }
+
+  /* RMT Visualization Styles */
+  .rmt-step {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6;
+  }
+  
+  .visualization-container {
+    @apply h-80 w-full relative overflow-hidden rounded-lg;
+  }
+  
+  /* Map styles */
+  .map-legend {
+    @apply absolute bottom-4 right-4 bg-white p-2 rounded shadow-md z-10;
+  }
+  
+  .map-legend-item {
+    @apply flex items-center mb-1;
+  }
+  
+  .map-legend-color {
+    @apply w-4 h-4 mr-2 rounded;
+  }
+  
+  .map-target-country {
+    @apply bg-gray-400;
+  }
+  
+  .map-low-risk {
+    @apply bg-green-500;
+  }
+  
+  .map-medium-risk {
+    @apply bg-yellow-500;
+  }
+  
+  .map-high-risk {
+    @apply bg-red-500;
+  }
+  
+  /* Disease status styles */
+  .status-free {
+    @apply bg-green-500 text-white;
+  }
+  
+  .status-sporadic {
+    @apply bg-yellow-400 text-gray-900;
+  }
+  
+  .status-regional {
+    @apply bg-orange-500 text-white;
+  }
+  
+  .status-widespread {
+    @apply bg-red-500 text-white;
+  }
+  
+  /* Chart selector buttons */
+  .chart-selector {
+    @apply flex space-x-2 mb-4;
+  }
+  
+  .chart-selector-button {
+    @apply px-3 py-1 text-sm rounded transition-colors;
+  }
+  
+  .chart-selector-button-active {
+    @apply bg-[#15736d] text-white;
+  }
+  
+  .chart-selector-button-inactive {
+    @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
   }
 }
 
