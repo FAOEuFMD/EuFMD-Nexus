@@ -1,41 +1,42 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const RISPLanding: React.FC = () => {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-green-primary mb-6">RISP - Risk Information Sharing Platform</h1>
-      <p className="text-gray-600 mb-4">
-        Risk Information Sharing Platform for authenticated users.
-      </p>
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <a 
-            href="/risp/outbreak" 
-            className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
-            <h3 className="font-semibold text-green-primary">Outbreak Entry</h3>
-            <p className="text-gray-600 text-sm">Report outbreak information</p>
-          </a>
+    <div className="container mx-auto px-4">
+      <section>
+        <p className="font-black capitalize text-2xl m-3 font-martaBold">
+          Risk Information Sharing Platform
+        </p>
+        <div className="flex justify-evenly mx-8 items-center">
+          <h3 className="text-lg mx-5 text-justify welcome-text">
+            Welcome to the Risk Information Sharing Platform. <br /> This platform allows you to report and share information. <br /> Your input is crucial to help us monitor and manage health risks effectively. Please answer the questions below to share information about outbreaks, control and surveillance measures for the selected time period.
+          </h3>
           
-          <a 
-            href="/risp/vaccination" 
-            className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
-            <h3 className="font-semibold text-green-primary">Vaccination</h3>
-            <p className="text-gray-600 text-sm">Manage vaccination records</p>
-          </a>
-          
-          <a 
-            href="/risp/surveillance" 
-            className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
-            <h3 className="font-semibold text-green-primary">Surveillance</h3>
-            <p className="text-gray-600 text-sm">Monitor surveillance activities</p>
-          </a>
+          <img 
+            src="https://i.pinimg.com/736x/c4/ea/ef/c4eaef915005c7fd654630b396020a5d.jpg" 
+            alt="Two cows standing in a field" 
+            className="rounded-xl w-96 m-5"
+          />
         </div>
-      </div>
+      </section>
+      <Link to="/risp/outbreak">
+        <button className="w-1/4 bg-green-greenMain hover:bg-green-greenMain2 text-white font-bold py-2 px-4 rounded my-10">
+          Continue
+        </button>
+      </Link>
     </div>
   );
 };
 
 export default RISPLanding;
+
+// Add the specific styles for RISP
+const style = document.createElement('style');
+style.textContent = `
+  .welcome-text {
+    width: 30rem;
+    line-height: 2.5rem;
+  }
+`;
+document.head.appendChild(style);

@@ -366,11 +366,11 @@
   }
 
   .nav-btn {
-    @apply px-2 py-1.5 font-semibold bg-transparent text-green-dark border-2 border-green-dark rounded mr-2 transition-all duration-300;
+    @apply px-2 py-1.5 font-semibold bg-transparent text-green-greenMain border-2 border-green-greenMain rounded mr-2 transition-all duration-300;
   }
 
   .nav-btn:hover {
-    @apply bg-green-greenMain text-white border-green-dark;
+    @apply bg-green-greenMain text-white border-green-greenMain;
   }
 
   .close-btn {

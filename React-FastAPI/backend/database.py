@@ -66,7 +66,22 @@ class DatabaseHelper:
                 if params is None:
                     result = connection.execute(text(query))
                 else:
-                    result = connection.execute(text(query), params)
+                    # Convert params to a dictionary for SQLAlchemy text() binding
+                    if isinstance(params, tuple) and len(params) == 1:
+                        # Handle the common case of a single parameter
+                        result = connection.execute(text(query.replace("%s", ":param1")), {"param1": params[0]})
+                    elif isinstance(params, tuple):
+                        # Convert tuple params to a dictionary
+                        param_dict = {f"param{i+1}": val for i, val in enumerate(params)}
+                        # Replace %s placeholders with named parameters
+                        modified_query = query
+                        for i in range(len(params)):
+                            modified_query = modified_query.replace("%s", f":param{i+1}", 1)
+                        result = connection.execute(text(modified_query), param_dict)
+                    else:
+                        # Assume it's already a dict or other compatible format
+                        result = connection.execute(text(query), params)
+                        
                 if query.strip().upper().startswith('SELECT'):
                     rows = [dict(row._mapping) for row in result]
                     return {"data": rows, "error": None}

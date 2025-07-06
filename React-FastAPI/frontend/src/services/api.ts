@@ -20,7 +20,9 @@ api.interceptors.request.use(
     if (!isRMTEndpoint) {
       const token = localStorage.getItem('token');
       if (token) {
-        config.headers['x-access-token'] = token;
+        // Set token in both header formats for compatibility
+        config.headers['x-access-token'] = token;  // Express backend format
+        config.headers['Authorization'] = `Bearer ${token}`;  // FastAPI format
       }
     }
     return config;

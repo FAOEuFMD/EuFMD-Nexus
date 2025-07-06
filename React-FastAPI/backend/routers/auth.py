@@ -10,9 +10,11 @@ router = APIRouter(prefix="/api/auth", tags=["authentication"])
 @router.post("/login", response_model=Token)
 async def login(user_credentials: UserLogin):
     """Login endpoint - authenticates user and returns JWT token"""
+    print(f"Login attempt for email: {user_credentials.email}")
     user = await authenticate_user(user_credentials.email, user_credentials.password)
     
     if not user:
+        print(f"Login failed for email: {user_credentials.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

@@ -4,8 +4,7 @@ import { apiService } from '../services/api';
 import { calculateRiskScores } from '../utils/calculateRiskScores';
 
 // Import map and chart components
-// import RiskScoreMap from '../components/RMT/maps/RiskScoreMap'; // Commented out as it's not currently in use
-import DebugRiskMap from '../components/RMT/maps/DebugRiskMap';
+import RiskScoreMap from '../components/RMT/maps/RiskScoreMap';
 import DiseaseStatusHeatmap from '../components/RMT/charts/DiseaseStatusHeatmap';
 import PathwayEffectivenessRadar from '../components/RMT/charts/PathwayEffectivenessRadar';
 import EnhancedRiskPathwayChart from '../components/RMT/charts/RiskPathwayChart';
@@ -297,12 +296,29 @@ const RMTResults: React.FC = () => {
   const formatRiskScoresForMap = () => {
     const countryRiskScores: Record<string, Record<string, number>> = {};
     
+    // Find maximum risk score for normalization
+    let maxRiskScore = 0;
+    riskScores.forEach(score => {
+      if (score.riskScore > maxRiskScore) {
+        maxRiskScore = score.riskScore;
+      }
+    });
+    
+    // Use a safe normalization factor (ensure we don't divide by zero)
+    const normalizationFactor = maxRiskScore > 0 ? maxRiskScore / 3 : 1;
+    
+    // Normalize and collect scores
     riskScores.forEach(score => {
       if (!countryRiskScores[score.sourceCountry]) {
         countryRiskScores[score.sourceCountry] = {};
       }
-      countryRiskScores[score.sourceCountry][score.disease] = score.riskScore;
+      // Normalize score to 0-3 range
+      const normalizedScore = Math.min(3, score.riskScore / normalizationFactor);
+      countryRiskScores[score.sourceCountry][score.disease] = normalizedScore;
     });
+    
+    console.log('Max risk score found:', maxRiskScore);
+    console.log('Normalization factor:', normalizationFactor);
     
     return sourceCountries.map(country => {
       const scores = countryRiskScores[country.name_un] || {};
@@ -400,21 +416,28 @@ const RMTResults: React.FC = () => {
           <select 
             value={selectedDisease} 
             onChange={(e) => setSelectedDisease(e.target.value)}
-            className="border rounded px-2 py-1 bg-white"
+            className="border rounded px-2 py-1 bg-white min-w-[150px]"
+            style={{ 
+              paddingRight: '2rem',
+              backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 0.7rem center',
+              backgroundSize: '0.65em',
+              appearance: 'none'
+            }}
           >
             {diseases.map(disease => (
               <option key={disease} value={disease}>{disease}</option>
             ))}
           </select>
         </div>
-        {/* Use the debug map for now to ensure we at least see some data */}
-        <DebugRiskMap 
+        <RiskScoreMap 
           countryData={mapData}
           targetCountryName={receiverCountry}
           selectedDisease={selectedDisease}
         />
-        {/* Original map commented out for debugging
-        <RiskScoreMap 
+        {/* Debug map kept as fallback if needed 
+        <DebugRiskMap 
           countryData={mapData}
           targetCountryName={receiverCountry}
           selectedDisease={selectedDisease}
@@ -489,7 +512,11 @@ const RMTResults: React.FC = () => {
           This heatmap shows the disease status for each disease across all source countries.
           Darker colors indicate higher disease prevalence.
         </p>
-        <DiseaseStatusHeatmap diseaseStatusData={diseaseStatus} />
+        <div className="flex justify-center">
+          <div className="w-full">
+            <DiseaseStatusHeatmap diseaseStatusData={diseaseStatus} />
+          </div>
+        </div>
       </div>
 
       {/* Pathway Effectiveness Radar */}

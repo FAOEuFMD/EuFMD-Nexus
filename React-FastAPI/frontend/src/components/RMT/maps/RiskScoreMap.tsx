@@ -51,9 +51,12 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
 
   // Color function based on risk score
   const getRiskColor = (score: number): string => {
-    if (score === 0) return '#4CAF50'; // Low risk (green)
-    if (score <= 1) return '#FFEB3B'; // Low-medium risk (yellow)
-    if (score <= 2) return '#FF9800'; // Medium-high risk (orange)
+    // Normalize score if it's outside the expected 0-3 range
+    const normalizedScore = score > 3 ? Math.min(3, score / Math.ceil(score / 3)) : score;
+    
+    if (normalizedScore === 0) return '#4CAF50'; // Low risk (green)
+    if (normalizedScore <= 1) return '#FFEB3B'; // Low-medium risk (yellow)
+    if (normalizedScore <= 2) return '#FF9800'; // Medium-high risk (orange)
     return '#F44336'; // High risk (red)
   };
 
@@ -173,6 +176,20 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
       
       if (selectedDisease !== 'overall') {
         tooltipContent += ` (${selectedDisease})`;
+      }
+      
+      // Show individual disease scores if available
+      if (selectedDisease === 'overall' && countryRiskData.riskScores) {
+        tooltipContent += '<br/><small>Disease scores:';
+        ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'].forEach(disease => {
+          // TypeScript-safe way to access disease scores
+          const diseaseProp = disease as keyof typeof countryRiskData.riskScores;
+          const score = countryRiskData.riskScores[diseaseProp];
+          if (score !== undefined) {
+            tooltipContent += `<br/>${disease}: ${score.toFixed(1)}`;
+          }
+        });
+        tooltipContent += '</small>';
       }
     }
     

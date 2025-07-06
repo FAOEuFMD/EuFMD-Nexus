@@ -101,6 +101,27 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           )}
 
           <hr className="my-3 hr-text gradient" data-content="" />
+          
+          {/* RISP section - moved up above Tools and Resources */}
+          {(isAdmin || isRispUser) && (
+            <div>
+              <Link
+                className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
+                to="/risp"
+                onClick={onClose}
+              >
+                <FontAwesomeIcon icon={faTools} className="text-xl" />
+                <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
+                  RISP
+                </span>
+                <div className="flex flex-col items-start">
+                  <span>RISP</span>
+                </div>
+              </Link>
+            </div>
+          )}
+          
+          <hr className="my-3 hr-text gradient" data-content="" />
           <h1 className="border-white border-2 p-2 rounded">Tools and Resources</h1>
           
           <div>
@@ -216,26 +237,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               FMD-PCP Map
             </Link>
           </div>
-
-          <hr className="my-3 hr-text gradient" data-content="" />
-          
-          {(isAdmin || isRispUser) && (
-            <div>
-              <Link
-                className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
-                to="/risp"
-                onClick={onClose}
-              >
-                <FontAwesomeIcon icon={faTools} className="text-xl" />
-                <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
-                  RISP
-                </span>
-                <div className="flex flex-col items-start">
-                  <span>RISP</span>
-                </div>
-              </Link>
-            </div>
-          )}
         </div>
       </div>
     </div>
