@@ -38,3 +38,51 @@ When code is pushed to the `main` branch, CircleCI will:
 If you need to deploy the application manually, follow these steps:
 
 1. Build the React frontend:
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   ```
+
+2. Transfer the files to your EC2 instance:
+   ```bash
+   # Create directories on EC2
+   ssh ubuntu@13.49.235.70 "sudo mkdir -p /var/www/eufmd-nexus/frontend /var/www/eufmd-nexus/backend"
+   
+   # Transfer frontend build files
+   scp -r frontend/build/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/frontend/
+   
+   # Transfer backend files
+   scp -r backend/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/
+   ```
+
+3. SSH into your EC2 instance and set up the backend:
+   ```bash
+   ssh ubuntu@13.49.235.70
+   cd /var/www/eufmd-nexus/backend
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+4. Install and start the systemd service:
+   ```bash
+   sudo cp /path/to/deployment/eufmd-nexus-api.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable eufmd-nexus-api
+   sudo systemctl start eufmd-nexus-api
+   ```
+
+5. Configure Nginx:
+   ```bash
+   sudo cp /path/to/deployment/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus
+   sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+## Troubleshooting
+
+- Check the service status: `sudo systemctl status eufmd-nexus-api`
+- View backend logs: `sudo journalctl -u eufmd-nexus-api`
+- View Nginx logs: `sudo tail -f /var/log/nginx/eufmd-nexus-error.log`

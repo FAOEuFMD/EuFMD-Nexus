@@ -11,15 +11,15 @@ jobs:
       - checkout
       - node/install-packages:
           pkg-manager: npm
-          app-dir: ./React-FastAPI/frontend
+          app-dir: ./frontend
       - run:
           name: Build React Frontend
-          command: cd React-FastAPI/frontend && npm run build
+          command: cd frontend && npm run build
       - persist_to_workspace:
           root: ./
           paths:
-            - React-FastAPI/frontend/build
-            - React-FastAPI/backend
+            - frontend/build
+            - backend
             - deployment
 
   deploy-to-aws:
@@ -39,8 +39,8 @@ jobs:
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mkdir -p /var/www/eufmd-nexus/frontend /var/www/eufmd-nexus/backend"
             
             # Transfer files
-            scp -r -o StrictHostKeyChecking=no ./React-FastAPI/frontend/build/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/frontend/
-            scp -r -o StrictHostKeyChecking=no ./React-FastAPI/backend/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/
+            scp -r -o StrictHostKeyChecking=no ./frontend/build/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/frontend/
+            scp -r -o StrictHostKeyChecking=no ./backend/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/
             
             # Copy service and Nginx config files
             scp -o StrictHostKeyChecking=no ./deployment/eufmd-nexus-api.service ubuntu@13.49.235.70:/tmp/
