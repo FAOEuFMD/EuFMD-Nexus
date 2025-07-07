@@ -1,0 +1,69 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@5.1.0
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/node:18.20.2
+    steps:
+      - checkout
+      - node/install-packages:
+          pkg-manager: npm
+          app-dir: ./React-FastAPI/frontend
+      - run:
+          name: Build React Frontend
+          command: cd React-FastAPI/frontend && npm run build
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - React-FastAPI/frontend/build
+            - React-FastAPI/backend
+            - deployment
+
+  deploy-to-aws:
+    docker:
+      - image: cimg/node:18.20.2
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ./
+      - add_ssh_keys:
+          fingerprints:
+            - "48:71:27:d6:7d:df:89:a7:cf:0e:60:09:ba:c5:27:85"
+      - run:
+          name: Deploy to AWS EC2
+          command: |
+            # Create directory structure on EC2
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mkdir -p /var/www/eufmd-nexus/frontend /var/www/eufmd-nexus/backend"
+            
+            # Transfer files
+            scp -r -o StrictHostKeyChecking=no ./React-FastAPI/frontend/build/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/frontend/
+            scp -r -o StrictHostKeyChecking=no ./React-FastAPI/backend/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/
+            
+            # Copy service and Nginx config files
+            scp -o StrictHostKeyChecking=no ./deployment/eufmd-nexus-api.service ubuntu@13.49.235.70:/tmp/
+            scp -o StrictHostKeyChecking=no ./deployment/nginx-eufmd-nexus.conf ubuntu@13.49.235.70:/tmp/
+            
+            # Install service and Nginx config
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable eufmd-nexus-api"
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus && sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/"
+            
+            # Set up Python environment and install dependencies
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+            
+            # Restart services
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo systemctl restart eufmd-nexus-api && sudo systemctl restart nginx"
+
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - build-and-test
+      - deploy-to-aws:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              only: main
