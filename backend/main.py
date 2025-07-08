@@ -16,7 +16,8 @@ from routers import (
     emergency_response,
     feedback,
     visits,
-    stock
+    stock,
+    loa
 )
 
 # Create FastAPI application
@@ -46,6 +47,7 @@ app.include_router(emergency_response.router)
 app.include_router(feedback.router)
 app.include_router(visits.router)
 app.include_router(stock.router)
+app.include_router(loa.router)
 
 # Root endpoint
 @app.get("/")

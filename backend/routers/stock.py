@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/stock", tags=["stock"])
 async def get_stocks(current_user: dict = Depends(get_current_user)):
     """Get all stock entries"""
     try:
-        query = "SELECT * FROM stock_entry ORDER BY created_at DESC"
+        query = "SELECT * FROM stock_entry"
         result = await db_helper.execute_main_query(query)
         if result["error"]:
             raise HTTPException(status_code=500, detail=result["error"])
@@ -30,7 +30,6 @@ async def add_stock_entry(
         po = request_data.get("PO")
         product = request_data.get("product")
         serotype = request_data.get("serotype")
-        code = request_data.get("code")
         quantity = request_data.get("quantity")
         purchase_date = request_data.get("purchase_date")
         expiry_date = request_data.get("expiry_date")
@@ -38,12 +37,12 @@ async def add_stock_entry(
 
         insert_query = """
         INSERT INTO stock_entry (
-            LOA_DP, supplier, PO, product, serotype, code, quantity,
+            `LOA/DP`, supplier, PO, product, serotype, quantity,
             purchase_date, expiry_date, notes
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         
-        params = (loa_dp, supplier, po, product, serotype, code, quantity, purchase_date, expiry_date, notes)
+        params = (loa_dp, supplier, po, product, serotype, quantity, purchase_date, expiry_date, notes)
         result = await db_helper.execute_main_query(insert_query, params)
         
         if result["error"]:
@@ -69,10 +68,13 @@ async def update_stock_entry(
         params = []
         
         for key, value in changes.items():
-            if key in ['quantity', 'LOA_DP', 'supplier', 'PO', 'product', 'serotype', 'code', 'purchase_date', 'expiry_date', 'notes']:
+            if key in ['quantity', 'LOA_DP', 'supplier', 'PO', 'product', 'serotype', 'purchase_date', 'expiry_date', 'notes']:
                 if key == 'quantity':
                     # For quantity updates, we typically want to add to existing quantity
                     set_clauses.append("quantity = quantity + %s")
+                elif key == 'LOA_DP':
+                    # Handle the special column name with slash
+                    set_clauses.append("`LOA/DP` = %s")
                 else:
                     set_clauses.append(f"{key} = %s")
                 params.append(value)

@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import BarChart from '../components/BarChart';
+import LOAModal from '../components/LOAModal';
+import StockModal from '../components/StockModal';
+import MapModal from '../components/MapModal';
 
 interface Country {
   id: number;
@@ -265,7 +269,7 @@ const DiagnosticSupport: React.FC = () => {
             <div className="flex flex-row m-4 gap-4 rounded-xl bg-white border border-gray-300 shadow-md p-4">
               {/* Chart */}
               <div className="w-3/5 text-center text-xlg font-black border border-gray-300 rounded-lg p-4" style={{marginRight: '20px'}}>
-                Products
+                <BarChart uniqueProductsArray={uniqueProductsArray} />
               </div>
 
               {/* Color Legends */}
@@ -439,46 +443,27 @@ const DiagnosticSupport: React.FC = () => {
 
       {/* Modals */}
       {isMapModalVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg overflow-hidden shadow-xl transform transition-all">
-            <div className="p-4">
-              <div style={{height: '400px', width: '800px'}}>
-                <p className="text-center text-gray-600">Map view would be implemented here with Leaflet</p>
-              </div>
-            </div>
-            <div className="p-4 flex justify-end">
-              <button onClick={closeMapModal} className="close-btn nav-btn">Close</button>
-            </div>
-          </div>
-        </div>
+        <MapModal
+          isVisible={isMapModalVisible}
+          procurements={filteredProcurements}
+          matchedCountries={matchedCountries}
+          onClose={closeMapModal}
+        />
       )}
 
       {isStockModalVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg overflow-hidden shadow-xl transform transition-all">
-            <div className="p-4">
-              <h3 className="text-lg font-medium mb-4">Stock Management</h3>
-              <p className="text-gray-600">Stock management interface would be implemented here</p>
-            </div>
-            <div className="p-4 flex justify-end">
-              <button onClick={closeStockModal} className="close-btn nav-btn">Close</button>
-            </div>
-          </div>
-        </div>
+        <StockModal
+          isVisible={isStockModalVisible}
+          countries={countries}
+          onClose={closeStockModal}
+        />
       )}
 
       {isLOAModalVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg overflow-hidden shadow-xl transform transition-all">
-            <div className="p-4">
-              <h3 className="text-lg font-medium mb-4">LOA Management</h3>
-              <p className="text-gray-600">LOA management interface would be implemented here</p>
-            </div>
-            <div className="p-4 flex justify-end">
-              <button onClick={closeLOAModal} className="close-btn nav-btn">Close</button>
-            </div>
-          </div>
-        </div>
+        <LOAModal 
+          isVisible={isLOAModalVisible}
+          onClose={closeLOAModal}
+        />
       )}
 
       {isConfirmDeleteModalVisible && (

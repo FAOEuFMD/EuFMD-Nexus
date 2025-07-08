@@ -605,11 +605,14 @@
     background-color: rgba(1, 80, 57, 0.1);
   }
 
+  .expired-row {
+    background-color: #d3d3d3;
+  }
+
   .description-cell {
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-height: 100px;
+    overflow-y: auto;
+    white-space: pre-wrap;
   }
 
   .close-btn {
@@ -626,11 +629,64 @@
     background-color: #4b5563;
   }
 
+  /* LOA Modal specific styles */
+  .modal-container {
+    position: relative;
+    max-height: 90vh;
+    width: 90vw;
+    overflow-y: auto;
+    z-index: 1000;
+  }
+
+  .editable-input {
+    background-color: rgba(1, 80, 57, 0.1);
+    border: 1px solid #01503a;
+    border-radius: 4px;
+    padding: 5px;
+    width: 100%;
+    min-width: 80px;
+  }
+
+  .sticky-header {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 1050;
+    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+  }
+
+  .table-container {
+    max-height: 70vh;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1000;
+  }
+
+  .selected-row {
+    background-color: rgba(1, 80, 57, 0.1);
+  }
+
+  .expired-row {
+    background-color: #d3d3d3;
+  }
+
+  .description-cell {
+    max-height: 100px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+
   @media (max-width: 1500px) {
     #graph-component,
     #map-component {
       flex: 1 1 100%;
       height: auto;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .modal-container {
+      width: 95vw;
     }
   }
 }

@@ -2,8 +2,9 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
 from config import settings
 from models import TokenData
 from database import db_helper
@@ -12,7 +13,7 @@ from database import db_helper
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Token handling
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
@@ -81,16 +82,28 @@ async def authenticate_user(email: str, password: str):
     print(f"Auth success: User {email} authenticated successfully with role: {user.get('role', 'unknown')}")
     return user
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user from JWT token"""
+async def get_current_user(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    """Get current user from JWT token - supports both Bearer and x-access-token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    try:
+    token = None
+    
+    # Try to get token from Authorization header (Bearer token)
+    if credentials:
         token = credentials.credentials
+    
+    # If no Bearer token, try x-access-token header (for Vue app compatibility)
+    if not token:
+        token = request.headers.get("x-access-token")
+    
+    if not token:
+        raise credentials_exception
+    
+    try:
         payload = jwt.decode(token, settings.super_secret, algorithms=[settings.algorithm])
         user_id: int = payload.get("user_id")
         user_role: str = payload.get("user_role")

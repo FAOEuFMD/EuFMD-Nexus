@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import NexusIcon from './NexusIcon';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -33,8 +34,9 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
         <div className="container flex justify-between items-center">
           {/* Home Logo */}
           <div>
-            <Link to="/">
-              <h3 className="text-2xl text-white font-semibold">EuFMD Hub</h3>
+            <Link to="/" className="flex items-center">
+              <h3 className="text-2xl text-white font-semibold">EuFMD Nexus</h3>
+              <NexusIcon className="ml-2 text-white" size={28} />
             </Link>
           </div>
         </div>
