@@ -106,17 +106,17 @@ jobs:
             
             # Create environment variables file for systemd service
             echo "Setting up environment variables for systemd service..."
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo bash -c 'cat > /etc/systemd/system/eufmd-nexus-api.env << EOL
-DB_HOST=${DB_HOST}
-DB_USER=${DB_USER}
-DB_PASS=${DB_PASS}
-DB_NAME=${DB_NAME}
-DB2_NAME=${DB2_NAME}
-SECRET_KEY=${SECRET_KEY}
-SUPER_SECRET=${SUPER_SECRET}
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 'sudo bash -c "cat > /etc/systemd/system/eufmd-nexus-api.env << EOF
+DB_HOST=$DB_HOST
+DB_USER=$DB_USER
+DB_PASS=$DB_PASS
+DB_NAME=$DB_NAME
+DB2_NAME=$DB2_NAME
+SECRET_KEY=$SECRET_KEY
+SUPER_SECRET=$SUPER_SECRET
 NODE_ENV=production
-ALLOWED_ORIGINS=[\"https://nexus.eufmd.org\", \"https://nexus-dev.eufmd.org\"]
-EOL'"
+ALLOWED_ORIGINS=[\\\"https://nexus.eufmd.org\\\", \\\"https://nexus-dev.eufmd.org\\\"]
+EOF"'
             
             # Update permissions
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo chown -R ubuntu:ubuntu /var/www/eufmd-nexus"
