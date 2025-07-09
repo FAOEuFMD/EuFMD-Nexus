@@ -106,24 +106,30 @@ jobs:
             
             # Create environment variables file for systemd service
             echo "Setting up environment variables for systemd service..."
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 'sudo bash -c "cat > /etc/systemd/system/eufmd-nexus-api.env << EOF
-DB_HOST=$DB_HOST
-DB_USER=$DB_USER
-DB_PASS=$DB_PASS
-DB_NAME=$DB_NAME
-DB2_NAME=$DB2_NAME
-SECRET_KEY=$SECRET_KEY
-SUPER_SECRET=$SUPER_SECRET
-NODE_ENV=production
-ALLOWED_ORIGINS=[\\\"https://nexus.eufmd.org\\\", \\\"https://nexus-dev.eufmd.org\\\"]
-EOF"'
+            echo "DB_HOST=$DB_HOST" > env_temp
+            echo "DB_USER=$DB_USER" >> env_temp
+            echo "DB_PASS=$DB_PASS" >> env_temp
+            echo "DB_NAME=$DB_NAME" >> env_temp
+            echo "DB2_NAME=$DB2_NAME" >> env_temp
+            echo "SECRET_KEY=$SECRET_KEY" >> env_temp
+            echo "SUPER_SECRET=$SUPER_SECRET" >> env_temp
+            echo "NODE_ENV=production" >> env_temp
+            echo "ALLOWED_ORIGINS=[\"https://nexus.eufmd.org\", \"https://nexus-dev.eufmd.org\"]" >> env_temp
+            scp -o StrictHostKeyChecking=no env_temp ubuntu@13.49.235.70:/tmp/eufmd-nexus-api.env
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.env /etc/systemd/system/eufmd-nexus-api.env && sudo chmod 600 /etc/systemd/system/eufmd-nexus-api.env"
             
             # Update permissions
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo chown -R ubuntu:ubuntu /var/www/eufmd-nexus"
             
+            # Reload systemd to recognize the updated environment file
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo systemctl daemon-reload"
+            
             # Restart services
             echo "Restarting services..."
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo systemctl restart eufmd-nexus-api && sudo systemctl restart nginx"
+            
+            # Clean up temporary files
+            rm -f env_temp
             
             echo "Deployment completed successfully!"
 
