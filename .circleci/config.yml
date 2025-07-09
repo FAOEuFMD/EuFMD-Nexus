@@ -13,6 +13,10 @@ jobs:
       - node/install-packages:
           pkg-manager: npm
           app-dir: ./frontend
+          include-dependencies-from-package-json: true
+      - run:
+          name: Verify Tailwind plugins installation
+          command: cd frontend && npm list @tailwindcss/forms @tailwindcss/typography || npm install --save-dev @tailwindcss/forms @tailwindcss/typography
       - run:
           name: Build React Frontend
           command: cd frontend && npm run build
@@ -63,7 +67,7 @@ jobs:
             
             # Set up Python environment and install dependencies
             echo "Setting up Python environment..."
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && python3 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
             
             # Copy environment variables
             echo "Setting up environment variables..."
