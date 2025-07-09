@@ -25,6 +25,7 @@ jobs:
             echo "      colors: {" >> tailwind.config.js
             echo "        green: {" >> tailwind.config.js
             echo "          greenMain: '#15736d'," >> tailwind.config.js
+            echo "          greenMain2: '#20876D'," >> tailwind.config.js
             echo "          dark: '#015039'," >> tailwind.config.js
             echo "          highlight: '#94AD30'," >> tailwind.config.js
             echo "          secondary: '#75AD82'," >> tailwind.config.js
