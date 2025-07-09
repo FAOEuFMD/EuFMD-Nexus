@@ -10,15 +10,14 @@ jobs:
       - image: cimg/node:18.20.2
     steps:
       - checkout
-      - node/install-packages:
-          pkg-manager: npm
-          app-dir: ./frontend
       - run:
-          name: Install dependencies
-          command: cd frontend && npm install
-      - run:
-          name: Install Tailwind plugins
-          command: cd frontend && npm install --save-dev @tailwindcss/forms @tailwindcss/typography
+          name: Install all dependencies
+          command: |
+            echo "Installing frontend dependencies..."
+            cd frontend
+            npm install
+            npm install --save-dev @tailwindcss/forms @tailwindcss/typography
+            npm list @tailwindcss/forms @tailwindcss/typography
       - run:
           name: Build React Frontend
           command: cd frontend && npm run build
