@@ -20,7 +20,29 @@ jobs:
             echo "Creating a simplified tailwind.config.js for build..."
             echo "module.exports = {" > tailwind.config.js
             echo "  content: ['./src/**/*.{js,jsx,ts,tsx}']," >> tailwind.config.js
-            echo "  theme: { extend: {} }," >> tailwind.config.js
+            echo "  theme: {" >> tailwind.config.js
+            echo "    extend: {" >> tailwind.config.js
+            echo "      colors: {" >> tailwind.config.js
+            echo "        green: {" >> tailwind.config.js
+            echo "          greenMain: '#15736d'," >> tailwind.config.js
+            echo "          dark: '#015039'," >> tailwind.config.js
+            echo "          highlight: '#94AD30'," >> tailwind.config.js
+            echo "          secondary: '#75AD82'," >> tailwind.config.js
+            echo "          primary: '#2a4d4f'," >> tailwind.config.js
+            echo "          light: '#CADFBF'," >> tailwind.config.js
+            echo "          forest: '#194e3b'," >> tailwind.config.js
+            echo "          light2: '#8faa8c'," >> tailwind.config.js
+            echo "          lighter: '#bacaaf'," >> tailwind.config.js
+            echo "          tom: '#69927f'," >> tailwind.config.js
+            echo "          competency3: '#4f8e32'," >> tailwind.config.js
+            echo "          competency4: '#15592b'," >> tailwind.config.js
+            echo "          competency5: '#073a1e'," >> tailwind.config.js
+            echo "          box4: '#829c7c'," >> tailwind.config.js
+            echo "          box6: '#adbe8e'," >> tailwind.config.js
+            echo "        }," >> tailwind.config.js
+            echo "      }," >> tailwind.config.js
+            echo "    }," >> tailwind.config.js
+            echo "  }," >> tailwind.config.js
             echo "  plugins: []" >> tailwind.config.js
             echo "}" >> tailwind.config.js
             echo "Modified tailwind.config.js:"
