@@ -79,9 +79,6 @@ const getPageTitle = (pathname: string): string => {
     'Vademos': 'Vademos',
     'RMTData': 'RMTData',
     'rmt-data': 'RMTData',
-    'training-data': 'TrainingData',
-    'training-data/courses': 'Training Data > Non-moodle courses',
-    'training-data/enrolments': 'Training Data > Enrolments',
     'view-past-training-impact': 'TrainingImpact',
   };
   

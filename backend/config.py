@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     db_pass: str
     db_name: str
     db2_name: str
-    db3_name: str
-    db4_name: str
     
     # Security
     secret_key: str

@@ -6,5 +6,4 @@ export { default as RouteGuard } from './RouteGuard';
 // PCP Components
 export * from './PCP';
 
-// Training Components
-export * from './Training';
+

@@ -25,10 +25,8 @@ import {
   GetPreparedWall,
   EmergencyToolbox,
   Vademos,
-  TrainingData,
-  TrainingNMCourses,
-  TrainingNMEnrolments,
-  ViewPastTrainingData
+  ViewPastTrainingData,
+
 } from './pages';
 
 const AppRouter: React.FC = () => {
@@ -167,7 +165,7 @@ const AppRouter: React.FC = () => {
               </RouteGuard>
             } 
           />
-          
+
           <Route 
             path="view-past-training-impact" 
             element={
@@ -176,6 +174,7 @@ const AppRouter: React.FC = () => {
               </RouteGuard>
             } 
           />
+
 
           {/* Admin-only Routes */}
           <Route 
@@ -214,32 +213,7 @@ const AppRouter: React.FC = () => {
             } 
           />
           
-          <Route 
-            path="training-data" 
-            element={
-              <RouteGuard requiresAdmin={true}>
-                <TrainingData />
-              </RouteGuard>
-            } 
-          />
-          
-          <Route 
-            path="training-data/courses" 
-            element={
-              <RouteGuard requiresAdmin={true}>
-                <TrainingNMCourses />
-              </RouteGuard>
-            } 
-          />
-          
-          <Route 
-            path="training-data/enrolments" 
-            element={
-              <RouteGuard requiresAdmin={true}>
-                <TrainingNMEnrolments />
-              </RouteGuard>
-            } 
-          />
+
 
           {/* Authenticated Routes (RISP) */}
           <Route 

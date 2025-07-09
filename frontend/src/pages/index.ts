@@ -21,7 +21,4 @@ export { default as GetPreparedWall } from './GetPreparedWall';
 export { default as EmergencyToolbox } from './EmergencyToolbox';
 export { default as Vademos } from './Vademos';
 export { default as RMTData } from './RMTData';
-export { default as TrainingData } from './TrainingData';
-export { default as TrainingNMCourses } from './TrainingNMCourses';
-export { default as TrainingNMEnrolments } from './TrainingNMEnrolments';
 export { default as ViewPastTrainingData } from './ViewPastTrainingData';

@@ -10,7 +10,6 @@ from routers import (
     auth,
     rmt,
     pcp,
-    training,
     fast_report,
     diagnostic_support,
     emergency_response,
@@ -40,7 +39,6 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(rmt.router)
 app.include_router(pcp.router)
-app.include_router(training.router)
 app.include_router(fast_report.router)
 app.include_router(diagnostic_support.router)
 app.include_router(emergency_response.router)

@@ -84,21 +84,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {isAdmin && (
-            <div>
-              <Link
-                className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
-                to="/training-data"
-                onClick={onClose}
-              >
-                <FontAwesomeIcon icon={faFileCsv} className="text-xl" />
-                <span className="tooltip rounded shadow-lg p-1 bg-black text-white -mt-8 text-left">
-                  Training Impact
-                </span>
-                Training Data
-              </Link>
-            </div>
-          )}
+
 
           <hr className="my-3 hr-text gradient" data-content="" />
           

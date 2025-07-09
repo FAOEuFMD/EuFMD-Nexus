@@ -57,7 +57,7 @@ A modern web application for the European Commission for the Control of Foot-and
 
 1. Follow tutorial: https://eufmd-fast-docs.onrender.com/blog/testing-environment
 
-2. The App uses 4 databases: db_manager, PCP, RMT and db_training. You must import all 4 databases on your local MySQL.
+2. The App uses 2 databases: db_manager and PCP. You must import all 2 databases on your local MySQL.
 
 3. Copy the `.env.example` file to `.env` and configure your database credentials.
 
@@ -101,19 +101,28 @@ The application will be available at:
 - **Emergency Response**: Emergency toolbox and fast reporting
 - **User Authentication**: JWT-based authentication system
 
+## Deployment
+
+For detailed deployment instructions and configuration details, please refer to the [deployment README](deployment/README.md). The deployment folder contains all necessary configuration files and documentation for deploying to AWS EC2 with CircleCI automation.
+
+Key deployment files:
+- `deployment/eufmd-nexus-api.service` - Systemd service configuration
+- `deployment/nginx-eufmd-nexus.conf` - Nginx server configuration
+- `deployment/README.md` - Comprehensive deployment guide
+
 ## API Documentation
 
 The FastAPI backend provides automatic API documentation available at `/docs` when running the server.
 
-## Contributing
+
 
 ### Branching Strategy
 
-The reference branch is `development`. Always pull from and merge changes into the `development` branch.
+The reference branch is `staging`. Always pull from and merge changes into the `staging` branch.
 
 ### Workflow
 
-1. Pull the latest changes from `development`
+1. Pull the latest changes from `staging`
 2. Create a new branch for your work
 3. Work on your changes and commit them
 4. Merge changes from development
