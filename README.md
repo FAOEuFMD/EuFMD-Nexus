@@ -8,6 +8,10 @@ A modern web application for the European Commission for the Control of Foot-and
 - **Backend**: Python FastAPI
 - **Database**: MySQL with multiple databases (db_manager, PCP, RMT, db_training)
 
+## Deployment
+
+For detailed deployment instructions, please refer to the [deployment documentation](./deployment/README.md).
+
 ## Installation
 
 ### Prerequisites

@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   node: circleci/node@5.1.0
+  python: circleci/python@2.1.1
 
 jobs:
   build-and-test:
@@ -24,7 +25,7 @@ jobs:
 
   deploy-to-aws:
     docker:
-      - image: cimg/node:18.20.2
+      - image: cimg/python:3.10-node
     steps:
       - checkout
       - attach_workspace:
@@ -33,16 +34,26 @@ jobs:
           fingerprints:
             - "SHA256:aGhV26g9FrJTqEplXTmqyD9hLeuoCYAdqZNUwjxx9uA"
       - run:
+          name: Install deployment dependencies
+          command: pip install paramiko
+      - run:
           name: Deploy to AWS EC2
           command: |
+            echo "Starting deployment to AWS EC2..."
+            
             # Create directory structure on EC2
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mkdir -p /var/www/eufmd-nexus/frontend /var/www/eufmd-nexus/backend"
             
-            # Transfer files
+            # Transfer frontend files
+            echo "Transferring frontend files..."
             scp -r -o StrictHostKeyChecking=no ./frontend/build/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/frontend/
+            
+            # Transfer backend files
+            echo "Transferring backend files..."
             scp -r -o StrictHostKeyChecking=no ./backend/* ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/
             
             # Copy service and Nginx config files
+            echo "Setting up service files..."
             scp -o StrictHostKeyChecking=no ./deployment/eufmd-nexus-api.service ubuntu@13.49.235.70:/tmp/
             scp -o StrictHostKeyChecking=no ./deployment/nginx-eufmd-nexus.conf ubuntu@13.49.235.70:/tmp/
             
@@ -51,16 +62,30 @@ jobs:
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus && sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/"
             
             # Set up Python environment and install dependencies
+            echo "Setting up Python environment..."
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
             
+            # Copy environment variables
+            echo "Setting up environment variables..."
+            scp -o StrictHostKeyChecking=no ./.env ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/.env
+            
+            # Update permissions
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo chown -R ubuntu:ubuntu /var/www/eufmd-nexus"
+            
             # Restart services
+            echo "Restarting services..."
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo systemctl restart eufmd-nexus-api && sudo systemctl restart nginx"
+            
+            echo "Deployment completed successfully!"
 
 workflows:
   version: 2
   build-and-deploy:
     jobs:
-      - build-and-test
+      - build-and-test:
+          filters:
+            branches:
+              only: main
       - deploy-to-aws:
           requires:
             - build-and-test
