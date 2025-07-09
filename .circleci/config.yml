@@ -96,13 +96,17 @@ jobs:
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable eufmd-nexus-api"
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus && sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/"
             
-            # Fix broken packages and install Python venv package
-            echo "Fixing broken packages and installing Python venv..."
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo apt-get update && sudo apt --fix-broken install -y && sudo apt-get install -y --reinstall python-pkg-resources && sudo apt-get install -y python3-venv python3.8-venv"
+            # Force fix broken packages and install Python venv package
+            echo "Forcing fix for broken packages and installing Python venv..."
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo dpkg --remove --force-all python-pkg-resources || true && sudo apt-get update && sudo apt --fix-broken install -y && sudo apt-get install -y python3-venv"
             
-            # Set up Python environment and install dependencies
-            echo "Setting up Python environment..."
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && python3 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
+            # Set up Python environment directly without venv
+            echo "Setting up Python environment directly..."
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && pip3 install --user -r requirements.txt"
+            
+            # Update the service file to use python3 directly
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo sed -i 's|/var/www/eufmd-nexus/backend/venv/bin/uvicorn|uvicorn|g' /etc/systemd/system/eufmd-nexus-api.service"
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo sed -i 's|Environment=PATH=/var/www/eufmd-nexus/backend/venv/bin:/usr/local/bin:/usr/bin:/bin|Environment=PATH=/usr/local/bin:/usr/bin:/bin|g' /etc/systemd/system/eufmd-nexus-api.service"
             
             # Copy environment variables
             echo "Setting up environment variables..."
