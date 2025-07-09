@@ -18,7 +18,7 @@ jobs:
             npm install
             # Create a simplified tailwind.config.js for build
             echo "Creating a simplified tailwind.config.js for build..."
-            cat > tailwind.config.js << 'EOL'
+            cat > tailwind.config.js << 'TAILWINDCONFIG'
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -26,7 +26,6 @@ module.exports = {
   ],
   theme: {
     extend: {
-      // Basic theme extensions only
       colors: {
         primary: {
           50: '#eff6ff',
@@ -48,10 +47,9 @@ module.exports = {
       },
     },
   },
-  // No plugins for CI build
   plugins: [],
 }
-EOL
+TAILWINDCONFIG
             echo "Modified tailwind.config.js:"
             cat tailwind.config.js
       - run:
