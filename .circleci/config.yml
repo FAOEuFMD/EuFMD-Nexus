@@ -16,8 +16,12 @@ jobs:
             echo "Installing frontend dependencies..."
             cd frontend
             npm install
-            npm install --save-dev @tailwindcss/forms @tailwindcss/typography
-            npm list @tailwindcss/forms @tailwindcss/typography
+            npm install --save-dev @tailwindcss/forms@0.5.7 @tailwindcss/typography@0.5.10
+            echo "Modifying tailwind.config.js to use local imports"
+            sed -i 's/require(.@tailwindcss\/forms.)/require(".\/node_modules\/@tailwindcss\/forms")/g' tailwind.config.js
+            sed -i 's/require(.@tailwindcss\/typography.)/require(".\/node_modules\/@tailwindcss\/typography")/g' tailwind.config.js
+            echo "Modified tailwind.config.js:"
+            cat tailwind.config.js
       - run:
           name: Build React Frontend
           command: cd frontend && npm run build
