@@ -96,6 +96,10 @@ jobs:
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable eufmd-nexus-api"
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus && sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/"
             
+            # Install Python venv package and set up environment
+            echo "Installing Python venv package..."
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo apt-get update && sudo apt-get install -y python3-venv"
+            
             # Set up Python environment and install dependencies
             echo "Setting up Python environment..."
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && python3 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
