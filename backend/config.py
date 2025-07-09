@@ -24,5 +24,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        env_file_encoding = 'utf-8'
+        # This ensures environment variables take precedence over .env file
 
 settings = Settings()

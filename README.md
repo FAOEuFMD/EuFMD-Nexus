@@ -63,7 +63,8 @@ For detailed deployment instructions, please refer to the [deployment documentat
 
 2. The App uses 2 databases: db_manager and PCP. You must import all 2 databases on your local MySQL.
 
-3. Copy the `.env.example` file to `.env` and configure your database credentials.
+3. Copy the `.env.example` file to `.env` and configure your database credentials for local development. 
+   > Note: For production deployment, environment variables are configured in CircleCI and deployed via systemd. See `deployment/README.md` for details.
 
 ## Running the Application
 

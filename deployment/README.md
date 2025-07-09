@@ -37,13 +37,32 @@ To avoid conflicts with the existing TOM application, we use the following ports
 | Backend (FastAPI) | 5800 | TOM app uses port 5000               |
 | Database (RDS)    | 5432 | AWS RDS PostgreSQL standard port     |
 
+## Environment Variables
+
+The application requires the following environment variables:
+
+- `DB_HOST`: Database host URL
+- `DB_USER`: Database username
+- `DB_PASS`: Database password
+- `DB_NAME`: Primary database name
+- `DB2_NAME`: Secondary database name
+- `SECRET_KEY`: Secret key for JWT tokens
+- `SUPER_SECRET`: Another secret key for enhanced security
+- `NODE_ENV`: Environment (set to "production" for deployment)
+- `ALLOWED_ORIGINS`: List of allowed CORS origins
+
+These variables are:
+1. Set in CircleCI environment variables
+2. Transferred to the server during deployment as a systemd environment file
+3. Made available to the application through the systemd service
+
 ## Deployment Files
 
 This folder contains the configuration files needed for deployment:
 
 ### `eufmd-nexus-api.service`
 
-Systemd service file for running the FastAPI backend service.
+Systemd service file for running the FastAPI backend service. The service uses environment variables from a separate environment file.
 
 ```ini
 [Unit]
@@ -58,6 +77,7 @@ Environment=PATH=/var/www/eufmd-nexus/backend/venv/bin:/usr/local/bin:/usr/bin:/
 ExecStart=/var/www/eufmd-nexus/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 5800
 Restart=always
 RestartSec=10
+EnvironmentFile=/etc/eufmd-nexus/env
 
 [Install]
 WantedBy=multi-user.target
@@ -138,6 +158,26 @@ Key environment variables are stored securely in CircleCI project settings:
 - Environment configuration
 - CORS settings
 
+### Environment Variables
+
+The following environment variables must be set in the CircleCI project settings:
+
+- `DB_HOST` - Database host URL
+- `DB_USER` - Database username  
+- `DB_PASS` - Database password
+- `DB_NAME` - Primary database name
+- `DB2_NAME` - Secondary database name
+- `SECRET_KEY` - Secret key for JWT tokens
+- `SUPER_SECRET` - Another secret key for enhanced security
+
+These environment variables are used during the deployment process and transferred to the server's systemd environment file. They are never committed to the git repository for security reasons.
+
+To set these environment variables in CircleCI:
+1. Go to the CircleCI project settings
+2. Navigate to Environment Variables
+3. Add each variable with its respective value
+4. Make sure to use the exact names as listed above
+
 ## Deployment Process
 
 ### Manual Deployment (First Time)
@@ -170,6 +210,30 @@ Key environment variables are stored securely in CircleCI project settings:
    sudo systemctl daemon-reload
    sudo systemctl enable eufmd-nexus-api
    sudo systemctl start eufmd-nexus-api
+   ```
+
+5. Create environment variables file:
+   ```bash
+   sudo nano /etc/eufmd-nexus/env
+   ```
+   Add the following content, replacing with actual values:
+   ```env
+   DB_HOST=your_db_host
+   DB_USER=your_db_user
+   DB_PASS=your_db_pass
+   DB_NAME=your_db_name
+   DB2_NAME=your_db2_name
+   SECRET_KEY=your_secret_key
+   SUPER_SECRET=your_super_secret
+   NODE_ENV=production
+   ALLOWED_ORIGINS=*
+   ```
+   Save and exit the editor.
+
+6. Set permissions for the environment file:
+   ```bash
+   sudo chown root:root /etc/eufmd-nexus/env
+   sudo chmod 640 /etc/eufmd-nexus/env
    ```
 
 ### Automated Deployment (CircleCI)

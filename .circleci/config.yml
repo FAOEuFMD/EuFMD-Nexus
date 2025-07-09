@@ -102,13 +102,21 @@ jobs:
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo python3 -m pip install --upgrade pip"
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "cd /var/www/eufmd-nexus/backend && sudo python3 -m pip install -r requirements.txt"
             
-            # Update the service file to use python3 directly
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo sed -i 's|/var/www/eufmd-nexus/backend/venv/bin/uvicorn|uvicorn|g' /etc/systemd/system/eufmd-nexus-api.service"
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo sed -i 's|Environment=PATH=/var/www/eufmd-nexus/backend/venv/bin:/usr/local/bin:/usr/bin:/bin|Environment=PATH=/usr/local/bin:/usr/bin:/bin|g' /etc/systemd/system/eufmd-nexus-api.service"
+            # No need to update service file with sed as we're using the updated file directly
             
-            # Copy environment variables
-            echo "Setting up environment variables..."
-            scp -o StrictHostKeyChecking=no ./.env ubuntu@13.49.235.70:/var/www/eufmd-nexus/backend/.env
+            # Create environment variables file for systemd service
+            echo "Setting up environment variables for systemd service..."
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo bash -c 'cat > /etc/systemd/system/eufmd-nexus-api.env << EOL
+DB_HOST=${DB_HOST}
+DB_USER=${DB_USER}
+DB_PASS=${DB_PASS}
+DB_NAME=${DB_NAME}
+DB2_NAME=${DB2_NAME}
+SECRET_KEY=${SECRET_KEY}
+SUPER_SECRET=${SUPER_SECRET}
+NODE_ENV=production
+ALLOWED_ORIGINS=[\"https://nexus.eufmd.org\", \"https://nexus-dev.eufmd.org\"]
+EOL'"
             
             # Update permissions
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo chown -R ubuntu:ubuntu /var/www/eufmd-nexus"
