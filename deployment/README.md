@@ -169,6 +169,7 @@ The following environment variables must be set in the CircleCI project settings
 - `DB2_NAME` - Secondary database name
 - `SECRET_KEY` - Secret key for JWT tokens
 - `SUPER_SECRET` - Another secret key for enhanced security
+- `REACT_APP_API_URL` - Backend API URL for the React frontend (e.g., http://13.49.235.70:5800)
 
 These environment variables are used during the deployment process and transferred to the server's systemd environment file. They are never committed to the git repository for security reasons.
 
@@ -240,7 +241,14 @@ To set these environment variables in CircleCI:
 
 1. Push changes to GitHub main branch
 2. CircleCI automatically deploys to EC2
-3. Access the application at http://13.49.235.70:8080
+3. Access the application at http://13.49.235.70:8080 (direct IP access using the EC2 instance's public IP address)
+
+**Note:** The URL http://13.49.235.70:8080 uses the EC2 instance's direct public IP address. This works because:
+- EC2 instances with public networking get assigned public IP addresses
+- Your Nginx is configured to listen on port 8080 
+- The security group for this EC2 instance allows inbound traffic on port 8080
+
+For a more professional setup, consider implementing the domain name and HTTPS from the "Future Improvements" section.
 
 ## Troubleshooting
 
@@ -267,10 +275,52 @@ sudo systemctl restart eufmd-nexus-api
 sudo systemctl restart nginx
 ```
 
+### Fix CORS Issues:
+
+If you see CORS errors in the browser console, ensure:
+
+1. The `ALLOWED_ORIGINS` environment variable in `/etc/systemd/system/eufmd-nexus-api.env` includes your frontend URL:
+   ```bash
+   sudo nano /etc/systemd/system/eufmd-nexus-api.env
+   ```
+   
+   It should contain something like:
+   ```
+   ALLOWED_ORIGINS=["http://13.49.235.70:8080", "https://nexus.eufmd.org"]
+   ```
+
+2. The frontend is using the correct API URL:
+   - For local development: Make sure `.env` in the frontend directory has `REACT_APP_API_URL=http://localhost:5800`
+   - For production: Set the `REACT_APP_API_URL` environment variable in CircleCI to `http://13.49.235.70:5800`
+
+3. After updating CORS settings, restart the API service:
+   ```bash
+   sudo systemctl restart eufmd-nexus-api
+   ```
+
 ## Future Improvements
 
-- Set up HTTPS with Let's Encrypt
-- Configure domain name (e.g., nexus.eufmd.org)
-- Implement automated database migrations
-- Add monitoring and alerting
-- Set up load balancing for higher availability
+- **Set up HTTPS with Let's Encrypt**: Secure your application with SSL/TLS encryption
+- **Configure domain name**: Replace the IP address access (13.49.235.70:8080) with a proper domain like nexus.eufmd.org
+  - Register domain (if not already done)
+  - Configure DNS records to point to your EC2 instance
+  - Update Nginx configuration to use the domain name
+- **Implement automated database migrations**: Ensure database schema changes are applied automatically during deployment
+- **Add monitoring and alerting**: Set up services like AWS CloudWatch to monitor application health
+- **Set up load balancing for higher availability**: Use AWS Elastic Load Balancer to distribute traffic and improve reliability
+
+### Moving from Direct IP to Domain Name
+
+When you're ready to switch from IP-based access to a domain name:
+
+1. Register a domain (or use subdomain of existing domain)
+2. Create DNS A record pointing to your EC2 IP address (13.49.235.70)
+3. Update the Nginx configuration to use your domain name:
+   ```nginx
+   server {
+       listen 8080;
+       server_name nexus.eufmd.org;  # Replace with your domain
+       # Rest of config remains the same
+   }
+   ```
+4. Consider moving to standard ports (80/443) instead of 8080 once you have a separate domain

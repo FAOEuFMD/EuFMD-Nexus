@@ -50,7 +50,11 @@ jobs:
             cat tailwind.config.js
       - run:
           name: Build React Frontend
-          command: cd frontend && npm run build
+          command: |
+            cd frontend
+            echo "Setting API URL for production build..."
+            export REACT_APP_API_URL="http://13.49.235.70:5800"
+            npm run build
       - persist_to_workspace:
           root: ./
           paths:
@@ -114,7 +118,7 @@ jobs:
             echo "SECRET_KEY=$SECRET_KEY" >> env_temp
             echo "SUPER_SECRET=$SUPER_SECRET" >> env_temp
             echo "NODE_ENV=production" >> env_temp
-            echo "ALLOWED_ORIGINS=[\"https://nexus.eufmd.org\", \"https://nexus-dev.eufmd.org\"]" >> env_temp
+            echo "ALLOWED_ORIGINS=[\"http://13.49.235.70:8080\", \"https://nexus.eufmd.org\", \"https://nexus-dev.eufmd.org\"]" >> env_temp
             scp -o StrictHostKeyChecking=no env_temp ubuntu@13.49.235.70:/tmp/eufmd-nexus-api.env
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.env /etc/systemd/system/eufmd-nexus-api.env && sudo chmod 600 /etc/systemd/system/eufmd-nexus-api.env"
             
