@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     node_env: str = "development"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    allowed_origins: List[str] = ["http://nexus.eufmd-tom.com:8080", "http://13.49.235.70:8080","http://localhost:3000", "http://127.0.0.1:3000"]
     
     class Config:
         env_file = ".env"
