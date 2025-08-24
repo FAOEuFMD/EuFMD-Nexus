@@ -1,12 +1,7 @@
+import { PATHWAYS_EFFECTIVENESS } from './pathwaysConfig';
+
 // Pathways constants from 'pathways' tab
-const PATHWAYS = {
-  airborne: { FMD: 2, PPR: 0, LSD: 1, RVF: 0, SPGP: 1 },
-  vectorborne: { FMD: 0, PPR: 0, LSD: 3, RVF: 3, SPGP: 2 },
-  wildAnimals: { FMD: 1, PPR: 2, LSD: 0, RVF: 2, SPGP: 0 },
-  animalProduct: { FMD: 2, PPR: 1, LSD: 1, RVF: 1, SPGP: 1 },
-  liveAnimal: { FMD: 3, PPR: 3, LSD: 1, RVF: 3, SPGP: 3 },
-  fomite: { FMD: 2, PPR: 1, LSD: 1, RVF: 0, SPGP: 1 },
-};
+const PATHWAYS = PATHWAYS_EFFECTIVENESS;
 
 interface PathwayScores {
   airborne: number;

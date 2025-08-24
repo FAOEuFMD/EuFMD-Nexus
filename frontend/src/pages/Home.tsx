@@ -112,7 +112,7 @@ const Home: React.FC = () => {
             <h2 className="text-left mt-2 text-xl font-bold">Monitoring</h2>
             <p className="text-left">Stay updated with real-time monitoring of disease spread.</p>
             <button className="float-left bg-white hover:bg-gray-100 text-green-greenMain font-semibold py-2 px-4 border border-green-greenMain rounded-lg shadow mt-4">
-              <Link to="/RMT">Learn More</Link>
+              <Link to="/monitoring">Learn More</Link>
             </button>
           </span>
         </div>

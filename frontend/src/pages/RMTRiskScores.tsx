@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { getPathwaysForChart } from '../utils/pathwaysConfig';
 
 interface Country {
   id: number;
@@ -103,7 +104,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       },
       legend: {
         title: "Possible data sources:",
-        sources: ["TRACE", "National trade data"],
+        sources: ["TRACES", "National trade data"],
         link: "https://food.ec.europa.eu/horizontal-topics/traces_en"
       }
     },
@@ -118,7 +119,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       },
       legend: {
         title: "Possible data sources:",
-        sources: ["TRACE", "National trade data"],
+        sources: ["TRACES", "National trade data"],
         link: "https://food.ec.europa.eu/horizontal-topics/traces_en"
       }
     },
@@ -242,15 +243,8 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     });
   };
 
-  // Predefined pathways scores from Vue app
-  const pathwaysData: PathwayRow[] = [
-    { pathway: "Airborne", FMD: 2, PPR: 0, LSD: 1, RVF: 0, SPGP: 1 },
-    { pathway: "Vector-borne", FMD: 0, PPR: 0, LSD: 3, RVF: 3, SPGP: 2 },
-    { pathway: "Wild Animals", FMD: 1, PPR: 2, LSD: 0, RVF: 2, SPGP: 0 },
-    { pathway: "Animal Product", FMD: 2, PPR: 1, LSD: 1, RVF: 1, SPGP: 1 },
-    { pathway: "Live Animal", FMD: 3, PPR: 3, LSD: 1, RVF: 3, SPGP: 3 },
-    { pathway: "Fomite", FMD: 2, PPR: 1, LSD: 1, RVF: 0, SPGP: 1 },
-  ];
+  // Predefined pathways scores from centralized config
+  const pathwaysData: PathwayRow[] = getPathwaysForChart();
 
   useEffect(() => {
     loadInitialData();
@@ -1316,7 +1310,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                         <ul className="text-sm list-disc pl-6">
                           {connectionFieldInfo[selectedConnectionField].legend.sources.map((source, index) => (
                             <li key={index} className="mb-1">
-                              {source === 'TRACE' || source === 'Eurostat statistics about transport' ? (
+                              {source === 'TRACES' || source === 'Eurostat statistics about transport' ? (
                                 <a 
                                   href={connectionFieldInfo[selectedConnectionField].legend.link} 
                                   target="_blank" 

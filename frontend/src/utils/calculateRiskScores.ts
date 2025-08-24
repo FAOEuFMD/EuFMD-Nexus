@@ -1,4 +1,5 @@
 import { calculateConnectionScoresPerPathway } from './calculateConnectionScoresPerPathway';
+import { PATHWAYS_EFFECTIVENESS, Disease } from './pathwaysConfig';
 import { calculateRiskPerDisease } from './calculateRiskPerDisease';
 
 interface Connections {
@@ -126,20 +127,5 @@ export function calculateRiskScores({
   return results.sort((a, b) => b.riskScore - a.riskScore);
 }
 
-// Define disease type
-type Disease = 'FMD' | 'PPR' | 'LSD' | 'RVF' | 'SPGP';
-
-// Define pathway type
-type PathwayKey = 'airborne' | 'vectorborne' | 'wildAnimals' | 'animalProduct' | 'liveAnimal' | 'fomite';
-
-// Pathways constants from 'pathways' tab
-const PATHWAYS: {
-  [key in PathwayKey]: { [key in Disease]: number };
-} = {
-  airborne: { FMD: 2, PPR: 0, LSD: 1, RVF: 0, SPGP: 1 },
-  vectorborne: { FMD: 0, PPR: 0, LSD: 3, RVF: 3, SPGP: 2 },
-  wildAnimals: { FMD: 1, PPR: 2, LSD: 0, RVF: 2, SPGP: 0 },
-  animalProduct: { FMD: 2, PPR: 1, LSD: 1, RVF: 1, SPGP: 1 },
-  liveAnimal: { FMD: 3, PPR: 3, LSD: 1, RVF: 3, SPGP: 3 },
-  fomite: { FMD: 2, PPR: 1, LSD: 1, RVF: 0, SPGP: 1 },
-};
+// Use PATHWAYS_EFFECTIVENESS from centralized config
+const PATHWAYS = PATHWAYS_EFFECTIVENESS;
