@@ -21,6 +21,7 @@ import {
   RISPOutbreak,
   RISPVaccination,
   RISPSurveillance,
+  RISPSummary,
   PCPMap,
   GetPreparedWall,
   EmergencyToolbox,
@@ -248,6 +249,15 @@ const AppRouter: React.FC = () => {
             element={
               <RouteGuard requiresAuth={true}>
                 <RISPSurveillance />
+              </RouteGuard>
+            } 
+          />
+          
+          <Route 
+            path="risp/summary" 
+            element={
+              <RouteGuard requiresAuth={true}>
+                <RISPSummary />
               </RouteGuard>
             } 
           />

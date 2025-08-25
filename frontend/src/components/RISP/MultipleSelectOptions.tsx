@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 interface AdminLevel {
   name: string;
@@ -11,6 +11,7 @@ interface MultipleSelectOptionsProps {
   selectedOptions: string[];
   onClose: () => void;
   onChange: (options: string[]) => void;
+  country?: string; // Add country prop for admin levels fetching
 }
 
 const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
@@ -18,7 +19,8 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   multipleOptions,
   selectedOptions,
   onClose,
-  onChange
+  onChange,
+  country
 }) => {
   // Split initial selected options into regular options and admin levels
   const initialRegularOptions = selectedOptions.filter(opt => multipleOptions.includes(opt));
@@ -31,44 +33,76 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   const [otherInputValue, setOtherInputValue] = useState<string>('');
   const [adminLevels, setAdminLevels] = useState<AdminLevel[]>([]);
 
+  // Update local state when selectedOptions prop changes
+  useEffect(() => {
+    const newRegularOptions = selectedOptions.filter(opt => multipleOptions.includes(opt));
+    const newAdminLevels = selectedOptions.filter(opt => 
+      !multipleOptions.includes(opt) && opt !== 'Specify region'
+    );
+    
+    setSelectedOptionsLocal(newRegularOptions);
+    setSelectedAdminLevels(newAdminLevels);
+  }, [selectedOptions, multipleOptions]);
+
   // Fetch admin levels when "Specify region" is selected
+  const fetchAdminLevels = useCallback(async () => {
+    try {
+      if (!country) {
+        console.log('No country available for admin levels');
+        setAdminLevels([]);
+        return;
+      }
+
+      console.log('Fetching admin levels for country:', country);
+      
+      const response = await fetch('https://countriesnow.space/api/v0.1/countries/states', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          country: country
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data && data.data && data.data.states) {
+        const adminLevelsData = data.data.states.map((state: any) => ({
+          id: state.state_code || state.name,
+          name: state.name
+        }));
+        
+        console.log('Received admin levels:', adminLevelsData);
+        setAdminLevels(adminLevelsData);
+      } else {
+        console.error("Unexpected API response format:", data);
+        setAdminLevels([]);
+      }
+    } catch (error) {
+      console.error("Error fetching admin levels:", error);
+      setAdminLevels([]);
+    }
+  }, [country]);
+
   useEffect(() => {
     if (selectedOptionsLocal.includes("Specify region")) {
       fetchAdminLevels();
     }
-  }, [selectedOptionsLocal]);
-
-  // Mock function to fetch admin levels (replace with actual API call)
-  const fetchAdminLevels = async () => {
-    try {
-      // This would be your API call
-      // const response = await fetch('/api/admin-levels');
-      // const data = await response.json();
-      
-      // For now, using mock data
-      const mockAdminLevels = [
-        { id: "1", name: "Region 1" },
-        { id: "2", name: "Region 2" },
-        { id: "3", name: "Region 3" },
-        { id: "4", name: "Region 4" },
-      ];
-      
-      setAdminLevels(mockAdminLevels);
-    } catch (error) {
-      console.error("Error fetching admin levels:", error);
-    }
-  };
+  }, [selectedOptionsLocal, fetchAdminLevels]);
 
   const handleOptionChange = (option: string) => {
     if (selectedOptionsLocal.includes(option)) {
-      setSelectedOptionsLocal(selectedOptionsLocal.filter(opt => opt !== option));
+      const newSelected = selectedOptionsLocal.filter(opt => opt !== option);
+      setSelectedOptionsLocal(newSelected);
       
       // If removing "Specify region", also clear selected admin levels
       if (option === "Specify region") {
         setSelectedAdminLevels([]);
       }
     } else {
-      setSelectedOptionsLocal([...selectedOptionsLocal, option]);
+      const newSelected = [...selectedOptionsLocal, option];
+      setSelectedOptionsLocal(newSelected);
     }
   };
 
@@ -86,18 +120,24 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
 
   const saveSelection = () => {
     // Combine selected options, admin levels, and other input if needed
-    let finalOptions = [...selectedOptionsLocal];
+    let finalOptions: string[] = [];
     
     if (selectedOptionsLocal.includes("Specify region")) {
-      finalOptions = finalOptions.concat(selectedAdminLevels);
-    }
-    
-    if (includesOther() && otherInputValue.trim()) {
-      finalOptions.push(otherInputValue.trim());
+      // Get all selected values except "Specify region", then add selected admin levels
+      finalOptions = [
+        ...selectedOptionsLocal.filter(opt => opt !== "Specify region"),
+        ...selectedAdminLevels
+      ];
+    } else if (includesOther() && otherInputValue.trim()) {
+      // If "Other" is selected, use only the other input value
+      finalOptions = [otherInputValue.trim()];
+    } else {
+      // Normal case - use selected options
+      finalOptions = [...selectedOptionsLocal];
     }
     
     onChange(finalOptions);
-    onClose();
+    onClose(); // Close the modal after saving
   };
 
   if (!isOpen) return null;
@@ -115,7 +155,7 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
                 type="checkbox"
                 checked={selectedOptionsLocal.includes(option)}
                 onChange={() => handleOptionChange(option)}
-                className="text-green-600 focus:ring-green-500"
+                className="text-green-greenMain focus:ring-green-greenMain focus:border-green-greenMain"
               />
               <span>{option}</span>
             </label>
@@ -138,7 +178,7 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
                           type="checkbox"
                           checked={selectedAdminLevels.includes(adminLevel.name)}
                           onChange={() => handleAdminLevelChange(adminLevel.name)}
-                          className="text-green-600 focus:ring-green-500"
+                          className="text-green-greenMain focus:ring-green-greenMain focus:border-green-greenMain"
                         />
                         <span className="text-sm text-gray-700">{adminLevel.name}</span>
                       </label>
@@ -162,14 +202,16 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
 
         <div className="mt-4 flex justify-end space-x-2">
           <button 
-            onClick={onClose} 
+            type="button"
+            onClick={onClose}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
           >
             Cancel
           </button>
           <button 
+            type="button"
             onClick={saveSelection} 
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+            className="px-4 py-2 bg-green-greenMain hover:bg-green-greenMain2 text-white rounded"
           >
             Save
           </button>

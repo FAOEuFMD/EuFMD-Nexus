@@ -235,6 +235,32 @@ export const apiService = {
     updateStatus: (id: number, status: string) =>
       api.put(`/api/visits/${id}/status`, { status }),
   },
+
+  // RISP endpoints
+  risp: {
+    // Get RISP data by type, year, and quarter
+    getRISP: ({ type, year, quarter }: { type: string; year: string; quarter: string }) =>
+      api.get(`/api/risp/${type}?year=${year}&quarter=${quarter}`),
+
+    // Get outbreaks data specifically
+    getOutbreaks: (year: number, quarter: string) =>
+      api.get(`/api/risp/outbreaks?year=${year}&quarter=${quarter}`),
+
+    // Add RISP data
+    addRISP: (formData: any) =>
+      api.post(`/api/risp/${formData.type}`, formData),    // Vaccination campaigns specific methods
+    getRISPVaccinations: (year: string) =>
+      api.get(`/api/risp/vaccinations?year=${year}`),
+    
+    addRISPVaccination: (formData: any) =>
+      api.post('/api/risp/vaccinations', formData),
+    
+    updateRISPVaccination: (id: number, formData: any) =>
+      api.put(`/api/risp/vaccinations/${id}`, formData),
+    
+    deleteRISPVaccination: (id: number) =>
+      api.delete(`/api/risp/vaccinations/${id}`),
+  },
 };
 
 export default api;

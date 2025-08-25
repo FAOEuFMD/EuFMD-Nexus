@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RispNavBar from '../components/RISP/RispNavBar';
 import MultipleSelectOptions from '../components/RISP/MultipleSelectOptions';
+import HierarchicalSpeciesSelector from '../components/RISP/HierarchicalSpeciesSelector';
 import { apiService } from '../services/api';
 import { diseaseOptions, rispService } from '../services/risp/rispService';
 
@@ -42,12 +43,6 @@ const RISPVaccination: React.FC = () => {
   const [tooltipOpen, setTooltipOpen] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(false);
 
-  // Species options
-  const speciesOptions = [
-    "Cattle", "Buffaloes", "Sheep", "Goats", "Camels", "Wildlife", "Pigs",
-    "Large Ruminants", "Small Ruminants"
-  ];
-
   // Location options
   const locationOptions = [
     "Within 50km from the border",
@@ -66,8 +61,11 @@ const RISPVaccination: React.FC = () => {
 
   // Load user profile and campaigns on component mount
   useEffect(() => {
-    fetchUserProfile();
-    fetchCampaigns();
+    const loadData = async () => {
+      await fetchUserProfile();
+      await fetchCampaigns();
+    };
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -86,21 +84,45 @@ const RISPVaccination: React.FC = () => {
   // Fetch campaigns
   const fetchCampaigns = async () => {
     try {
-      const response = await rispService.getVaccinations(userCountry);
+      const response = await rispService.getVaccinations(currentYear.toString());
       
       if (response.data && response.data.length > 0) {
-        setCampaigns(response.data.map((campaign: any) => ({
-          ...campaign,
+        const mappedCampaigns = response.data.map((campaign: any) => ({
+          id: campaign.id,
+          diseaseId: campaign.diseaseId,
+          diseaseName: campaign.disease_name || '',
+          year: campaign.year || currentYear.toString(),
+          country: campaign.country || userCountry,
+          status: campaign.status || '',
+          vaccinationType: campaign.vaccination_type || '',
+          strategy: campaign.vaccination_type || '',
+          geographicalAreas: Array.isArray(campaign.geographical_areas) ? campaign.geographical_areas : [],
+          regionDetails: campaign.regionDetails || '',
           species: Array.isArray(campaign.species) ? campaign.species : [],
+          speciesTargeted: Array.isArray(campaign.species) ? campaign.species : [],
+          serotypesIncluded: campaign.serotypesIncluded || [],
           q1: Number(campaign.q1) || 0,
           q2: Number(campaign.q2) || 0,
           q3: Number(campaign.q3) || 0,
           q4: Number(campaign.q4) || 0,
-          total: Number(campaign.total) || calculateTotal(campaign),
+          total: Number(campaign.total) || 0,
           coverage: Number(campaign.coverage) || 0,
-          regionDetails: campaign.regionDetails || ""
-        })));
+          vaccineDetails: campaign.vaccine_details || '',
+          supplier: campaign.vaccine_details || '',
+          vaccinationRegime: campaign.vaccinationRegime || '',
+          comments: campaign.comments || ''
+        }));
+        
+        setCampaigns(mappedCampaigns);
+        
+        // Initialize dropdown state for all loaded campaigns
+        const initialDropdowns: Record<number, Record<string, boolean>> = {};
+        mappedCampaigns.forEach((_: any, index: number) => {
+          initialDropdowns[index] = {};
+        });
+        setDropdowns(initialDropdowns);
       } else {
+        console.log('No vaccination campaigns found, adding empty campaign');
         addCampaign();
       }
     } catch (error) {
@@ -139,28 +161,74 @@ const RISPVaccination: React.FC = () => {
   // Add new campaign
   const addCampaign = () => {
     try {
+      const newCampaignIndex = campaigns.length;
       setCampaigns([...campaigns, createEmptyCampaign()]);
+      
+      // Initialize dropdown state for the new campaign
+      setDropdowns(prev => ({
+        ...prev,
+        [newCampaignIndex]: {}
+      }));
     } catch (error) {
       console.error('Error adding campaign:', error);
       alert('Failed to add new campaign. Please try again.');
     }
   };
 
-  // Delete campaign
-  const deleteForm = async (id: number | null | undefined) => {
-    if (!window.confirm('Are you sure you want to delete this vaccination campaign?')) {
-      return;
-    }
-
+  // Save or Update campaign
+  const updateCampaign = async (index: number) => {
     try {
-      if (id !== null && id !== undefined) {
-        // Would be your actual API call
-        // await rispService.deleteVaccination(id);
+      const campaign = campaigns[index];
+      
+      // Basic validation
+      if (!campaign.diseaseName || !campaign.year) {
+        alert('Please fill in at least Disease Name and Year before saving.');
+        return;
       }
-      setCampaigns(campaigns.filter(campaign => campaign.id !== id));
+
+      // Calculate total before saving
+      const updatedCampaign = { ...campaign };
+      updatedCampaign.total = calculateTotal(updatedCampaign);
+
+      // Map our internal model to the API expected model
+      const formattedCampaign = {
+        id: campaign.id === null ? undefined : campaign.id,
+        disease_name: campaign.diseaseName,
+        year: campaign.year,
+        country: userCountry,
+        status: campaign.status,
+        vaccination_type: campaign.vaccinationType,
+        geographical_areas: campaign.geographicalAreas,
+        species: campaign.species,
+        vaccine_details: campaign.vaccineDetails,
+        q1: Number(campaign.q1) || 0,
+        q2: Number(campaign.q2) || 0,
+        q3: Number(campaign.q3) || 0,
+        q4: Number(campaign.q4) || 0,
+        total: calculateTotal(updatedCampaign),
+        coverage: Number(campaign.coverage) || 0
+      };
+
+      let result;
+      if (campaign.id) {
+        // Update existing campaign
+        result = await rispService.updateVaccination(campaign.id, formattedCampaign as any);
+      } else {
+        // Create new campaign
+        result = await rispService.saveVaccination(formattedCampaign as any);
+      }
+      
+      if (result?.success) {
+        const actionText = campaign.id ? 'updated' : 'saved';
+        alert(`Vaccination campaign ${actionText} successfully!`);
+        // Refresh the campaigns list to get updated data
+        await fetchCampaigns();
+      } else {
+        throw new Error('Failed to save vaccination data');
+      }
     } catch (error) {
-      console.error('Error deleting campaign:', error);
-      alert('Failed to delete campaign. Please try again.');
+      console.error("Error saving vaccination campaign:", error);
+      alert("Error saving vaccination campaign. Please try again.");
     }
   };
 
@@ -169,20 +237,21 @@ const RISPVaccination: React.FC = () => {
     setDropdowns(prev => {
       const newDropdowns = { ...prev };
       
+      // Close all dropdowns first
+      Object.keys(newDropdowns).forEach(idx => {
+        newDropdowns[parseInt(idx)] = {};
+      });
+      
       // Initialize if not exists
       if (!newDropdowns[index]) {
         newDropdowns[index] = {};
       }
       
-      // Toggle this dropdown
-      newDropdowns[index][type] = !newDropdowns[index]?.[type];
+      // Get current state from the original prev state (before we closed everything)
+      const currentState = prev[index]?.[type] || false;
       
-      // Close other dropdowns
-      Object.keys(newDropdowns).forEach(idx => {
-        if (idx !== index.toString()) {
-          newDropdowns[parseInt(idx)] = {};
-        }
-      });
+      // Toggle this dropdown - if it was closed, open it; if it was open, keep it closed
+      newDropdowns[index][type] = !currentState;
       
       return newDropdowns;
     });
@@ -215,10 +284,7 @@ const RISPVaccination: React.FC = () => {
         
         if (field === 'diseaseName') {
           campaign.diseaseName = value;
-          const validSpecies = filteredSpecies(value);
-          campaign.species = campaign.species.filter(s => 
-            validSpecies.includes(s)
-          );
+          // Note: Species are no longer filtered by disease with hierarchical selector
         } else if (['q1', 'q2', 'q3', 'q4', 'coverage'].includes(field)) {
           const num = Number(value);
           // Validate number input
@@ -284,36 +350,6 @@ const RISPVaccination: React.FC = () => {
     }
   };
 
-  // Filter species based on disease
-  const filteredSpecies = (diseaseName: string): string[] => {
-    if (!diseaseName) return speciesOptions;
-  
-    if (diseaseName.includes("LSD")) {
-      return speciesOptions.filter(s =>
-        s === "Cattle" || s === "Buffaloes" || s === "Wildlife" ||
-        s === "Large Ruminants"
-      );
-    } else if (diseaseName.includes("PPR") || diseaseName.includes("SPGP")) {
-      return speciesOptions.filter(s =>
-        s === "Sheep" || s === "Goats" || s === "Wildlife" ||
-        s === "Small Ruminants"
-      );
-    } else if (diseaseName.includes("RVF")) {
-      return speciesOptions.filter(s =>
-        s === "Sheep" || s === "Goats" || s === "Cattle" || s === "Buffaloes" ||
-        s === "Wildlife" || s === "Camels" || s === "Large Ruminants" ||
-        s === "Small Ruminants"
-      );
-    } else if (diseaseName.includes("FMD")) {
-      return speciesOptions.filter(s =>
-        s === "Sheep" || s === "Goats" || s === "Cattle" || s === "Buffaloes" ||
-        s === "Wildlife" || s === "Pigs" || s === "Large Ruminants" ||
-        s === "Small Ruminants"
-      );
-    }
-    return speciesOptions;
-  };
-
   // Form submission
   const submitForm = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -339,22 +375,23 @@ const RISPVaccination: React.FC = () => {
         // Map our internal model to the API expected model
         const formattedCampaign = {
           id: campaign.id === null ? undefined : campaign.id,
-          diseaseId: campaign.diseaseId,
-          diseaseName: campaign.diseaseName,
-          country: userCountry,
+          disease_name: campaign.diseaseName,
           year: campaign.year,
+          country: userCountry,
           status: campaign.status,
-          strategy: campaign.vaccinationType, // Map to API's expected field name
-          geographicalAreas: campaign.geographicalAreas,
-          speciesTargeted: campaign.species, // Map to API's expected field name
-          serotypesIncluded: [],
-          coverage: String(Math.min(100, Math.max(0, Number(campaign.coverage) || 0))),
-          vaccinationRegime: '',
-          supplier: campaign.vaccineDetails, // Map to API's expected field name
-          comments: campaign.comments || ''
+          vaccination_type: campaign.vaccinationType,
+          geographical_areas: campaign.geographicalAreas,
+          species: campaign.species,
+          vaccine_details: campaign.vaccineDetails,
+          q1: Number(campaign.q1) || 0,
+          q2: Number(campaign.q2) || 0,
+          q3: Number(campaign.q3) || 0,
+          q4: Number(campaign.q4) || 0,
+          total: calculateTotal(campaign),
+          coverage: Number(campaign.coverage) || 0
         };
 
-        const result = await rispService.saveVaccination(formattedCampaign);
+        const result = await rispService.saveVaccination(formattedCampaign as any);
         
         if (result?.success) {
           // Handle successful save
@@ -498,24 +535,28 @@ const RISPVaccination: React.FC = () => {
                         </select>
                       </td>
                       <td className="p-3 relative">
-                        <div onClick={() => toggleDropdown(index, 'areas')}>
-                          <textarea
-                            readOnly 
-                            className="w-full min-h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer resize-y"
-                            value={formatList(campaign.geographicalAreas, 'Select areas...')}
-                            onFocus={(e) => e.target.blur()}
-                          ></textarea>
-                        </div>
+                        <textarea
+                          readOnly 
+                          className="w-full min-h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer resize-y"
+                          value={formatList(campaign.geographicalAreas || [], 'Select areas...')}
+                          onFocus={(e) => e.target.blur()}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            console.log('Textarea clicked directly');
+                            toggleDropdown(index, 'areas');
+                          }}
+                        ></textarea>
                         {dropdowns[index]?.areas && (
                           <MultipleSelectOptions 
                             isOpen={true}
                             multipleOptions={locationOptions}
-                            selectedOptions={campaign.geographicalAreas}
+                            selectedOptions={campaign.geographicalAreas || []}
                             onClose={() => closeDropdown(index, 'areas')}
                             onChange={(options) => handleFieldUpdate(index, 'geographicalAreas', options)}
+                            country={userCountry}
                           />
                         )}
-                        {campaign.geographicalAreas.includes('Specify region') && (
+                        {(campaign.geographicalAreas || []).includes('Specify region') && (
                           <textarea
                             className="mt-2 w-full min-h-[38px] py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm resize-y"
                             value={campaign.regionDetails}
@@ -545,19 +586,21 @@ const RISPVaccination: React.FC = () => {
                   <tbody>
                     <tr className="hover:bg-gray-50">
                       <td className="p-3 relative">
-                        <div onClick={() => toggleDropdown(index, 'species')}>
-                          <button 
-                            type="button"
-                            className="w-full h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer"
-                          >
-                            {formatList(campaign.species, 'Select species...')}
-                          </button>
-                        </div>
+                        <button 
+                          type="button"
+                          className="w-full h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            console.log('Species button clicked directly');
+                            toggleDropdown(index, 'species');
+                          }}
+                        >
+                          {formatList(campaign.species || [], 'Select species...')}
+                        </button>
                         {dropdowns[index]?.species && (
-                          <MultipleSelectOptions 
+                          <HierarchicalSpeciesSelector 
                             isOpen={true}
-                            multipleOptions={filteredSpecies(campaign.diseaseName)}
-                            selectedOptions={campaign.species}
+                            selectedOptions={campaign.species || []}
                             onClose={() => closeDropdown(index, 'species')}
                             onChange={(options) => handleFieldUpdate(index, 'species', options)}
                           />
@@ -628,13 +671,14 @@ const RISPVaccination: React.FC = () => {
                   </tbody>
                 </table>
 
-                {/* Delete Campaign Button */}
+                {/* Save/Update Campaign Button */}
                 <div className="flex justify-end">
                   <button
-                    onClick={() => deleteForm(campaign.id)}
-                    className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                    type="button"
+                    onClick={() => updateCampaign(index)}
+                    className="text-xs px-3 py-2 bg-green-greenMain text-white rounded hover:bg-green-greenMain2 transition-colors"
                   >
-                    Delete Vaccination
+                    {campaign.id ? 'Update Campaign' : 'Save Campaign'}
                   </button>
                 </div>
               </div>
@@ -657,21 +701,11 @@ const RISPVaccination: React.FC = () => {
               Add Vaccination
             </button>
             <button 
-              type="submit" 
-              className={`px-4 py-2 bg-green-greenMain hover:bg-green-greenMain2 text-white rounded ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              disabled={loading}
+              type="button"
+              onClick={() => navigate('/risp/surveillance')}
+              className="px-4 py-2 bg-green-greenMain hover:bg-green-greenMain2 text-white rounded"
             >
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Saving...
-                </span>
-              ) : (
-                'Save and Proceed to Surveillance'
-              )}
+              Proceed to Surveillance
             </button>
           </div>
         </form>
