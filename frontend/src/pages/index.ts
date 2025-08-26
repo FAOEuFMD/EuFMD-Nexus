@@ -16,6 +16,7 @@ export { default as RISPLanding } from './RISPLanding';
 export { default as RISPOutbreak } from './RISPOutbreak';
 export { default as RISPVaccination } from './RISPVaccination';
 export { default as RISPSurveillance } from './RISPSurveillance';
+export { default as RISPSummary } from './RISPSummary';
 export { default as PCPMap } from './PCPMap';
 export { default as GetPreparedWall } from './GetPreparedWall';
 export { default as EmergencyToolbox } from './EmergencyToolbox';

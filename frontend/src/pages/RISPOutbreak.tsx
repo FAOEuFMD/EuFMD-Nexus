@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RispNavBar from '../components/RISP/RispNavBar';
 import QuarterSelection from '../components/RISP/QuarterSelection';
 import NumberInput from '../components/RISP/NumberInput';
 import MultipleSelectOptions from '../components/RISP/MultipleSelectOptions';
+import HierarchicalSpeciesSelector from '../components/RISP/HierarchicalSpeciesSelector';
 import { 
   diseaseOptions, 
-  speciesOptions, 
   statusOptions, 
   fmdSerotypes, 
   controlMeasures,
+  locationOptions,
   rispService 
 } from '../services/risp/rispService';
+import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 
 const RISPOutbreak: React.FC = () => {
@@ -23,12 +25,36 @@ const RISPOutbreak: React.FC = () => {
   const years = Array.from({length: 4}, (_, i) => String(currentYear - i));
   const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
 
-  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(`Q${Math.ceil((new Date().getMonth() + 1) / 3)}`);
+  // Helper function to get previous quarter and year
+  const getPreviousQuarterAndYear = () => {
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    const currentQuarter = Math.ceil(currentMonth / 3); // 1-4
+    const currentYear = new Date().getFullYear();
+    
+    if (currentQuarter === 1) {
+      // If current quarter is Q1, previous quarter is Q4 of previous year
+      return {
+        quarter: 'Q4',
+        year: String(currentYear - 1)
+      };
+    } else {
+      // Otherwise, previous quarter is in the same year
+      return {
+        quarter: `Q${currentQuarter - 1}`,
+        year: String(currentYear)
+      };
+    }
+  };
+
+  const previousPeriod = getPreviousQuarterAndYear();
+
+  const [selectedYear, setSelectedYear] = useState<string>(previousPeriod.year);
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(previousPeriod.quarter);
   const [popoverVisible, setPopoverVisible] = useState<boolean>(false);
   const [popoverIndex, setPopoverIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
   // Table headers with tooltips
   const tableHeaders = [
@@ -38,17 +64,19 @@ const RISPOutbreak: React.FC = () => {
     { label: "Status", tooltip: true },
     { label: "Serotype", tooltip: true },
     { label: "Control Measures", tooltip: true },
-    { label: "Comments", tooltip: true },
+    { label: "Location", tooltip: true },
+    { label: "Additional Information", tooltip: true },
   ];
 
   const tableData = [
-    { description: "Disease name" },
-    { description: "Number of outbreaks reported in the quarter" },
-    { description: "Animal species affected by the disease" },
-    { description: "Status of the outbreak (confirmed, suspected, resolved)" },
-    { description: "FMD serotype if applicable (O, A, Asia1, etc.)" },
-    { description: "Control measures applied in response to the outbreak" },
-    { description: "Additional comments about the outbreak" },
+    { description: "Specify the disease that was identified in the current outbreak." },
+    { description: "An outbreak means the occurrence of one or more cases in an epidemiological unit." },
+    { description: "Specify the species affected by the outbreak." },
+    { description: "Refers to the level of confirmation for the disease." },
+    { description: "For FMD outbreaks, specify the serotype if known." },
+    { description: "Measures taken to control the outbreak." },
+    { description: "Location where the outbreak occurred." },
+    { description: "Any additional information about the outbreak." },
   ];
 
   // Create state for each disease with modals and data
@@ -59,6 +87,7 @@ const RISPOutbreak: React.FC = () => {
       isSelectedModalOpen: false,
       isSerotypeModalOpen: false,
       isControlMeasuresModalOpen: false,
+      isLocationModalOpen: false,
       outbreakData: {
         diseaseId: disease.id,
         diseaseName: disease.name,
@@ -68,7 +97,9 @@ const RISPOutbreak: React.FC = () => {
         selectedStatus: [] as string[],
         selectedSerotype: [] as string[],
         selectedControlMeasures: [] as string[],
-        comments: "",
+        selectedLocation: [] as string[],
+        borderingCountry: "",
+        outbreaksAdditionalInfo: "",
         year: parseInt(selectedYear),
         quarter: selectedQuarter
       }
@@ -89,70 +120,118 @@ const RISPOutbreak: React.FC = () => {
   };
 
   const isFMD = (diseaseName: string) => {
-    return diseaseName === 'FMD';
+    return diseaseName.includes('FMD');
   };
 
-  const filteredSpecies = (diseaseName: string) => {
-    // You can customize this to filter species by disease if needed
-    return speciesOptions;
-  };
 
-  const handleSpeciesSelection = (index: number, selected: string[]) => {
+  // Load data only when component mounts or year/quarter actually changes
+  useEffect(() => {
+    const loadPreviousData = async () => {
+      try {
+        console.log('loadPreviousData: Starting to load data for', selectedYear, selectedQuarter);
+        
+        // Reset form first
+        setDiseases(prevDiseases => 
+          prevDiseases.map(disease => ({
+            ...disease,
+            outbreakData: {
+              diseaseId: disease.outbreakData.diseaseId,
+              diseaseName: disease.name,
+              country: user?.country || "",
+              numberOutbreaks: 0,
+              selectedLocation: [],
+              borderingCountry: "",
+              selectedStatus: [],
+              selectedSerotype: [],
+              selectedSpecies: [],
+              selectedControlMeasures: [],
+              outbreaksAdditionalInfo: "",
+              year: parseInt(selectedYear),
+              quarter: selectedQuarter
+            }
+          }))
+        );
+
+        const response = await rispService.getOutbreaks(parseInt(selectedYear), selectedQuarter, user?.country || "");
+        
+        if (response.data && response.data.length > 0) {
+          console.log("Loading outbreak data:", response.data);
+
+          response.data.forEach((record: any) => {
+            setDiseases(prevDiseases => {
+              const newDiseases = [...prevDiseases];
+              const disease = newDiseases.find(d => 
+                d.name.split(' - ')[0].trim() === record.disease_name.trim()
+              );
+              
+              if (disease) {
+                try {
+                  disease.outbreakData = {
+                    diseaseId: disease.outbreakData.diseaseId,
+                    diseaseName: disease.name,
+                    country: user?.country || "",
+                    numberOutbreaks: Number(record.number_outbreaks) || 0,
+                    selectedLocation: JSON.parse(record.locations || '[]'),
+                    borderingCountry: record.bordering_country || "",
+                    selectedStatus: JSON.parse(record.status || '[]'),
+                    selectedSerotype: JSON.parse(record.serotype || '[]'),
+                    selectedSpecies: JSON.parse(record.species || '[]'),
+                    selectedControlMeasures: JSON.parse(record.control_measures || '[]'),
+                    outbreaksAdditionalInfo: record.additional_info || "",
+                    year: parseInt(selectedYear),
+                    quarter: selectedQuarter
+                  };
+                  console.log('Loaded data for', disease.name, ':', disease.outbreakData);
+                } catch (e) {
+                  console.error("Error parsing JSON for disease:", disease.name, e);
+                }
+              }
+              return newDiseases;
+            });
+          });
+        } else {
+          console.log("No outbreak data found for this period");
+        }
+      } catch (error) {
+        console.error("Error loading outbreak data:", error);
+      }
+    };
+
+    if (user?.country) {
+      console.log('useEffect triggered - Loading previous data for year/quarter:', selectedYear, selectedQuarter, 'country:', user?.country);
+      loadPreviousData();
+    }
+  }, [selectedYear, selectedQuarter, user?.country]); // Removed loadPreviousData dependency
+
+  // Generic field update function similar to vaccination page
+  const handleFieldUpdate = (index: number, field: string, value: any) => {
     setDiseases(prevDiseases => {
       const newDiseases = [...prevDiseases];
-      newDiseases[index] = {
-        ...newDiseases[index],
-        outbreakData: {
-          ...newDiseases[index].outbreakData,
-          selectedSpecies: selected
-        },
-        isSpeciesModalOpen: false
-      };
-      return newDiseases;
-    });
-  };
-
-  const handleStatusSelection = (index: number, selected: string[]) => {
-    setDiseases(prevDiseases => {
-      const newDiseases = [...prevDiseases];
-      newDiseases[index] = {
-        ...newDiseases[index],
-        outbreakData: {
-          ...newDiseases[index].outbreakData,
-          selectedStatus: selected
-        },
-        isSelectedModalOpen: false
-      };
-      return newDiseases;
-    });
-  };
-
-  const handleSerotypeSelection = (index: number, selected: string[]) => {
-    setDiseases(prevDiseases => {
-      const newDiseases = [...prevDiseases];
-      newDiseases[index] = {
-        ...newDiseases[index],
-        outbreakData: {
-          ...newDiseases[index].outbreakData,
-          selectedSerotype: selected
-        },
-        isSerotypeModalOpen: false
-      };
-      return newDiseases;
-    });
-  };
-
-  const handleControlMeasuresSelection = (index: number, selected: string[]) => {
-    setDiseases(prevDiseases => {
-      const newDiseases = [...prevDiseases];
-      newDiseases[index] = {
-        ...newDiseases[index],
-        outbreakData: {
-          ...newDiseases[index].outbreakData,
-          selectedControlMeasures: selected
-        },
-        isControlMeasuresModalOpen: false
-      };
+      const disease = newDiseases[index];
+      
+      if (disease) {
+        // Update the specific field in outbreakData
+        disease.outbreakData = {
+          ...disease.outbreakData,
+          [field]: value
+        };
+        
+        // Close modal for selection fields
+        if (field === 'selectedSpecies') {
+          disease.isSpeciesModalOpen = false;
+        } else if (field === 'selectedStatus') {
+          disease.isSelectedModalOpen = false;
+        } else if (field === 'selectedSerotype') {
+          disease.isSerotypeModalOpen = false;
+        } else if (field === 'selectedControlMeasures') {
+          disease.isControlMeasuresModalOpen = false;
+        } else if (field === 'selectedLocation') {
+          disease.isLocationModalOpen = false;
+        }
+        
+        console.log(`Updated ${field} for ${disease.name}:`, value);
+      }
+      
       return newDiseases;
     });
   };
@@ -171,6 +250,58 @@ const RISPOutbreak: React.FC = () => {
     });
   };
 
+  // Helper function to handle bordering country input
+  const handleBorderingCountryChange = (index: number, country: string) => {
+    setDiseases(prevDiseases => {
+      const newDiseases = [...prevDiseases];
+      const disease = newDiseases[index];
+      
+      if (disease) {
+        disease.outbreakData.borderingCountry = country;
+      }
+      
+      return newDiseases;
+    });
+  };
+
+  // Custom handler for location changes that includes bordering country formatting
+  // Helper function to convert formatted locations back to raw selections
+  const getRawLocations = (formattedLocations: string[]): string[] => {
+    return formattedLocations.map(location => {
+      if (location.startsWith('Within 50km from the border:')) {
+        return 'Within 50km from the border';
+      }
+      return location;
+    });
+  };
+
+  // Helper function to format locations for display
+  const formatLocationsForDisplay = (rawLocations: string[], borderingCountry: string): string[] => {
+    return rawLocations.map(location => {
+      if (location === 'Within 50km from the border' && borderingCountry && borderingCountry.trim()) {
+        return `Within 50km from the border: ${borderingCountry.trim()}`;
+      }
+      return location;
+    });
+  };
+
+  const handleLocationChange = (index: number, selectedLocations: string[]) => {
+    setDiseases(prevDiseases => {
+      const newDiseases = [...prevDiseases];
+      const disease = newDiseases[index];
+      
+      if (disease) {
+        // Store the raw selections
+        disease.outbreakData.selectedLocation = selectedLocations;
+        
+        // Close modal
+        disease.isLocationModalOpen = false;
+      }
+      
+      return newDiseases;
+    });
+  };
+
   const handleCommentsChange = (index: number, value: string) => {
     setDiseases(prevDiseases => {
       const newDiseases = [...prevDiseases];
@@ -178,7 +309,7 @@ const RISPOutbreak: React.FC = () => {
         ...newDiseases[index],
         outbreakData: {
           ...newDiseases[index].outbreakData,
-          comments: value
+          outbreaksAdditionalInfo: value
         }
       };
       return newDiseases;
@@ -218,24 +349,77 @@ const RISPOutbreak: React.FC = () => {
     
     setSaving(true);
     
-    // Filter only diseases with outbreaks
-    const outbreaksToSave = diseases
-      .filter(disease => disease.outbreakData.numberOutbreaks && parseInt(String(disease.outbreakData.numberOutbreaks)) > 0)
-      .map(disease => disease.outbreakData);
+    // Submit all diseases, including those with zero outbreaks (like Vue does)
+    const diseasesToSubmit = diseases.map(disease => ({
+      disease: disease.outbreakData.diseaseName.split(' - ')[0].trim(),
+      number_outbreaks: parseInt(String(disease.outbreakData.numberOutbreaks)) || 0,
+      locations: disease.outbreakData.selectedLocation || [],
+      bordering_country: disease.outbreakData.borderingCountry || "",
+      status: disease.outbreakData.selectedStatus || [],
+      serotype: disease.outbreakData.selectedSerotype || [],
+      species: disease.outbreakData.selectedSpecies || [],
+      control_measures: disease.outbreakData.selectedControlMeasures || [],
+      comments: disease.outbreakData.outbreaksAdditionalInfo || ""  // Change from additional_info to comments and ensure it's a string
+    }));
+
+    console.log('Outbreak data details:');
+    diseases.forEach((disease, index) => {
+      console.log(`Disease ${index} (${disease.name}):`, {
+        numberOutbreaks: disease.outbreakData.numberOutbreaks,
+        selectedSpecies: disease.outbreakData.selectedSpecies,
+        selectedStatus: disease.outbreakData.selectedStatus,
+        selectedLocation: disease.outbreakData.selectedLocation,
+        borderingCountry: disease.outbreakData.borderingCountry,
+        selectedControlMeasures: disease.outbreakData.selectedControlMeasures,
+        selectedSerotype: disease.outbreakData.selectedSerotype
+      });
+    });
+    console.log('Data being submitted:', diseasesToSubmit);
+
+    // Validation - check for diseases with outbreaks > 0
+    const errors = diseasesToSubmit.reduce((acc: string[], diseaseData) => {
+      // Only validate if there are outbreaks
+      if (diseaseData.number_outbreaks > 0) {
+        const missing = [];
+        if (!diseaseData.locations.length) missing.push('Location');
+        if (!diseaseData.species.length) missing.push('Species');
+        if (!diseaseData.status.length) missing.push('Status');
+        if (isFMD(diseaseData.disease) && !diseaseData.serotype.length) missing.push('Serotype');
+        if (!diseaseData.control_measures.length) missing.push('Control Measures');
+
+        if (missing.length > 0) {
+          acc.push(`${diseaseData.disease}: Missing ${missing.join(', ')}`);
+        }
+      }
+      return acc;
+    }, []);
+
+    if (errors.length > 0) {
+      alert('Please fill in all required fields before proceeding:\n\n' + errors.join('\n'));
+      setSaving(false);
+      return;
+    }
     
     try {
-      // Save each outbreak
-      for (const outbreak of outbreaksToSave) {
-        await rispService.saveOutbreak(outbreak);
-      }
-      
+      const formData = {
+        type: "outbreaks",
+        userId: user?.id,
+        country: user?.country,
+        year: parseInt(selectedYear),
+        quarter: selectedQuarter,
+        diseases: diseasesToSubmit
+      };
+
+      console.log('Submitting data:', JSON.stringify(formData, null, 2));
+      const response = await apiService.risp.addRISP(formData);
+
+      console.log('Save successful:', response);
       setSaveSuccess(true);
-      setTimeout(() => {
-        setSaveSuccess(false);
-        navigate('/risp/vaccination');
-      }, 2000);
+      setTimeout(() => setSaveSuccess(false), 3000); // Hide success message after 3 seconds
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error saving outbreaks:', error);
+      alert(`Failed to save outbreak data: ${error}`);
     } finally {
       setSaving(false);
     }
@@ -267,6 +451,8 @@ const RISPOutbreak: React.FC = () => {
         <QuarterSelection 
           years={years} 
           quarters={quarters}
+          selectedYear={selectedYear}
+          selectedQuarter={selectedQuarter}
           onYearChange={handleYearChange}
           onQuarterChange={handleQuarterChange}
         />
@@ -376,16 +562,16 @@ const RISPOutbreak: React.FC = () => {
                             </button>
                           </div>
                         )}
-                        <MultipleSelectOptions 
+                        <HierarchicalSpeciesSelector 
                           isOpen={disease.isSpeciesModalOpen}
-                          multipleOptions={filteredSpecies(disease.name)}
                           selectedOptions={disease.outbreakData.selectedSpecies}
+                          disease={disease.name}
                           onClose={() => {
-                            const newDiseases = [...diseases];
-                            newDiseases[index].isSpeciesModalOpen = false;
-                            setDiseases(newDiseases);
+                            setDiseases(prev => prev.map((d, i) => 
+                              i === index ? { ...d, isSpeciesModalOpen: false } : d
+                            ));
                           }}
-                          onChange={(selected) => handleSpeciesSelection(index, selected)}
+                          onChange={(selected) => handleFieldUpdate(index, 'selectedSpecies', selected)}
                         />
                       </td>
 
@@ -426,7 +612,8 @@ const RISPOutbreak: React.FC = () => {
                             newDiseases[index].isSelectedModalOpen = false;
                             setDiseases(newDiseases);
                           }}
-                          onChange={(selected) => handleStatusSelection(index, selected)}
+                          onChange={(selected) => handleFieldUpdate(index, 'selectedStatus', selected)}
+                          country={user?.country}
                         />
                       </td>
 
@@ -446,7 +633,7 @@ const RISPOutbreak: React.FC = () => {
                             <input 
                               className="w-full p-2 text-left" 
                               disabled 
-                              placeholder="No serotype"
+                              placeholder="N/A"
                             />
                           </div>
                         ) : (
@@ -475,7 +662,8 @@ const RISPOutbreak: React.FC = () => {
                             newDiseases[index].isSerotypeModalOpen = false;
                             setDiseases(newDiseases);
                           }}
-                          onChange={(selected) => handleSerotypeSelection(index, selected)}
+                          onChange={(selected) => handleFieldUpdate(index, 'selectedSerotype', selected)}
+                          country={user?.country}
                         />
                       </td>
 
@@ -516,19 +704,72 @@ const RISPOutbreak: React.FC = () => {
                             newDiseases[index].isControlMeasuresModalOpen = false;
                             setDiseases(newDiseases);
                           }}
-                          onChange={(selected) => handleControlMeasuresSelection(index, selected)}
+                          onChange={(selected) => handleFieldUpdate(index, 'selectedControlMeasures', selected)}
+                          country={user?.country}
                         />
                       </td>
 
-                      {/* COMMENTS */}
+                      {/* LOCATION */}
                       <td className="p-4" style={{ width: '170px' }}>
-                        <textarea
-                          className={`border border-gray-300 rounded p-2 w-full ${isNoOutbreaks(disease.outbreakData) ? 'bg-gray-200' : ''}`}
-                          value={disease.outbreakData.comments}
-                          onChange={(e) => handleCommentsChange(index, e.target.value)}
-                          disabled={isNoOutbreaks(disease.outbreakData)}
-                          placeholder={isNoOutbreaks(disease.outbreakData) ? "No outbreaks" : "Add comments"}
+                        {isNoOutbreaks(disease.outbreakData) ? (
+                          <div className="border border-gray-300 rounded">
+                            <button 
+                              className="w-full p-2 text-left bg-gray-200"
+                              disabled
+                            >
+                              No outbreaks
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="border border-gray-300 rounded">
+                            <button 
+                              onClick={() => {
+                                const newDiseases = [...diseases];
+                                newDiseases[index].isLocationModalOpen = true;
+                                setDiseases(newDiseases);
+                              }}
+                              type="button"
+                              className="w-full p-2 text-left"
+                            >
+                              {disease.outbreakData.selectedLocation?.length 
+                                ? formatLocationsForDisplay(disease.outbreakData.selectedLocation, disease.outbreakData.borderingCountry).join(", ") 
+                                : "Select Location"}
+                            </button>
+                          </div>
+                        )}
+                        <MultipleSelectOptions 
+                          isOpen={disease.isLocationModalOpen}
+                          multipleOptions={locationOptions}
+                          selectedOptions={getRawLocations(disease.outbreakData.selectedLocation)}
+                          onClose={() => {
+                            const newDiseases = [...diseases];
+                            newDiseases[index].isLocationModalOpen = false;
+                            setDiseases(newDiseases);
+                          }}
+                          onChange={(selected) => handleLocationChange(index, selected)}
+                          country={user?.country}
+                          borderingCountry={disease.outbreakData.borderingCountry}
+                          onBorderingCountryChange={(country) => handleBorderingCountryChange(index, country)}
                         />
+                      </td>
+
+                      {/* ADDITIONAL INFORMATION */}
+                      <td className="p-4" style={{ width: '170px' }}>
+                        {isNoOutbreaks(disease.outbreakData) ? (
+                          <div className="border border-gray-300 rounded">
+                            <textarea disabled className="bg-gray-200" placeholder="No outbreaks"></textarea>
+                          </div>
+                        ) : (
+                          <div className="border border-gray-300 rounded">
+                            <textarea 
+                              value={disease.outbreakData.outbreaksAdditionalInfo} 
+                              onChange={(e) => handleCommentsChange(index, e.target.value)}
+                              placeholder="Add comment"
+                              className="comment-textarea"
+                              rows={4}
+                            ></textarea>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -536,26 +777,70 @@ const RISPOutbreak: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex justify-center mt-6 mb-10">
-              <button
-                type="button"
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded mr-4"
-                onClick={() => navigate('/risp')}
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                className={`px-4 py-2 bg-green-greenMain hover:bg-green-greenMain2 text-white rounded ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+            <div className="flex justify-center space-x-4">
+              <button 
+                type="button" 
+                onClick={handleSubmit} 
+                className="w-1/4 nav-btn my-10"
                 disabled={saving}
               >
-                {saving ? 'Saving...' : 'Save and Proceed to Vaccination'}
+                {saving ? 'Saving...' : 'Save & Proceed to Vaccination'}
               </button>
             </div>
-
+            
             {saveSuccess && (
               <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
                 <p>Outbreak information saved successfully!</p>
+              </div>
+            )}
+
+            {/* Success Modal */}
+            {showSuccessModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+                  <div className="text-center">
+                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                      <svg
+                        className="h-6 w-6 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                      Data Saved Successfully!
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Outbreak information has been submitted correctly.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowSuccessModal(false);
+                        navigate('/risp/vaccination');
+                      }}
+                      className="w-full text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+                      style={{
+                        backgroundColor: '#15736d',
+                        borderColor: 'rgb(1 80 57 / 1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgb(1 80 57 / 1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#15736d';
+                      }}
+                    >
+                      OK
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
