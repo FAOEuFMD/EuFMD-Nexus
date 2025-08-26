@@ -12,6 +12,8 @@ interface MultipleSelectOptionsProps {
   onClose: () => void;
   onChange: (options: string[]) => void;
   country?: string; // Add country prop for admin levels fetching
+  borderingCountry?: string; // New prop for bordering country
+  onBorderingCountryChange?: (country: string) => void; // New prop for handling bordering country changes
 }
 
 const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
@@ -20,7 +22,9 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   selectedOptions,
   onClose,
   onChange,
-  country
+  country,
+  borderingCountry,
+  onBorderingCountryChange
 }) => {
   // Split initial selected options into regular options and admin levels
   const initialRegularOptions = selectedOptions.filter(opt => multipleOptions.includes(opt));
@@ -43,6 +47,19 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
     setSelectedOptionsLocal(newRegularOptions);
     setSelectedAdminLevels(newAdminLevels);
   }, [selectedOptions, multipleOptions]);
+
+  // Reset local state when modal opens to ensure proper syncing
+  useEffect(() => {
+    if (isOpen) {
+      const newRegularOptions = selectedOptions.filter(opt => multipleOptions.includes(opt));
+      const newAdminLevels = selectedOptions.filter(opt => 
+        !multipleOptions.includes(opt) && opt !== 'Specify region'
+      );
+      
+      setSelectedOptionsLocal(newRegularOptions);
+      setSelectedAdminLevels(newAdminLevels);
+    }
+  }, [isOpen, selectedOptions, multipleOptions]);
 
   // Fetch admin levels when "Specify region" is selected
   const fetchAdminLevels = useCallback(async () => {
@@ -198,6 +215,22 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
             onChange={(e) => setOtherInputValue(e.target.value)}
             placeholder="Please specify here..."
           />
+        )}
+
+        {/* Conditional bordering country input */}
+        {selectedOptionsLocal.includes('Within 50km from the border') && (
+          <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Please specify the bordering country:
+            </label>
+            <input
+              type="text"
+              value={borderingCountry || ''}
+              onChange={(e) => onBorderingCountryChange?.(e.target.value)}
+              placeholder="Enter bordering country name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
         )}
 
         <div className="mt-4 flex justify-end space-x-2">

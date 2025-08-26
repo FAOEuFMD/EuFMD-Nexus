@@ -25,12 +25,36 @@ const RISPOutbreak: React.FC = () => {
   const years = Array.from({length: 4}, (_, i) => String(currentYear - i));
   const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
 
-  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(`Q${Math.ceil((new Date().getMonth() + 1) / 3)}`);
+  // Helper function to get previous quarter and year
+  const getPreviousQuarterAndYear = () => {
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    const currentQuarter = Math.ceil(currentMonth / 3); // 1-4
+    const currentYear = new Date().getFullYear();
+    
+    if (currentQuarter === 1) {
+      // If current quarter is Q1, previous quarter is Q4 of previous year
+      return {
+        quarter: 'Q4',
+        year: String(currentYear - 1)
+      };
+    } else {
+      // Otherwise, previous quarter is in the same year
+      return {
+        quarter: `Q${currentQuarter - 1}`,
+        year: String(currentYear)
+      };
+    }
+  };
+
+  const previousPeriod = getPreviousQuarterAndYear();
+
+  const [selectedYear, setSelectedYear] = useState<string>(previousPeriod.year);
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(previousPeriod.quarter);
   const [popoverVisible, setPopoverVisible] = useState<boolean>(false);
   const [popoverIndex, setPopoverIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
   // Table headers with tooltips
   const tableHeaders = [
@@ -74,6 +98,7 @@ const RISPOutbreak: React.FC = () => {
         selectedSerotype: [] as string[],
         selectedControlMeasures: [] as string[],
         selectedLocation: [] as string[],
+        borderingCountry: "",
         outbreaksAdditionalInfo: "",
         year: parseInt(selectedYear),
         quarter: selectedQuarter
@@ -115,6 +140,7 @@ const RISPOutbreak: React.FC = () => {
               country: user?.country || "",
               numberOutbreaks: 0,
               selectedLocation: [],
+              borderingCountry: "",
               selectedStatus: [],
               selectedSerotype: [],
               selectedSpecies: [],
@@ -146,6 +172,7 @@ const RISPOutbreak: React.FC = () => {
                     country: user?.country || "",
                     numberOutbreaks: Number(record.number_outbreaks) || 0,
                     selectedLocation: JSON.parse(record.locations || '[]'),
+                    borderingCountry: record.bordering_country || "",
                     selectedStatus: JSON.parse(record.status || '[]'),
                     selectedSerotype: JSON.parse(record.serotype || '[]'),
                     selectedSpecies: JSON.parse(record.species || '[]'),
@@ -223,6 +250,58 @@ const RISPOutbreak: React.FC = () => {
     });
   };
 
+  // Helper function to handle bordering country input
+  const handleBorderingCountryChange = (index: number, country: string) => {
+    setDiseases(prevDiseases => {
+      const newDiseases = [...prevDiseases];
+      const disease = newDiseases[index];
+      
+      if (disease) {
+        disease.outbreakData.borderingCountry = country;
+      }
+      
+      return newDiseases;
+    });
+  };
+
+  // Custom handler for location changes that includes bordering country formatting
+  // Helper function to convert formatted locations back to raw selections
+  const getRawLocations = (formattedLocations: string[]): string[] => {
+    return formattedLocations.map(location => {
+      if (location.startsWith('Within 50km from the border:')) {
+        return 'Within 50km from the border';
+      }
+      return location;
+    });
+  };
+
+  // Helper function to format locations for display
+  const formatLocationsForDisplay = (rawLocations: string[], borderingCountry: string): string[] => {
+    return rawLocations.map(location => {
+      if (location === 'Within 50km from the border' && borderingCountry && borderingCountry.trim()) {
+        return `Within 50km from the border: ${borderingCountry.trim()}`;
+      }
+      return location;
+    });
+  };
+
+  const handleLocationChange = (index: number, selectedLocations: string[]) => {
+    setDiseases(prevDiseases => {
+      const newDiseases = [...prevDiseases];
+      const disease = newDiseases[index];
+      
+      if (disease) {
+        // Store the raw selections
+        disease.outbreakData.selectedLocation = selectedLocations;
+        
+        // Close modal
+        disease.isLocationModalOpen = false;
+      }
+      
+      return newDiseases;
+    });
+  };
+
   const handleCommentsChange = (index: number, value: string) => {
     setDiseases(prevDiseases => {
       const newDiseases = [...prevDiseases];
@@ -275,6 +354,7 @@ const RISPOutbreak: React.FC = () => {
       disease: disease.outbreakData.diseaseName.split(' - ')[0].trim(),
       number_outbreaks: parseInt(String(disease.outbreakData.numberOutbreaks)) || 0,
       locations: disease.outbreakData.selectedLocation || [],
+      bordering_country: disease.outbreakData.borderingCountry || "",
       status: disease.outbreakData.selectedStatus || [],
       serotype: disease.outbreakData.selectedSerotype || [],
       species: disease.outbreakData.selectedSpecies || [],
@@ -289,6 +369,7 @@ const RISPOutbreak: React.FC = () => {
         selectedSpecies: disease.outbreakData.selectedSpecies,
         selectedStatus: disease.outbreakData.selectedStatus,
         selectedLocation: disease.outbreakData.selectedLocation,
+        borderingCountry: disease.outbreakData.borderingCountry,
         selectedControlMeasures: disease.outbreakData.selectedControlMeasures,
         selectedSerotype: disease.outbreakData.selectedSerotype
       });
@@ -335,8 +416,7 @@ const RISPOutbreak: React.FC = () => {
       console.log('Save successful:', response);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000); // Hide success message after 3 seconds
-      alert('Outbreak Information has been submitted correctly');
-      navigate('/risp/vaccination');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error saving outbreaks:', error);
       alert(`Failed to save outbreak data: ${error}`);
@@ -371,6 +451,8 @@ const RISPOutbreak: React.FC = () => {
         <QuarterSelection 
           years={years} 
           quarters={quarters}
+          selectedYear={selectedYear}
+          selectedQuarter={selectedQuarter}
           onYearChange={handleYearChange}
           onQuarterChange={handleQuarterChange}
         />
@@ -483,6 +565,7 @@ const RISPOutbreak: React.FC = () => {
                         <HierarchicalSpeciesSelector 
                           isOpen={disease.isSpeciesModalOpen}
                           selectedOptions={disease.outbreakData.selectedSpecies}
+                          disease={disease.name}
                           onClose={() => {
                             setDiseases(prev => prev.map((d, i) => 
                               i === index ? { ...d, isSpeciesModalOpen: false } : d
@@ -649,7 +732,7 @@ const RISPOutbreak: React.FC = () => {
                               className="w-full p-2 text-left"
                             >
                               {disease.outbreakData.selectedLocation?.length 
-                                ? disease.outbreakData.selectedLocation.join(", ") 
+                                ? formatLocationsForDisplay(disease.outbreakData.selectedLocation, disease.outbreakData.borderingCountry).join(", ") 
                                 : "Select Location"}
                             </button>
                           </div>
@@ -657,14 +740,16 @@ const RISPOutbreak: React.FC = () => {
                         <MultipleSelectOptions 
                           isOpen={disease.isLocationModalOpen}
                           multipleOptions={locationOptions}
-                          selectedOptions={disease.outbreakData.selectedLocation}
+                          selectedOptions={getRawLocations(disease.outbreakData.selectedLocation)}
                           onClose={() => {
                             const newDiseases = [...diseases];
                             newDiseases[index].isLocationModalOpen = false;
                             setDiseases(newDiseases);
                           }}
-                          onChange={(selected) => handleFieldUpdate(index, 'selectedLocation', selected)}
+                          onChange={(selected) => handleLocationChange(index, selected)}
                           country={user?.country}
+                          borderingCountry={disease.outbreakData.borderingCountry}
+                          onBorderingCountryChange={(country) => handleBorderingCountryChange(index, country)}
                         />
                       </td>
 
@@ -706,6 +791,56 @@ const RISPOutbreak: React.FC = () => {
             {saveSuccess && (
               <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
                 <p>Outbreak information saved successfully!</p>
+              </div>
+            )}
+
+            {/* Success Modal */}
+            {showSuccessModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+                  <div className="text-center">
+                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                      <svg
+                        className="h-6 w-6 text-green-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                      Data Saved Successfully!
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Outbreak information has been submitted correctly.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowSuccessModal(false);
+                        navigate('/risp/vaccination');
+                      }}
+                      className="w-full text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+                      style={{
+                        backgroundColor: '#15736d',
+                        borderColor: 'rgb(1 80 57 / 1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgb(1 80 57 / 1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#15736d';
+                      }}
+                    >
+                      OK
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

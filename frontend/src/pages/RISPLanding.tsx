@@ -13,7 +13,7 @@ const RISPLanding: React.FC = () => {
             Welcome to the Risk Information Sharing Platform. <br /> 
             This platform allows you to report and share information. <br /> 
             Your input is crucial to help us monitor and manage health risks effectively. 
-            Please answer the questions below to share information about outbreaks, 
+            Please fill the following forms to share information about outbreaks, 
             control and surveillance measures for the selected time period.
           </h3>
           

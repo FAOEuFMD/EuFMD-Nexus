@@ -66,8 +66,31 @@ const RISPSurveillance: React.FC = () => {
   const years = Array.from({length: 4}, (_, i) => String(currentYear - i));
   const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
 
-  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(`Q${Math.ceil((new Date().getMonth() + 1) / 3)}`);
+  // Helper function to get previous quarter and year
+  const getPreviousQuarterAndYear = () => {
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    const currentQuarter = Math.ceil(currentMonth / 3); // 1-4
+    const currentYear = new Date().getFullYear();
+    
+    if (currentQuarter === 1) {
+      // If current quarter is Q1, previous quarter is Q4 of previous year
+      return {
+        quarter: 'Q4',
+        year: String(currentYear - 1)
+      };
+    } else {
+      // Otherwise, previous quarter is in the same year
+      return {
+        quarter: `Q${currentQuarter - 1}`,
+        year: String(currentYear)
+      };
+    }
+  };
+
+  const previousPeriod = getPreviousQuarterAndYear();
+
+  const [selectedYear, setSelectedYear] = useState<string>(previousPeriod.year);
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(previousPeriod.quarter);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
@@ -291,6 +314,8 @@ const RISPSurveillance: React.FC = () => {
         <QuarterSelection 
           years={years}
           quarters={quarters}
+          selectedYear={selectedYear}
+          selectedQuarter={selectedQuarter}
           onYearChange={handleYearChange}
           onQuarterChange={handleQuarterChange}
         />

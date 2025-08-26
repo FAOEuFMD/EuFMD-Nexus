@@ -41,12 +41,12 @@ const RISPVaccination: React.FC = () => {
   const [userCountry, setUserCountry] = useState('');
   const [dropdowns, setDropdowns] = useState<Record<number, Record<string, boolean>>>({});
   const [tooltipOpen, setTooltipOpen] = useState<Record<number, boolean>>({});
+  const [q1TooltipOpen, setQ1TooltipOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Location options
+  // Location options - specific for vaccination (only National and Specify region)
   const locationOptions = [
-    "Within 50km from the border",
-    "Far from the border", 
+    "National",
     "Specify region"
   ];
 
@@ -439,11 +439,13 @@ const RISPVaccination: React.FC = () => {
                       <th className="py-3 border border-white min-w-[100px]">Year</th>
                       <th className="py-3 border border-white min-w-[100px]">Status</th>
                       <th className="py-3 border border-white min-w-[180px] relative">
-                        <div className="flex items-center justify-center gap-1">
+                        <div 
+                          className="flex items-center justify-center gap-1"
+                          onMouseEnter={() => setTooltipOpen({...tooltipOpen, [index]: true})}
+                          onMouseLeave={() => setTooltipOpen({...tooltipOpen, [index]: false})}
+                        >
                           Strategy
                           <button
-                            onMouseEnter={() => setTooltipOpen({...tooltipOpen, [index]: true})}
-                            onMouseLeave={() => setTooltipOpen({...tooltipOpen, [index]: false})}
                             type="button"
                             className="inline-flex items-center hover:opacity-80 transition-opacity"
                           >
@@ -459,25 +461,25 @@ const RISPVaccination: React.FC = () => {
                           </button>
                           {tooltipOpen[index] && (
                             <div className="absolute z-50 w-64 bg-white rounded-lg shadow-lg border border-gray-200 text-left p-3 text-black right-0 top-full mt-2">
-                              <div className="space-y-2">
+                              <div className="space-y-2 text-xs">
                                 <p>
                                   <span className="font-medium">Mass vaccination:</span><br />
-                                  <span className="text-sm text-gray-600">All targeted animals in the entire country/zone</span>
+                                  <span className="text-gray-600">Vaccinations in entire country/zone (also if only one species vaccinated)</span>
                                 </p>
                                 <p>
                                   <span className="font-medium">Risk-based vaccination:</span><br />
-                                  <span className="text-sm text-gray-600">Before movement or for high-value populations</span>
+                                  <span className="text-gray-600">Only sub-populations are vaccinated, e.g. in specific area, before movement, high value populations.</span>
                                 </p>
                                 <p>
                                   <span className="font-medium">Ring vaccination:</span><br />
-                                  <span className="text-sm text-gray-600">Around outbreak areas</span>
+                                  <span className="text-gray-600">Around outbreak areas</span>
                                 </p>
                               </div>
                             </div>
                           )}
                         </div>
                       </th>
-                      <th className="py-3 border border-white min-w-[180px]">Geographical Areas</th>
+                      <th className="py-3 border border-white min-w-[200px]">Species</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -530,10 +532,81 @@ const RISPVaccination: React.FC = () => {
                           <option value="Mass">Mass vaccination</option>
                           <option value="RiskBased">Risk-based vaccination</option>
                           <option value="Ring">Ring vaccination</option>
-                          <option value="OwnerRequest">On request of Owner</option>
+                          <option value="OwnerRequest">On request of owner</option>
                           <option value="Trade">Related to trade</option>
                         </select>
                       </td>
+                      <td className="p-3 relative">
+                        <button 
+                          type="button"
+                          className="w-full h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            console.log('Species button clicked directly');
+                            toggleDropdown(index, 'species');
+                          }}
+                        >
+                          {formatList(campaign.species || [], 'Select species...')}
+                        </button>
+                        {dropdowns[index]?.species && (
+                          <HierarchicalSpeciesSelector 
+                            isOpen={true}
+                            selectedOptions={campaign.species || []}
+                            disease={campaign.diseaseName}
+                            onClose={() => closeDropdown(index, 'species')}
+                            onChange={(options) => handleFieldUpdate(index, 'species', options)}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Vaccination Data Table */}
+                <table className="min-w-full border border-white bg-white text-center tracking-wider text-sm">
+                  <thead>
+                    <tr className="bg-gray-200 text-gray-700 text-sm font-medium capitalize whitespace-nowrap">
+                      <th className="py-3 border border-white min-w-[180px]">Geographical Areas</th>
+                      <th className="py-3 border border-white w-32 relative">
+                        <div 
+                          className="flex items-center justify-center gap-1"
+                          onMouseEnter={() => setQ1TooltipOpen(true)}
+                          onMouseLeave={() => setQ1TooltipOpen(false)}
+                        >
+                          Q1
+                          <button
+                            type="button"
+                            className="inline-flex items-center hover:opacity-80 transition-opacity"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              height="16px"
+                              viewBox="0 -960 960 960"
+                              width="16px"
+                              fill="currentColor"
+                            >
+                              <path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"/>
+                            </svg>
+                          </button>
+                          {q1TooltipOpen && (
+                            <div className="absolute z-50 w-48 bg-white rounded-lg shadow-lg border border-gray-200 text-left p-2 text-black left-1/2 transform -translate-x-1/2 top-full mt-1">
+                              <p className="text-xs text-gray-700">
+                                Add number of animals<br />vaccinated in each quarter
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </th>
+                      <th className="py-3 border border-white w-32">Q2</th>
+                      <th className="py-3 border border-white w-32">Q3</th>
+                      <th className="py-3 border border-white w-32">Q4</th>
+                      <th className="py-3 border border-white w-32">Total</th>
+                      <th className="py-3 border border-white w-32">Coverage (%)</th>
+                      <th className="py-3 border border-white min-w-[300px]">Vaccine Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="hover:bg-gray-50">
                       <td className="p-3 relative">
                         <textarea
                           readOnly 
@@ -563,47 +636,6 @@ const RISPVaccination: React.FC = () => {
                             onChange={(e) => handleFieldUpdate(index, 'regionDetails', e.target.value)}
                             placeholder="Enter region details..."
                           ></textarea>
-                        )}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Vaccination Data Table */}
-                <table className="min-w-full border border-white bg-white text-center tracking-wider text-sm">
-                  <thead>
-                    <tr className="bg-gray-200 text-gray-700 text-sm font-medium capitalize whitespace-nowrap">
-                      <th className="py-3 border border-white min-w-[200px]">Species</th>
-                      <th className="py-3 border border-white w-32">Q1</th>
-                      <th className="py-3 border border-white w-32">Q2</th>
-                      <th className="py-3 border border-white w-32">Q3</th>
-                      <th className="py-3 border border-white w-32">Q4</th>
-                      <th className="py-3 border border-white w-32">Total</th>
-                      <th className="py-3 border border-white w-32">Coverage (%)</th>
-                      <th className="py-3 border border-white min-w-[300px]">Vaccine Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="hover:bg-gray-50">
-                      <td className="p-3 relative">
-                        <button 
-                          type="button"
-                          className="w-full h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            console.log('Species button clicked directly');
-                            toggleDropdown(index, 'species');
-                          }}
-                        >
-                          {formatList(campaign.species || [], 'Select species...')}
-                        </button>
-                        {dropdowns[index]?.species && (
-                          <HierarchicalSpeciesSelector 
-                            isOpen={true}
-                            selectedOptions={campaign.species || []}
-                            onClose={() => closeDropdown(index, 'species')}
-                            onChange={(options) => handleFieldUpdate(index, 'species', options)}
-                          />
                         )}
                       </td>
                       <td className="p-3">

@@ -46,9 +46,32 @@ const formatArrayData = (data: any): string => {
 const RISPSummary: React.FC = () => {
   const { user } = useAuthStore();
   
-  // Get current year and quarter
-  const currentYear = new Date().getFullYear();
-  const currentQuarter = `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
+  // Helper function to get previous quarter and year (same as outbreak and surveillance)
+  const getPreviousQuarterAndYear = () => {
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    const currentQuarter = Math.ceil(currentMonth / 3); // 1-4
+    const currentYear = new Date().getFullYear();
+    
+    if (currentQuarter === 1) {
+      // If current quarter is Q1, previous quarter is Q4 of previous year
+      return {
+        quarter: 'Q4',
+        year: String(currentYear - 1)
+      };
+    } else {
+      // Otherwise, previous quarter is in the same year
+      return {
+        quarter: `Q${currentQuarter - 1}`,
+        year: String(currentYear)
+      };
+    }
+  };
+
+  const previousPeriod = getPreviousQuarterAndYear();
+  
+  // Use previous quarter and year instead of current
+  const currentYear = parseInt(previousPeriod.year);
+  const currentQuarter = previousPeriod.quarter;
   
   const [outbreakData, setOutbreakData] = useState<any[]>([]);
   const [surveillanceData, setSurveillanceData] = useState<any[]>([]);
@@ -61,9 +84,7 @@ const RISPSummary: React.FC = () => {
       
       setLoading(true);
       try {
-        const currentYear = new Date().getFullYear();
-        const currentQuarter = `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
-
+        // Use the same previous quarter logic as other RISP pages
         // Load outbreak data using the correct API
         const outbreakResponse = await apiService.risp.getOutbreaks(currentYear, currentQuarter);
         
@@ -97,10 +118,10 @@ const RISPSummary: React.FC = () => {
         // Load vaccination data
         const vaccinationResponse = await apiService.risp.getRISPVaccinations(currentYear.toString());
         
-        // Filter campaigns that have data for current quarter
-        const currentQuarterNum = Math.ceil((new Date().getMonth() + 1) / 3);
+        // Filter campaigns that have data for the selected quarter (previous quarter)
+        const quarterNum = parseInt(currentQuarter.substring(1)); // Extract number from Q1, Q2, etc.
         const campaignsWithCurrentData = (vaccinationResponse.data || []).filter((campaign: any) => {
-          const quarterField = `q${currentQuarterNum}`;
+          const quarterField = `q${quarterNum}`;
           return campaign[quarterField] && campaign[quarterField] > 0;
         });
 
@@ -119,7 +140,7 @@ const RISPSummary: React.FC = () => {
     };
 
     loadSummaryData();
-  }, [user?.country]);
+  }, [user?.country, currentYear, currentQuarter]);
 
   const handlePrint = () => {
     const doc = new jsPDF();

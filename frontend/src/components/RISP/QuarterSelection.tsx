@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 interface QuarterSelectionProps {
   years: string[];
   quarters: string[];
+  selectedYear?: string;
+  selectedQuarter?: string;
   onYearChange?: (year: string) => void;
   onQuarterChange?: (quarter: string) => void;
 }
@@ -10,14 +12,16 @@ interface QuarterSelectionProps {
 const QuarterSelection: React.FC<QuarterSelectionProps> = ({ 
   years, 
   quarters, 
+  selectedYear: initialYear,
+  selectedQuarter: initialQuarter,
   onYearChange,
   onQuarterChange 
 }) => {
   const currentYear = new Date().getFullYear().toString();
   const currentQuarter = `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
   
-  const [selectedYear, setSelectedYear] = useState<string>(currentYear);
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(currentQuarter);
+  const [selectedYear, setSelectedYear] = useState<string>(initialYear || currentYear);
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(initialQuarter || currentQuarter);
 
   useEffect(() => {
     // Initialize with default values only on component mount

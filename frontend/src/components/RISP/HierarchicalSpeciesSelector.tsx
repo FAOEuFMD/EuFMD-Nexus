@@ -6,36 +6,90 @@ interface HierarchicalSpeciesSelectorProps {
   selectedOptions: string[];
   onClose: () => void;
   onChange: (options: string[]) => void;
+  disease?: string; // Add disease prop for filtering
 }
 
 const HierarchicalSpeciesSelector: React.FC<HierarchicalSpeciesSelectorProps> = ({
   isOpen,
   selectedOptions,
   onClose,
-  onChange
+  onChange,
+  disease
 }) => {
   const [selectedSpecies, setSelectedSpecies] = useState<string[]>(selectedOptions);
+
+  // Function to get disease-specific species options
+  const getFilteredSpeciesOptions = () => {
+    if (!disease) return { hierarchical: hierarchicalSpeciesOptions, single: singleSpeciesOptions };
+
+    const diseaseName = disease.toLowerCase();
+    
+    if (diseaseName.includes('lsd') || diseaseName.includes('lumpy')) {
+      // LSD affects only cattle and buffalo (large ruminants)
+      return {
+        hierarchical: { 'Large ruminants': ['Cattle', 'Buffalo'] },
+        single: ['Wildlife', 'Information not available']
+      };
+    } else if (diseaseName.includes('ppr') || diseaseName.includes('peste')) {
+      // PPR affects only small ruminants
+      return {
+        hierarchical: { 'Small ruminants': ['Goats', 'Sheep'] },
+        single: ['Wildlife', 'Information not available']
+      };
+    } else if (diseaseName.includes('spgp') || diseaseName.includes('sheep') || diseaseName.includes('goat')) {
+      // SPGP affects sheep and goats
+      return {
+        hierarchical: { 'Small ruminants': ['Goats', 'Sheep'] },
+        single: ['Information not available']
+      };
+    } else if (diseaseName.includes('fmd') || diseaseName.includes('foot')) {
+      // FMD affects cloven-hoofed animals
+      return {
+        hierarchical: hierarchicalSpeciesOptions, // All ruminants
+        single: ['Pigs', 'Wildlife', 'Information not available']
+      };
+    } else if (diseaseName.includes('rvf') || diseaseName.includes('rift')) {
+      // RVF affects multiple species
+      return {
+        hierarchical: hierarchicalSpeciesOptions, // All ruminants
+        single: ['Wildlife', 'Information not available']
+      };
+    }
+    
+    // Default: show all options
+    return { hierarchical: hierarchicalSpeciesOptions, single: singleSpeciesOptions };
+  };
+
+  const filteredOptions = getFilteredSpeciesOptions();
 
   // Update local state when selectedOptions prop changes
   useEffect(() => {
     setSelectedSpecies(selectedOptions);
   }, [selectedOptions]);
 
+  // Reset local state when modal opens to ensure proper syncing
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedSpecies(selectedOptions);
+    }
+  }, [isOpen, selectedOptions]);
+
   // Check if all species in a group are selected
   const isGroupFullySelected = (groupName: string): boolean => {
-    const groupSpecies = hierarchicalSpeciesOptions[groupName as keyof typeof hierarchicalSpeciesOptions];
-    return groupSpecies.every(species => selectedSpecies.includes(species));
+    const groupSpecies = filteredOptions.hierarchical[groupName as keyof typeof filteredOptions.hierarchical];
+    return groupSpecies ? groupSpecies.every(species => selectedSpecies.includes(species)) : false;
   };
 
   // Check if some species in a group are selected (for indeterminate state)
   const isGroupPartiallySelected = (groupName: string): boolean => {
-    const groupSpecies = hierarchicalSpeciesOptions[groupName as keyof typeof hierarchicalSpeciesOptions];
-    return groupSpecies.some(species => selectedSpecies.includes(species)) && !isGroupFullySelected(groupName);
+    const groupSpecies = filteredOptions.hierarchical[groupName as keyof typeof filteredOptions.hierarchical];
+    return groupSpecies ? (groupSpecies.some(species => selectedSpecies.includes(species)) && !isGroupFullySelected(groupName)) : false;
   };
 
   // Handle group selection (select/deselect all species in group)
   const handleGroupChange = (groupName: string) => {
-    const groupSpecies = hierarchicalSpeciesOptions[groupName as keyof typeof hierarchicalSpeciesOptions];
+    const groupSpecies = filteredOptions.hierarchical[groupName as keyof typeof filteredOptions.hierarchical];
+    if (!groupSpecies) return;
     
     if (isGroupFullySelected(groupName)) {
       // Deselect all species in this group
@@ -72,11 +126,11 @@ const HierarchicalSpeciesSelector: React.FC<HierarchicalSpeciesSelectorProps> = 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
       <div className="bg-white p-6 rounded shadow-lg w-96 max-h-96 overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Select Species (Hierarchical)</h2>
+        <h2 className="text-lg font-semibold mb-4">Select Species</h2>
 
         <div className="space-y-3">
           {/* Hierarchical Groups */}
-          {Object.entries(hierarchicalSpeciesOptions).map(([groupName, groupSpecies]) => (
+          {Object.entries(filteredOptions.hierarchical).map(([groupName, groupSpecies]) => (
             <div key={groupName} className="border-l-2 border-gray-200 pl-2">
               {/* Group Header */}
               <label className="flex items-center space-x-2 font-medium text-gray-800 cursor-pointer">
@@ -97,7 +151,7 @@ const HierarchicalSpeciesSelector: React.FC<HierarchicalSpeciesSelectorProps> = 
 
               {/* Group Species */}
               <div className="ml-6 mt-1 space-y-1">
-                {groupSpecies.map(species => (
+                {groupSpecies.map((species: string) => (
                   <label key={species} className="flex items-center space-x-2 text-gray-700 cursor-pointer">
                     <input
                       type="checkbox"
@@ -114,7 +168,7 @@ const HierarchicalSpeciesSelector: React.FC<HierarchicalSpeciesSelectorProps> = 
           ))}
 
           {/* Single Species (no grouping) */}
-          {singleSpeciesOptions.map(species => (
+          {filteredOptions.single.map(species => (
             <div key={species}>
               <label className="flex items-center space-x-2 font-medium text-gray-800 cursor-pointer">
                 <input
