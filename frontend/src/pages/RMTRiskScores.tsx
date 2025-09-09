@@ -60,8 +60,6 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   const [receiverCountry, setReceiverCountry] = useState<Country | null>(null);
   const [sourceCountries, setSourceCountries] = useState<Country[]>([]);
   const [selectedSourceCountry, setSelectedSourceCountry] = useState<string>('');
-  const [selectedCountries, setSelectedCountries] = useState<Set<number>>(new Set());
-  const [selectedCountryData, setSelectedCountryData] = useState<Country[]>([]);
   
   // Carousel/step state
   const [currentStep, setCurrentStep] = useState(0);
@@ -304,7 +302,6 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     // Clear source countries and data when receiver country changes
     setSourceCountries([]);
     setSelectedSourceCountry('');
-    setSelectedCountries(new Set());
     setDiseaseStatus([]);
     setMitigationMeasures([]);
     setConnections([]);
@@ -327,12 +324,6 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           
           if (Array.isArray(euNeighbours) && euNeighbours.length > 0) {
             setSourceCountries(euNeighbours);
-            // Add all EU neighbour countries to selected countries set
-            const newSelectedCountries = new Set<number>();
-            euNeighbours.forEach(country => newSelectedCountries.add(country.id));
-            setSelectedCountries(newSelectedCountries);
-            // Store country data for results page
-            setSelectedCountryData(euNeighbours);
             
             // Fetch disease status and mitigation measures for all EU countries
             try {
@@ -444,8 +435,6 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           });
           console.log('Using fallback EU neighbour countries:', euNeighbourCountries);
           setSourceCountries(euNeighbourCountries);
-          // Also update selected country data for results page
-          setSelectedCountryData(euNeighbourCountries);
           
           // Initialize data arrays for fallback countries
           const diseaseStatusData = euNeighbourCountries.map(country => ({
@@ -490,14 +479,6 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           // Check if country is already in source countries
           if (!sourceCountries.find(c => c.id === selectedCountry.id)) {
             setSourceCountries(prev => [...prev, selectedCountry]);
-            // Add to selected countries set
-            setSelectedCountries(prev => {
-              const newSet = new Set(prev);
-              newSet.add(selectedCountry.id);
-              return newSet;
-            });
-            // Store selected country data for passing to results page
-            setSelectedCountryData(prev => [...prev, selectedCountry]);
               
             // Fetch disease status and mitigation measures for the new country
             try {
@@ -775,11 +756,11 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
             connection: connectionData.connection || 0,
             livestockDensity: connectionData.livestockDensity || 0
           },
-          selectedCountries: Array.from(selectedCountries),
+          selectedCountries: sourceCountries.map(country => country.id),
           receiverCountryName: receiverCountry?.name_un,
           diseaseStatusData,
           mitigationMeasuresData,
-          sourceCountriesData: selectedCountryData
+          sourceCountriesData: sourceCountries
         }
       });
     } else {
@@ -822,17 +803,17 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     );
   };
   
-  // Function to fill all connections with value 0
+  // Function to fill empty connection fields with value 0 (preserves existing user entries)
   const fillAllConnectionsWithZero = () => {
     setConnections(prev =>
       prev.map(row => ({
         ...row,
-        liveAnimalContact: 0,
-        legalImport: 0,
-        proximity: 0,
-        illegalImport: 0,
-        connection: 0,
-        livestockDensity: 0
+        liveAnimalContact: row.liveAnimalContact !== null && row.liveAnimalContact !== undefined ? row.liveAnimalContact : 0,
+        legalImport: row.legalImport !== null && row.legalImport !== undefined ? row.legalImport : 0,
+        proximity: row.proximity !== null && row.proximity !== undefined ? row.proximity : 0,
+        illegalImport: row.illegalImport !== null && row.illegalImport !== undefined ? row.illegalImport : 0,
+        connection: row.connection !== null && row.connection !== undefined ? row.connection : 0,
+        livestockDensity: row.livestockDensity !== null && row.livestockDensity !== undefined ? row.livestockDensity : 0
       }))
     );
   };
@@ -844,9 +825,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           <div className="space-y-6">
             {/* Country Selection Form */}
             <div className="rmt-step">
-              <div className="flex flex-wrap gap-2 justify-evenly mb-0">
+              <div className="flex flex-col lg:flex-row gap-4 justify-evenly mb-0">
                 {/* Receiver country select - Left side */}
-                <div>
+                <div className="flex-1 min-w-0">
                   <label htmlFor="receiverCountry" className="block text-sm font-medium text-gray-700 mb-2">
                     My country is:
                   </label>
@@ -866,7 +847,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                 </div>
 
                 {/* Source country select - Right side */}
-                <div className="grow">
+                <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-700 mb-2">
                     I want to evaluate risks with:
                   </div>
@@ -874,7 +855,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                     <select
                       value={selectedSourceCountry}
                       onChange={(e) => handleSourceCountrySelection(e.target.value)}
-                      className="block w-3/4 mx-auto mt-1 p-2 border focus:border-[#15736d] rounded bg-white mb-1"
+                      className="block w-full mx-auto mt-1 p-2 border focus:border-[#15736d] rounded bg-white mb-1"
                       disabled={!receiverCountry}
                     >
                       <option value="">Type name of the country</option>
@@ -907,7 +888,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                 <div className="rmt-grid">
                   {/* Disease Status Table */}
                   <div className="h-full">
-                    <div className="overflow-x-auto">
+                    <div className="rmt-table-container">
                       <table className="rmt-table">
                         <thead>
                           <tr>
@@ -1015,7 +996,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
               <div className="rmt-grid">
                 {/* Mitigation Measures Table */}
                 <div>
-                  <div className="overflow-x-auto">
+                  <div className="rmt-table-container">
                     <table className="rmt-table">
                       <thead>
                         <tr>
@@ -1108,7 +1089,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                 <div className="flex">
                   <div className="ml-3">
                     <p className="text-sm text-blue-700">
-                      <strong>Note:</strong> Pathway effectiveness scores are automatically calculated based on EuFMD research data. No user input is required for this step.
+                      <strong>Note:</strong> Pathway effectiveness scores are estimated based on research data, and have been reviewed by experts of the European Reference Laboratories for each of the FAST diseases. No user inputs is required for this step.
                     </p>
                   </div>
                 </div>
@@ -1116,7 +1097,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
 
               <div className="rmt-grid">
                 <div>
-                  <div className="overflow-x-auto">
+                  <div className="rmt-table-container">
                     <table className="rmt-table">
                       <thead>
                         <tr>
@@ -1153,8 +1134,8 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                   </div>
                 </div>
                 
-                <div className="space-y-4">
-                  <div className="rmt-info-box">
+                <div className="flex flex-col lg:flex-row gap-4 mt-4 lg:mt-0">
+                  <div className="rmt-info-box flex-1">
                     <h4 className="rmt-info-title">Score Legend</h4>
                     <div className="space-y-2">
                       <div className="rmt-legend-item">
@@ -1176,7 +1157,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                     </div>
                   </div>
 
-                  <div className="rmt-info-box">
+                  <div className="rmt-info-box flex-1">
                     <h4 className="rmt-info-title">Key References*</h4>
                     <ul className="text-xs space-y-1 text-gray-600">
                       <li>• Brown et al., 2022</li>
@@ -1208,21 +1189,22 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                 each source country, through each of the 6 pathways, ranging from no connection (0) to highly connected (3).
               </p>
               
-              <div className="flex justify-start mb-4">
+              <div className="flex flex-wrap justify-start mb-4 gap-2">
                 <button
                   onClick={fillAllConnectionsWithZero}
                   className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1 px-3 rounded text-sm flex items-center gap-1"
+                  title="Fill only empty fields with 0 (preserves existing values)"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 20h9"></path>
                     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
                   </svg>
-                  Fill All With 0
+                  Fill Empty With 0
                 </button>
               </div>
               
               <div className="rmt-grid">
-                <div className="overflow-x-auto">
+                <div className="rmt-table-container">
                   <table className="rmt-table">
                     <thead>
                       <tr>
@@ -1404,9 +1386,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Risk Monitoring Tool</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Risk Monitoring Tool</h1>
         {receiverCountry && currentStep !== 2 && (
-          <h2 className="text-xl text-gray-700">
+          <h2 className="text-lg sm:text-xl text-gray-700">
             Evaluating {receiverCountry.name_un}'s risk with:
           </h2>
         )}
@@ -1424,7 +1406,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
 
       {/* Progress indicator */}
       <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
+        <div className="rmt-progress mb-4">
           {stepTitles.map((title, index) => (
             <div
               key={index}
@@ -1439,7 +1421,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
               >
                 {index + 1}
               </div>
-              <span className="ml-2 text-sm font-medium hidden md:block">{title}</span>
+              <span className="ml-2 text-sm font-medium hidden sm:block">{title}</span>
             </div>
           ))}
         </div>
@@ -1452,13 +1434,13 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       </div>
 
       {/* Step content */}
-      <div className="mb-8">
+      <div className="mb-12">
         {renderStepContent()}
       </div>
 
       {/* Navigation buttons */}
-      <div className="flex justify-between items-center">
-        <div className="space-x-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8">
+        <div className="flex flex-wrap gap-2">
           <Link
             to="/rmt"
             className="px-4 py-2 text-[#015039] border-2 border-[#015039] rounded-md hover:bg-[#15736d] hover:text-white transition-colors duration-300"
@@ -1473,7 +1455,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           </button>
         </div>
 
-        <div className="space-x-4">
+        <div className="flex flex-wrap gap-2">
           {currentStep > 0 && (
             <button
               onClick={handlePrevious}

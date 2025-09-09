@@ -35,6 +35,28 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
     fixLeafletIcon();
   }, []);
 
+  // Add country name mapping function
+  const getStandardizedCountryName = (geoJsonName: string): string => {
+    const nameMapping: { [key: string]: string } = {
+      'Turkey': 'Türkiye',
+      'Iran (Islamic Republic of)': 'Iran',
+      'Palestine, State of': 'Palestine',
+      'West Bank': 'Palestine',
+      'West Bank and Gaza': 'Palestine',
+      'Gaza Strip': 'Palestine',
+      'Palestinian Territory': 'Palestine',
+      // Add more mappings if needed for other countries
+      'United States of America': 'United States',
+      'Russian Federation': 'Russia',
+      'Syrian Arab Republic': 'Syria',
+      'Republic of Korea': 'South Korea',
+      "Democratic People's Republic of Korea": 'North Korea',
+      'United Kingdom of Great Britain and Northern Ireland': 'United Kingdom',
+    };
+    
+    return nameMapping[geoJsonName] || geoJsonName;
+  };
+
   // Calculate average risk score across diseases for a country
   const calculateAverageRisk = (country: any): number => {
     if (!country.riskScores) return 0;
@@ -64,10 +86,11 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
   const getCountryStyle = (feature: Feature<Geometry, any> | undefined) => {
     if (!feature) return {};
     
-    const countryName = feature.properties.NAME_EN || feature.properties.name;
+    const geoJsonCountryName = feature.properties.NAME_EN || feature.properties.name;
+    const standardizedCountryName = getStandardizedCountryName(geoJsonCountryName);
     
     // Highlight the target country differently
-    if (countryName === targetCountryName) {
+    if (standardizedCountryName === targetCountryName) {
       return { 
         fillColor: '#CCCCCC', // Gray for target country
         weight: 2, 
@@ -77,10 +100,10 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
       };
     }
     
-    // Find risk data for this country
+    // Find risk data for this country using standardized name
     const countryRiskData = countryData.find(c => 
-      c.name_un === countryName || 
-      c.name_un.toLowerCase() === countryName.toLowerCase()
+      c.name_un === standardizedCountryName || 
+      c.name_un.toLowerCase() === standardizedCountryName.toLowerCase()
     );
     
     if (!countryRiskData) {
@@ -160,40 +183,8 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
 
   // Handle feature interactions
   const onEachFeature = (feature: Feature<Geometry, any>, layer: any) => {
-    const countryName = feature.properties.NAME_EN || feature.properties.name;
-    const countryRiskData = countryData.find(c => 
-      c.name_un === countryName || 
-      c.name_un.toLowerCase() === countryName.toLowerCase()
-    );
-    
-    let tooltipContent = `<strong>${countryName}</strong>`;
-    
-    if (countryName === targetCountryName) {
-      tooltipContent += '<br/><em>Target Country</em>';
-    } else if (countryRiskData) {
-      const riskScore = calculateAverageRisk(countryRiskData);
-      tooltipContent += `<br/>Risk Score: ${riskScore.toFixed(1)}`;
-      
-      if (selectedDisease !== 'overall') {
-        tooltipContent += ` (${selectedDisease})`;
-      }
-      
-      // Show individual disease scores if available
-      if (selectedDisease === 'overall' && countryRiskData.riskScores) {
-        tooltipContent += '<br/><small>Disease scores:';
-        ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'].forEach(disease => {
-          // TypeScript-safe way to access disease scores
-          const diseaseProp = disease as keyof typeof countryRiskData.riskScores;
-          const score = countryRiskData.riskScores[diseaseProp];
-          if (score !== undefined) {
-            tooltipContent += `<br/>${disease}: ${score.toFixed(1)}`;
-          }
-        });
-        tooltipContent += '</small>';
-      }
-    }
-    
-    layer.bindTooltip(tooltipContent);
+    // Remove tooltip functionality since map already shows country names
+    // Country styling and risk data matching is handled in getCountryStyle function
   };
 
   if (isLoading) {
@@ -213,8 +204,9 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
         scrollWheelZoom={false}
       >
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="&copy; OpenStreetMap contributors"
+          url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
+          attribution="&copy; United Nations Geospatial Information Section"
+          maxZoom={18}
         />
         {countriesGeoJSON && (
           <GeoJSON 

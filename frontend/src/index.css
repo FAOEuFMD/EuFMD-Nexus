@@ -245,15 +245,20 @@
   }
 
   .rmt-legend-color {
-    width: 1.3rem;
-    height: 1.3rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
     margin-right: 0.6rem;
     border-radius: 0.2rem;
     border: 1px solid #e2e8f0;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    flex-shrink: 0;
   }
   
   /* RMT table styling */
@@ -342,7 +347,7 @@
     font-size: 0.8rem;
   }
   
-  /* Grid layout for RMT sections to align elements */
+  /* Grid layout for RMT sections to align elements - Enhanced Responsive */
   .rmt-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -354,6 +359,64 @@
     .rmt-grid {
       grid-template-columns: 2fr 1fr;
       align-items: start;
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .rmt-grid {
+      grid-template-columns: 2.5fr 1fr;
+      gap: 2rem;
+    }
+  }
+
+  /* Responsive table container */
+  .rmt-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+    max-width: 100%;
+  }
+
+  @media (max-width: 767px) {
+    .rmt-table-container {
+      font-size: 0.875rem;
+    }
+    
+    .rmt-table th,
+    .rmt-table td {
+      padding: 0.5rem 0.25rem;
+      min-width: 60px;
+    }
+  }
+
+  /* Responsive button groups */
+  .rmt-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  @media (min-width: 640px) {
+    .rmt-button-group {
+      justify-content: flex-start;
+    }
+  }
+
+  /* Responsive progress indicator */
+  .rmt-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .rmt-progress {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
     }
   }
 

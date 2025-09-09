@@ -391,7 +391,7 @@ const RMTResults: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h2 className="text-2xl font-semibold mb-4">
+      <h2 className="text-xl sm:text-2xl font-semibold mb-4">
         Risk Assessment Results for {receiverCountry}
       </h2>
 
@@ -406,17 +406,14 @@ const RMTResults: React.FC = () => {
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Risk Map Visualization</h3>
         <p className="text-gray-600 mb-4">
-          This map shows the overall risk level for each source country relative to {receiverCountry}.
-          Countries are colored according to their risk level: green (low risk), yellow (low-medium risk),
-          orange (medium-high risk), and red (high risk). The target country ({receiverCountry}) is 
-          highlighted in gray.
+          This map shows the overall risk level for each source country relative to {receiverCountry}. Countries with a similar level of risk are colored with the same color, on a scale from green (lower risk score) to red (higher risk score). The target country is highlighted in gray.
         </p>
         <div className="mb-3">
-          <label className="mr-2 font-medium">Select Disease: </label>
+          <label className="mr-2 font-medium text-sm sm:text-base">Select Disease: </label>
           <select 
             value={selectedDisease} 
             onChange={(e) => setSelectedDisease(e.target.value)}
-            className="border rounded px-2 py-1 bg-white min-w-[150px]"
+            className="border rounded px-2 py-1 bg-white min-w-[120px] sm:min-w-[150px] text-sm sm:text-base"
             style={{ 
               paddingRight: '2rem',
               backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
@@ -449,18 +446,16 @@ const RMTResults: React.FC = () => {
       <div className="mb-10">
         <h3 className="text-xl font-semibold mb-2">Risk Scores Summary</h3>
         <p className="text-gray-600 mb-4">
-          This table presents the risk scores for each disease across all source countries.
-          Higher scores (orange to red) indicate higher risk of disease introduction.
+          This table presents the risk scores for each disease across all source countries. Higher scores indicate a higher risk of entry of the pathogen. The scores should be used to compare the risk of entry of a pathogen among source countries, but should not be compared among different diseases.
         </p>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse rmt-table">
+          <table className="w-full border-collapse rmt-table min-w-[600px]">
             <thead>
               <tr className="bg-[#15736d] text-white">
                 <th className="px-4 py-2 text-left">Source Country</th>
                 {diseases.map(disease => (
                   <th key={disease} className="px-4 py-2 text-center">{disease}</th>
                 ))}
-                <th className="px-4 py-2 text-center">Average</th>
               </tr>
             </thead>
             <tbody>
@@ -471,10 +466,6 @@ const RMTResults: React.FC = () => {
                     acc[score.disease] = score.riskScore;
                     return acc;
                   }, {} as Record<string, number>);
-                
-                // Calculate average score
-                const totalScore = diseases.reduce((sum, disease) => sum + (countryScores[disease] || 0), 0);
-                const averageScore = Math.round((totalScore / diseases.length) * 10) / 10;
                 
                 return (
                   <tr key={country.id} className="border-b">
@@ -492,11 +483,6 @@ const RMTResults: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-4 py-2 text-center">
-                      <span className={`inline-block w-8 h-8 rounded-full ${getRiskColor(averageScore)} ${getTextColor(averageScore)} text-center leading-8`}>
-                        {averageScore}
-                      </span>
-                    </td>
                   </tr>
                 );
               })}
@@ -540,10 +526,10 @@ const RMTResults: React.FC = () => {
       </div>
 
       {/* Actions */}
-      <div className="flex justify-between mt-10">
+      <div className="flex flex-col sm:flex-row justify-between mt-10 gap-4">
         <Link 
           to="/rmt" 
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors text-center"
         >
           Start New Assessment
         </Link>

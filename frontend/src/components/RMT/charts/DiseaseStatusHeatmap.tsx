@@ -88,14 +88,15 @@ const DiseaseStatusHeatmap: React.FC<DiseaseStatusHeatmapProps> = ({ diseaseStat
         <ResponsiveHeatMap
           data={transformDiseaseStatus(diseaseStatusData)}
           margin={{ top: 60, right: 80, bottom: 40, left: leftMargin }}
-          valueFormat=">-.2s"
+          valueFormat=">-.0f"
           axisTop={{
             tickSize: 5,
             tickPadding: 5,
             tickRotation: 0,
             legend: 'Diseases',
             legendPosition: 'middle',
-            legendOffset: -30
+            legendOffset: -45,
+            format: (value) => value
           }}
           axisLeft={{
             tickSize: 5,
@@ -103,7 +104,18 @@ const DiseaseStatusHeatmap: React.FC<DiseaseStatusHeatmapProps> = ({ diseaseStat
             tickRotation: 0,
             legend: 'Countries',
             legendPosition: 'middle',
-            legendOffset: -Math.min(80, leftMargin * 0.7)
+            legendOffset: -Math.min(120, leftMargin * 0.9),
+            format: (value) => value
+          }}
+          theme={{
+            axis: {
+              legend: {
+                text: {
+                  fontWeight: 'bold',
+                  fontSize: 14
+                }
+              }
+            }
           }}
           colors={getColor}
           emptyColor="#eeeeee"
