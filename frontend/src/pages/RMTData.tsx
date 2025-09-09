@@ -12,7 +12,6 @@ const RMTDataNew: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [countries, setCountries] = useState<Country[]>([]);
-  const [selectedCountryName, setSelectedCountryName] = useState<string>('');
   const [countryDiseaseStatus, setCountryDiseaseStatus] = useState<any[]>([]);
   const [showTable, setShowTable] = useState(false);
   
@@ -31,53 +30,6 @@ const RMTDataNew: React.FC = () => {
       setError(err.message || 'Failed to load countries');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleCountrySelection = async (value: string) => {
-    setSelectedCountryName(value);
-    if (value) {
-      const country = countries.find(c => c.name_un === value);
-      if (country) {
-        setLoading(true);
-        try {
-          // Use the same API call as RMT
-          const diseaseResponse = await apiService.rmt.getDiseaseStatusByCountry(country.id);
-          
-          if (diseaseResponse.data?.scores && diseaseResponse.data.scores.length > 0) {
-            const latestScore = diseaseResponse.data.scores[0];
-            setCountryDiseaseStatus([{
-              id: country.id,
-              countryName: country.name_un,
-              FMD: latestScore.FMD ?? null,
-              PPR: latestScore.PPR ?? null,
-              LSD: latestScore.LSD ?? null,
-              RVF: latestScore.RVF ?? null,
-              SPGP: latestScore.SPGP ?? null
-            }]);
-          } else {
-            // No data found, show empty row
-            setCountryDiseaseStatus([{
-              id: country.id,
-              countryName: country.name_un,
-              FMD: null,
-              PPR: null,
-              LSD: null,
-              RVF: null,
-              SPGP: null
-            }]);
-          }
-          
-          setShowTable(true);
-        } catch (err: any) {
-          setError(err.message || 'Failed to load country data');
-        } finally {
-          setLoading(false);
-        }
-      }
-    } else {
-      setShowTable(false);
-      setCountryDiseaseStatus([]);
     }
   };
 
@@ -120,25 +72,6 @@ const RMTDataNew: React.FC = () => {
         >
           Update Mitigation Measures
         </button>
-      </div>
-
-      {/* Country Selector */}
-      <div className="mb-6">
-        <div className="text-sm font-medium text-gray-700 mb-2">
-          Country to update:
-        </div>
-        <select
-          value={selectedCountryName}
-          onChange={(e) => handleCountrySelection(e.target.value)}
-          className="block w-full mt-1 p-2 border focus:border-[#15736d] rounded bg-white mb-4"
-        >
-          <option value="">Select a country...</option>
-          {countries.map(country => (
-            <option key={country.id} value={country.name_un}>
-              {country.name_un}
-            </option>
-          ))}
-        </select>
       </div>
 
       {/* Country Disease Status Table */}
