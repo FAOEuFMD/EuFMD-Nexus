@@ -1160,12 +1160,12 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                   <div className="rmt-info-box flex-1">
                     <h4 className="rmt-info-title">Key References*</h4>
                     <ul className="text-xs space-y-1 text-gray-600">
-                      <li>• Brown et al., 2022</li>
-                      <li>• Horigan et al., 2018</li>
-                      <li>• Klausner et al., 2017</li>
-                      <li>• Rossi et al., 2017</li>
-                      <li>• Ryan et al., 2008</li>
-                      <li>• Tuppurainen et al., 2017</li>
+                      <li>• <a href="https://www.mdpi.com/1999-4915/14/5/1009" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Brown et al., 2022</a></li>
+                      <li>• <a href="https://www.sciencedirect.com/science/article/abs/pii/S0167587717306943" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Horigan et al., 2018</a></li>
+                      <li>• <a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/tbed.12378" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Klausner et al., 2017</a></li>
+                      <li>• <a href="https://www.nature.com/articles/s41598-017-02567-6" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Rossi et al., 2017</a></li>
+                      <li>• <a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1865-1682.2007.01004.x" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Ryan et al., 2008</a></li>
+                      <li>• <a href="https://onlinelibrary.wiley.com/doi/10.1111/tbed.12444" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline">Tuppurainen et al., 2015</a></li>
                     </ul>
                     <p className="text-xs text-gray-500 mt-2">
                       *All scores were determined based on scientific literature and expert opinion.
