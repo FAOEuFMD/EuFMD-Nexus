@@ -88,7 +88,7 @@ const RiskPathwayChart: React.FC<RiskPathwayChartProps> = ({ pathwayScores }) =>
   };
 
   return (
-    <div className="h-[500px] w-full rmt-step mb-6">
+    <div className="h-96 w-full rmt-step mb-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold">Risk Pathway Scores</h3>
         <div className="flex space-x-2">
@@ -108,12 +108,12 @@ const RiskPathwayChart: React.FC<RiskPathwayChartProps> = ({ pathwayScores }) =>
         </div>
       </div>
       
-      <div className="h-[420px]">
+      <div className="h-80">
         <ResponsiveBar
           data={chartData}
           keys={['airborne', 'vectorborne', 'wildAnimals', 'animalProduct', 'liveAnimal', 'fomite']}
           indexBy="country"
-          margin={{ top: 50, right: 130, bottom: 80, left: 60 }}
+          margin={{ top: 50, right: 130, bottom: 50, left: 60 }}
           padding={0.3}
           valueScale={{ type: 'linear' }}
           indexScale={{ type: 'band', round: true }}
@@ -127,7 +127,7 @@ const RiskPathwayChart: React.FC<RiskPathwayChartProps> = ({ pathwayScores }) =>
             tickRotation: -45,
             legend: 'Country',
             legendPosition: 'middle',
-            legendOffset: 65
+            legendOffset: 42
           }}
           axisLeft={{
             tickSize: 5,
@@ -135,17 +135,7 @@ const RiskPathwayChart: React.FC<RiskPathwayChartProps> = ({ pathwayScores }) =>
             tickRotation: 0,
             legend: 'Risk Score',
             legendPosition: 'middle',
-            legendOffset: -50
-          }}
-          theme={{
-            axis: {
-              legend: {
-                text: {
-                  fontWeight: 'bold',
-                  fontSize: 14
-                }
-              }
-            }
+            legendOffset: -40
           }}
           labelSkipWidth={12}
           labelSkipHeight={12}

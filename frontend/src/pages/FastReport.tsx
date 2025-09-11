@@ -31,51 +31,28 @@ interface CountryCoordinates {
   [key: string]: [number, number];
 }
 
-// Static country coordinates for major countries
+// Static country coordinates for target regions (Europe, West Eurasia, Central Asia, South Asia, North Africa, Near East)
 const countryCoordinates: CountryCoordinates = {
   'Afghanistan': [33.9391, 67.7100],
-  'Albania': [41.1533, 20.1683],
   'Algeria': [28.0339, 1.6596],
   'Armenia': [40.0691, 45.0382],
   'Azerbaijan': [40.1431, 47.5769],
-  'Bangladesh': [23.6850, 90.3563],
-  'Belarus': [53.7098, 27.9534],
-  'Bosnia and Herzegovina': [43.9159, 17.6791],
-  'Bulgaria': [42.7339, 25.4858],
-  'China': [35.8617, 104.1954],
-  'Croatia': [45.1000, 15.2000],
-  'Czech Republic': [49.8175, 15.4730],
-  'Estonia': [58.5953, 25.0136],
   'Georgia': [42.3154, 43.3569],
-  'Germany': [51.1657, 10.4515],
-  'Greece': [39.0742, 21.8243],
-  'Hungary': [47.1625, 19.5033],
-  'India': [20.5937, 78.9629],
   'Iran': [32.4279, 53.6880],
   'Iraq': [33.2232, 43.6793],
-  'Italy': [41.8719, 12.5674],
-  'Kazakhstan': [48.0196, 66.9237],
-  'Kyrgyzstan': [41.2044, 74.7661],
-  'Latvia': [56.8796, 24.6032],
-  'Lithuania': [55.1694, 23.8813],
-  'Moldova': [47.4116, 28.3699],
-  'Mongolia': [46.8625, 103.8467],
-  'Montenegro': [42.7087, 19.3744],
-  'North Macedonia': [41.6086, 21.7453],
+  'Jordan': [30.5852, 36.2384],
+  'Lebanon': [33.8547, 35.8623],
   'Pakistan': [30.3753, 69.3451],
-  'Poland': [51.9194, 19.1451],
-  'Romania': [45.9432, 24.9668],
-  'Russia': [61.5240, 105.3188],
-  'Serbia': [44.0165, 21.0059],
-  'Slovakia': [48.6690, 19.6990],
-  'Slovenia': [46.1512, 14.9955],
-  'Tajikistan': [38.8610, 71.2761],
+  'Palestine': [31.9522, 35.2332],
+  'Palestine, State of': [31.9522, 35.2332],
+  'Syria': [34.8021, 38.9968],
+  'Syrian Arab Republic': [34.8021, 38.9968],
   'Turkey': [38.9637, 35.2433],
-  'Turkmenistan': [38.9697, 59.5563],
-  'Ukraine': [48.3794, 31.1656],
-  'United Kingdom': [55.3781, -3.4360],
-  'Uzbekistan': [41.3775, 64.5853],
-  'Vietnam': [14.0583, 108.2772],
+  'Egypt': [26.8206, 30.8025],
+  'Libya': [26.3351, 17.2283],
+  'Morocco': [31.7917, -7.0926],
+  'Sudan': [12.8628, 30.2176],
+  'Tunisia': [33.8869, 9.5375],
 };
 
 const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredData }) => {
@@ -146,57 +123,36 @@ const FastReport: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Start loading
       setLoading(true);
-      
-      // Use mock data right away after a short timeout (regardless of API availability)
-      // This ensures the page never stays in a loading state for too long
-      const timeoutId = setTimeout(() => {
-        console.log('Using mock data due to timeout');
-        setData(mockFastReportData);
-        setError(null);
-        setLoading(false);
-      }, 1000); // Use mock data after 1 second if API doesn't respond quickly
+      setError(null);
       
       try {
-        // Try to fetch real data in parallel
-        const controller = new AbortController();
-        const fetchTimeoutId = setTimeout(() => controller.abort(), 5000); // 5-second fetch timeout
-        
-        const response = await fetch('/api/fast-report/create-dashboard', {
-          signal: controller.signal
-        });
-        clearTimeout(fetchTimeoutId);
-        
-        // If the timeout already fired, this would be after mock data was already set,
-        // but we'll update with real API data if it arrives later
-        clearTimeout(timeoutId);
+        console.log('Attempting to fetch data from API...');
+        const response = await fetch('/api/fast-report/create-dashboard');
         
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
         
         const dashboardData = await response.json();
         
-        // Extract data from the dashboard response
+        // Validate API response structure
         if (dashboardData && dashboardData.data && Array.isArray(dashboardData.data)) {
-          console.log("API data loaded:", dashboardData.data.length, "records");
+          console.log("Successfully loaded API data:", dashboardData.data.length, "records");
           setData(dashboardData.data);
-          setError(null);
+        } else if (dashboardData && Array.isArray(dashboardData)) {
+          // Handle case where API returns array directly
+          console.log("Successfully loaded API data (direct array):", dashboardData.length, "records");
+          setData(dashboardData);
         } else {
           console.warn("Invalid API data format:", dashboardData);
-          throw new Error('Invalid API response format');
+          throw new Error('Invalid API response format - expected array or {data: array}');
         }
       } catch (err: any) {
-        // Only log the error, don't show it to users since mock data will be used
-        console.warn('API fetch error:', err.message);
-        
-        // If timeout hasn't fired yet, use mock data immediately
-        clearTimeout(timeoutId);
-        setData(mockFastReportData);
-        setError(null); // Don't show error to user, just use mock data
+        console.error('Failed to fetch from API:', err.message);
+        setError(`Unable to load data: ${err.message}`);
+        setData([]); // No fallback data - show empty state
       } finally {
-        // Make sure loading is complete
         setLoading(false);
       }
     };
@@ -254,10 +210,23 @@ const FastReport: React.FC = () => {
   if (error) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-red-600 text-xl mb-4">Error: {error}</div>
+        <div className="text-red-600 text-xl mb-4">Error Loading Data</div>
         <div className="text-gray-600">
-          <p>Unable to load Fast Report data. Please ensure the FastAPI server is running and accessible.</p>
-          <p className="mt-2 text-sm">The map is currently showing sample data for demonstration purposes.</p>
+          <p>{error}</p>
+          <p className="mt-2 text-sm">Please ensure the FastAPI server is running and the database is accessible.</p>
+          <p className="mt-2 text-sm">Check the browser console for more details.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (data.length === 0 && !loading) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="text-gray-600 text-xl mb-4">No Data Available</div>
+        <div className="text-gray-600">
+          <p>No fast report data found in the database.</p>
+          <p className="mt-2 text-sm">Please check if data has been submitted through the data entry forms.</p>
         </div>
       </div>
     );
@@ -448,65 +417,5 @@ const FastReport: React.FC = () => {
     </div>
   );
 };
-
-// Mock data for development/testing
-const mockFastReportData: FastReportData[] = [
-  {
-    id: 1,
-    Year: 2023,
-    Quarter: 4,
-    Region: 'Europe',
-    Country: 'United Kingdom',
-    Disease: 'FMD',
-    Outbreaks: '3',
-    Cases: '15',
-    Outbreak_Description: 'Foot and Mouth Disease outbreak in livestock farms',
-    Vaccination: 1,
-    Vaccination_Description: 'Emergency vaccination program implemented',
-    Source: 'UK Veterinary Authorities'
-  },
-  {
-    id: 2,
-    Year: 2023,
-    Quarter: 3,
-    Region: 'Europe',
-    Country: 'Germany',
-    Disease: 'ASF',
-    Outbreaks: '2',
-    Cases: '8',
-    Outbreak_Description: 'African Swine Fever in wild boar population',
-    Vaccination: 0,
-    Vaccination_Description: '',
-    Source: 'German Federal Office for Food Safety'
-  },
-  {
-    id: 3,
-    Year: 2023,
-    Quarter: 2,
-    Region: 'Asia',
-    Country: 'China',
-    Disease: 'PPR',
-    Outbreaks: '5',
-    Cases: '120',
-    Outbreak_Description: 'Peste des Petits Ruminants in sheep and goat farms',
-    Vaccination: 1,
-    Vaccination_Description: 'Preventive vaccination in surrounding areas',
-    Source: 'Chinese Veterinary Services'
-  },
-  {
-    id: 4,
-    Year: 2023,
-    Quarter: 1,
-    Region: 'Africa',
-    Country: 'Egypt',
-    Disease: 'LUMPY',
-    Outbreaks: '1',
-    Cases: '25',
-    Outbreak_Description: 'Lumpy Skin Disease in cattle',
-    Vaccination: 1,
-    Vaccination_Description: 'Ring vaccination implemented',
-    Source: 'Egyptian Veterinary Organization'
-  }
-];
 
 export default FastReport;

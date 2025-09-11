@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { calculateRiskScores } from '../utils/calculateRiskScores';
 
 // Import map and chart components
 import RiskScoreMap from '../components/RMT/maps/RiskScoreMap';
-import DiseaseStatusHeatmap from '../components/RMT/charts/DiseaseStatusHeatmap';
 import PathwayEffectivenessRadar from '../components/RMT/charts/PathwayEffectivenessRadar';
-import EnhancedRiskPathwayChart from '../components/RMT/charts/RiskPathwayChart';
+import SimpleHeatmap from '../components/RMT/charts/SimpleHeatmap';
+import SimpleBarChart from 'components/RMT/charts/SimpleBarChart';
 
 // Types
 interface RiskScore {
@@ -44,8 +44,6 @@ interface MitigationMeasure {
   country_id?: number;
 }
 
-// Removed unused interface
-
 interface PathwayScores {
   name_un: string;
   scores: {
@@ -70,6 +68,7 @@ interface PathwayScores {
 
 const RMTResults: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -126,14 +125,12 @@ const RMTResults: React.FC = () => {
         
         // If we have data in state, use it directly
         if (stateDisease && stateMitigation && sourceCountriesData && sourceCountriesData.length > 0) {
-          console.log("Using data from state");
           diseaseStatusData = stateDisease;
           mitigationMeasuresData = stateMitigation;
           countriesData = sourceCountriesData;
         }
         // Otherwise fetch from API
         else {
-          console.log("Fetching data from API");
           // Create promises for all API calls
           const apiCalls = selectedCountries.map((countryId: number) => Promise.all([
             apiService.rmt.getDiseaseStatusByCountry(countryId),
@@ -188,17 +185,6 @@ const RMTResults: React.FC = () => {
           connections,
           sourceCountries: countriesData
         });
-        
-        console.log('---------- DEBUG RMT RESULTS ----------');
-        console.log('Calculated risk scores:', calculatedScores);
-        console.log('Disease status data:', diseaseStatusData);
-        console.log('Mitigation measures data:', mitigationMeasuresData); 
-        console.log('Source countries data:', countriesData);
-        console.log('Connections data:', connections);
-        console.log('-------------------------------------');
-        console.log('Disease status data:', diseaseStatusData);
-        console.log('Mitigation measures data:', mitigationMeasuresData);
-        console.log('Source countries data:', countriesData);
         
         setRiskScores(calculatedScores);
         
@@ -317,9 +303,6 @@ const RMTResults: React.FC = () => {
       countryRiskScores[score.sourceCountry][score.disease] = normalizedScore;
     });
     
-    console.log('Max risk score found:', maxRiskScore);
-    console.log('Normalization factor:', normalizationFactor);
-    
     return sourceCountries.map(country => {
       const scores = countryRiskScores[country.name_un] || {};
       
@@ -376,6 +359,39 @@ const RMTResults: React.FC = () => {
     return 'text-gray-900'; // Dark text on light backgrounds
   };
 
+  // Handle going back to previous step (Connections page)
+  const handlePrevious = () => {
+    const { 
+      connections, 
+      selectedCountries, 
+      receiverCountryName,
+      diseaseStatusData,
+      mitigationMeasuresData,
+      sourceCountriesData
+    } = location.state || {};
+    
+    // Navigate back to risk scores page with the same data, but set to the Connections step (step 3)
+    navigate('/rmt/risk-scores', {
+      state: {
+        connections,
+        selectedCountries,
+        receiverCountryName,
+        diseaseStatusData,
+        mitigationMeasuresData,
+        sourceCountriesData,
+        currentStep: 3 // Set to Connections step
+      }
+    });
+  };
+
+  // Handle starting a new assessment (clear all stored data)
+  const handleStartNewAssessment = () => {
+    // Clear stored RMT state
+    sessionStorage.removeItem('rmtState');
+    // Navigate to the main RMT page
+    navigate('/rmt');
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -398,7 +414,12 @@ const RMTResults: React.FC = () => {
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
           <p>{error}</p>
-          <Link to="/rmt" className="underline hover:text-red-800">Return to start</Link>
+          <button 
+            onClick={handleStartNewAssessment}
+            className="underline hover:text-red-800"
+          >
+            Return to start
+          </button>
         </div>
       )}
 
@@ -433,13 +454,6 @@ const RMTResults: React.FC = () => {
           targetCountryName={receiverCountry}
           selectedDisease={selectedDisease}
         />
-        {/* Debug map kept as fallback if needed 
-        <DebugRiskMap 
-          countryData={mapData}
-          targetCountryName={receiverCountry}
-          selectedDisease={selectedDisease}
-        />
-        */}
       </div>
 
       {/* Risk scores table */}
@@ -500,7 +514,9 @@ const RMTResults: React.FC = () => {
         </p>
         <div className="flex justify-center">
           <div className="w-full">
-            <DiseaseStatusHeatmap diseaseStatusData={diseaseStatus} />
+            <SimpleHeatmap 
+              diseaseStatusData={diseaseStatus} 
+            />
           </div>
         </div>
       </div>
@@ -512,7 +528,9 @@ const RMTResults: React.FC = () => {
           This radar chart shows how effective each pathway is for the transmission of each disease.
           A higher score indicates the pathway is more effective for disease transmission.
         </p>
-        <PathwayEffectivenessRadar pathwaysData={pathwaysData} />
+        <PathwayEffectivenessRadar 
+          pathwaysData={pathwaysData} 
+        />
       </div>
 
       {/* Enhanced Risk Pathway Chart */}
@@ -522,23 +540,33 @@ const RMTResults: React.FC = () => {
           This chart shows the contribution of each pathway to the overall risk for each source country.
           Use the disease selector to view pathway contributions for a specific disease.
         </p>
-        <EnhancedRiskPathwayChart pathwayScores={pathwayScores} />
+        <SimpleBarChart 
+          pathwayScores={pathwayScores} 
+        />
       </div>
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row justify-between mt-10 gap-4">
-        <Link 
-          to="/rmt" 
+        <button 
+          onClick={handleStartNewAssessment}
           className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors text-center"
         >
           Start New Assessment
-        </Link>
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 bg-[#15736d] text-white hover:bg-[#0f5a54] rounded transition-colors"
-        >
-          Print Results
         </button>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button
+            onClick={handlePrevious}
+            className="px-4 py-2 font-semibold text-[#015039] bg-transparent border-2 border-[#015039] rounded transition-all duration-300 hover:bg-[#15736d] hover:text-white"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-[#15736d] text-white hover:bg-[#0f5a54] rounded transition-colors"
+          >
+            Print Results
+          </button>
+        </div>
       </div>
     </div>
   );

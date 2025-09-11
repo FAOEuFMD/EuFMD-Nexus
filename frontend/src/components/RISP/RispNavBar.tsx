@@ -43,6 +43,14 @@ const RispNavBar: React.FC = () => {
         >
           Summary
         </Link>
+        
+        <Link 
+          to="/risp" 
+          className={`px-4 py-2 mr-2 mb-2 rounded-lg ${isActive('/risp') ? 
+            'bg-green-greenMain text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+        >
+          Regional Overview
+        </Link>
       </div>
     </div>
   );

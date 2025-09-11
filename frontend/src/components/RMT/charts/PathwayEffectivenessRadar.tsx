@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ResponsiveRadar } from '@nivo/radar';
 
 interface PathwayEffectivenessRadarProps {
@@ -30,19 +30,31 @@ const PathwayEffectivenessRadar: React.FC<PathwayEffectivenessRadarProps> = ({ p
     SPGP: '#673AB7'    // Purple
   };
 
-  // Transform data for the radar chart
+  // Simple transform without complex deep cloning
   const transformPathwaysForRadar = (data: PathwayEffectivenessRadarProps['pathwaysData']): RadarDataItem[] => {
-    return data.map(item => ({
-      pathway: item.pathway,
-      FMD: item.FMD,
-      PPR: item.PPR,
-      LSD: item.LSD,
-      RVF: item.RVF,
-      SPGP: item.SPGP
-    }));
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    const result = data.map(item => {
+      return {
+        pathway: String(item.pathway),
+        FMD: Number(item.FMD ?? 0),
+        PPR: Number(item.PPR ?? 0),
+        LSD: Number(item.LSD ?? 0),
+        RVF: Number(item.RVF ?? 0),
+        SPGP: Number(item.SPGP ?? 0)
+      };
+    });
+    
+    return result;
   };
 
-  const radarData = transformPathwaysForRadar(pathwaysData);
+  // Memoize the transformed data to prevent unnecessary recalculations
+  const radarData = useMemo(() => {
+    const transformedData = transformPathwaysForRadar(pathwaysData);
+    return transformedData;
+  }, [pathwaysData]);
   
   // Determine which diseases to show and colors to use
   const keysToShow = selectedDisease ? [selectedDisease] : diseases;
@@ -104,7 +116,8 @@ const PathwayEffectivenessRadar: React.FC<PathwayEffectivenessRadarProps> = ({ p
           colors={colorsToUse}
           fillOpacity={0.25}
           blendMode="multiply"
-          animate={true}
+          animate={false}
+          motionConfig="gentle"
           legends={keysToShow.length > 1 ? [
             {
               anchor: 'top-left',

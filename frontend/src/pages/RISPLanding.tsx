@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+// import { ResponsiveLine } from '@nivo/line';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '../stores/authStore';
@@ -50,7 +51,10 @@ interface FastReportData {
   Outbreaks: string;
   Cases: string;
   Outbreak_Description: string;
-  Vaccination: number;
+  Epidemiological_information: string;
+  Surveillance: number | string; // 1 or 0, could be number or string
+  Vaccination: number | string; // 1 or 0, could be number or string
+  Vaccination_doses: number;
   Vaccination_Description: string;
   Source: string;
 }
@@ -59,19 +63,8 @@ interface CountryCoordinates {
   [key: string]: [number, number];
 }
 
-interface VaccinationData {
-  Country: string;
-  Disease: string;
-  Year: number;
-  Region: string;
-}
-
-interface SurveillanceData {
-  Country: string;
-  Disease: string;
-  Year: number;
-  Region: string;
-}
+// Remove separate interfaces since all data comes from the same table
+// interface VaccinationData and SurveillanceData are no longer needed
 
 type ViewModeType = 'default' | 'outbreaks' | 'vaccination' | 'surveillance';
 
@@ -116,48 +109,20 @@ const regionSettings: { [key: string]: { center: [number, number], zoom: number 
 // Static country coordinates for major countries (same as FastReport)
 const countryCoordinates: CountryCoordinates = {
   'Afghanistan': [33.9391, 67.7100],
-  'Albania': [41.1533, 20.1683],
   'Algeria': [28.0339, 1.6596],
   'Armenia': [40.0691, 45.0382],
   'Azerbaijan': [40.1431, 47.5769],
-  'Bangladesh': [23.6850, 90.3563],
-  'Belarus': [53.7098, 27.9534],
-  'Bosnia and Herzegovina': [43.9159, 17.6791],
-  'Bulgaria': [42.7339, 25.4858],
-  'China': [35.8617, 104.1954],
-  'Croatia': [45.1000, 15.2000],
-  'Czech Republic': [49.8175, 15.4730],
-  'Estonia': [58.5953, 25.0136],
   'Georgia': [42.3154, 43.3569],
-  'Germany': [51.1657, 10.4515],
-  'Greece': [39.0742, 21.8243],
-  'Hungary': [47.1625, 19.5033],
-  'India': [20.5937, 78.9629],
   'Iran': [32.4279, 53.6880],
   'Iraq': [33.2232, 43.6793],
-  'Italy': [41.8719, 12.5674],
-  'Kazakhstan': [48.0196, 66.9237],
-  'Kyrgyzstan': [41.2044, 74.7661],
-  'Latvia': [56.8796, 24.6032],
-  'Lithuania': [55.1694, 23.8813],
-  'Moldova': [47.4116, 28.3699],
-  'Mongolia': [46.8625, 103.8467],
-  'Montenegro': [42.7087, 19.3744],
-  'North Macedonia': [41.6086, 21.7453],
+  'Jordan': [30.5852, 36.2384],
+  'Lebanon': [33.8547, 35.8623],
   'Pakistan': [30.3753, 69.3451],
-  'Poland': [51.9194, 19.1451],
-  'Romania': [45.9432, 24.9668],
-  'Russia': [61.5240, 105.3188],
-  'Serbia': [44.0165, 21.0059],
-  'Slovakia': [48.6690, 19.6990],
-  'Slovenia': [46.1512, 14.9955],
-  'Tajikistan': [38.8610, 71.2761],
+  'Palestine': [31.9522, 35.2332],
+  'Palestine, State of': [31.9522, 35.2332],
+  'Syria': [34.8021, 38.9968],
+  'Syrian Arab Republic': [34.8021, 38.9968],
   'Turkey': [38.9637, 35.2433],
-  'Turkmenistan': [38.9697, 59.5563],
-  'Ukraine': [48.3794, 31.1656],
-  'United Kingdom': [55.3781, -3.4360],
-  'Uzbekistan': [41.3775, 64.5853],
-  'Vietnam': [14.0583, 108.2772],
   'Egypt': [26.8206, 30.8025],
   'Libya': [26.3351, 17.2283],
   'Morocco': [31.7917, -7.0926],
@@ -204,24 +169,32 @@ const RISPLanding: React.FC = () => {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FastReportData[]>([]);
-  const [vaccinationData, setVaccinationData] = useState<VaccinationData[]>([]);
-  const [surveillanceData, setSurveillanceData] = useState<SurveillanceData[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [selectedDisease, setSelectedDisease] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewModeType>('default');
   const [selectedCountryData, setSelectedCountryData] = useState<any>(null);
 
+  // Debug user information
+  useEffect(() => {
+    console.log('Current user object:', user);
+    console.log('User country from auth:', user?.country);
+  }, [user]);
+
   // Get user's region based on their country
   const userRegion = useMemo(() => {
     if (!user?.country) return null;
-    return countryToRegion[user.country] || null;
+    const region = countryToRegion[user.country] || null;
+    console.log('User country:', user?.country, 'User region:', region);
+    return region;
   }, [user?.country]);
 
   // Get list of countries in user's region
   const userRegionCountries = useMemo(() => {
     if (!userRegion) return [];
-    return Object.keys(countryToRegion).filter(country => countryToRegion[country] === userRegion);
+    const countries = Object.keys(countryToRegion).filter(country => countryToRegion[country] === userRegion);
+    console.log('User region countries:', countries);
+    return countries;
   }, [userRegion]);
 
   // Get map settings based on user's region
@@ -250,13 +223,24 @@ const RISPLanding: React.FC = () => {
 
   // Get most recent quarter data for each country
   const mostRecentQuarterData = useMemo(() => {
+    console.log('Total data items:', data.length);
+    console.log('Countries in data:', Array.from(new Set(data.map(item => item.Country))));
+    
     // Find the most recent year and quarter combination
     const sortedData = data
-      .filter(item => userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
+      .filter(item => {
+        const isIncluded = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
+        if (!isIncluded && userRegionCountries.length > 0) {
+          console.log('Excluding country:', item.Country, 'User region countries:', userRegionCountries);
+        }
+        return isIncluded;
+      })
       .sort((a, b) => {
         if (a.Year !== b.Year) return (b.Year || 0) - (a.Year || 0);
         return (b.Quarter || 0) - (a.Quarter || 0);
       });
+    
+    console.log('Filtered data after region filter:', sortedData.length);
     
     const mostRecentYear = sortedData.length > 0 ? sortedData[0].Year : new Date().getFullYear();
     const mostRecentQuarter = sortedData.length > 0 ? sortedData[0].Quarter : Math.ceil((new Date().getMonth() + 1) / 3);
@@ -265,18 +249,6 @@ const RISPLanding: React.FC = () => {
     const recentData = data.filter(item => 
       item.Year === mostRecentYear && 
       item.Quarter === mostRecentQuarter &&
-      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
-    );
-    
-    // Get vaccination data for the most recent year (no quarter data available)
-    const recentVaccinationData = vaccinationData.filter(item =>
-      item.Year === mostRecentYear &&
-      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
-    );
-    
-    // Get surveillance data for the most recent year (no quarter data available)
-    const recentSurveillanceData = surveillanceData.filter(item =>
-      item.Year === mostRecentYear &&
       (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
     );
     
@@ -291,14 +263,18 @@ const RISPLanding: React.FC = () => {
           totalOutbreaks: 0,
           diseases: [],
           reports: [],
-          vaccinations: [],
-          surveillance: [],
-          hasData: true
+          outbreakReports: [],
+          vaccinationReports: [],
+          surveillanceReports: [],
+          hasData: true,
+          lastReported: `Q${mostRecentQuarter} ${mostRecentYear}`
         };
       }
       
       const outbreaks = parseInt(String(item.Outbreaks || 0), 10) || 0;
-      acc[country].totalOutbreaks += outbreaks;
+      if (outbreaks > 0) {
+        acc[country].totalOutbreaks += outbreaks;
+      }
       
       if (item.Disease && !acc[country].diseases.includes(item.Disease)) {
         acc[country].diseases.push(item.Disease);
@@ -306,46 +282,19 @@ const RISPLanding: React.FC = () => {
       
       acc[country].reports.push(item);
       
+      // Categorize reports based on flags
+      if (outbreaks > 0) {
+        acc[country].outbreakReports.push(item);
+      }
+      if (item.Vaccination === 1) {
+        acc[country].vaccinationReports.push(item);
+      }
+      if (item.Surveillance === 1) {
+        acc[country].surveillanceReports.push(item);
+      }
+      
       return acc;
     }, {} as Record<string, any>);
-    
-    // Add vaccination data to countries
-    recentVaccinationData.forEach(vaccine => {
-      const country = vaccine.Country;
-      if (!countryDataWithReports[country]) {
-        countryDataWithReports[country] = {
-          country,
-          year: mostRecentYear,
-          quarter: mostRecentQuarter,
-          totalOutbreaks: 0,
-          diseases: [],
-          reports: [],
-          vaccinations: [],
-          surveillance: [],
-          hasData: true
-        };
-      }
-      countryDataWithReports[country].vaccinations.push(vaccine);
-    });
-    
-    // Add surveillance data to countries
-    recentSurveillanceData.forEach(surv => {
-      const country = surv.Country;
-      if (!countryDataWithReports[country]) {
-        countryDataWithReports[country] = {
-          country,
-          year: mostRecentYear,
-          quarter: mostRecentQuarter,
-          totalOutbreaks: 0,
-          diseases: [],
-          reports: [],
-          vaccinations: [],
-          surveillance: [],
-          hasData: true
-        };
-      }
-      countryDataWithReports[country].surveillance.push(surv);
-    });
     
     // Add countries with no data for the most recent quarter
     const allCountryData = userRegionCountries.map(country => {
@@ -367,7 +316,7 @@ const RISPLanding: React.FC = () => {
     });
     
     return allCountryData;
-  }, [data, userRegionCountries, vaccinationData, surveillanceData]);
+  }, [data, userRegionCountries]);
 
   // Filter data based on user's region countries and selected filters
   const filteredData = useMemo(() => {
@@ -392,21 +341,44 @@ const RISPLanding: React.FC = () => {
     });
   }, [filteredData]);
 
-  // Filtered vaccination data by region
+  // Filtered vaccination data by region, year, quarter, and disease (from main data where Vaccination=1)
   const filteredVaccinationData = useMemo(() => {
-    return vaccinationData.filter(item => {
+    const filtered = data.filter(item => {
       const regionMatch = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
-      return regionMatch;
+      const yearMatch = selectedYear === 'all' || item.Year.toString() === selectedYear;
+      const quarterMatch = selectedQuarter === 'all' || item.Quarter.toString() === selectedQuarter;
+      const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
+      const hasVaccination = item.Vaccination === 1 || item.Vaccination === '1';
+      
+      return regionMatch && yearMatch && quarterMatch && diseaseMatch && hasVaccination;
     });
-  }, [vaccinationData, userRegionCountries]);
+    
+    console.log("Filtered vaccination data:", filtered.length, "records");
+    if (filtered.length === 0) {
+      console.log("No vaccination data found. Checking filters:");
+      console.log("- Data with Vaccination=1:", data.filter(item => item.Vaccination === 1).length);
+      console.log("- Data with Vaccination='1':", data.filter(item => item.Vaccination === '1').length);
+      console.log("- Selected year:", selectedYear);
+      console.log("- Selected quarter:", selectedQuarter);
+      console.log("- Selected disease:", selectedDisease);
+      console.log("- User region countries:", userRegionCountries);
+    }
+    
+    return filtered;
+  }, [data, userRegionCountries, selectedYear, selectedQuarter, selectedDisease]);
 
-  // Filtered surveillance data by region  
+  // Filtered surveillance data by region, year, quarter, and disease (from main data where Surveillance=1)
   const filteredSurveillanceData = useMemo(() => {
-    return surveillanceData.filter(item => {
+    return data.filter(item => {
       const regionMatch = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
-      return regionMatch;
+      const yearMatch = selectedYear === 'all' || item.Year.toString() === selectedYear;
+      const quarterMatch = selectedQuarter === 'all' || item.Quarter.toString() === selectedQuarter;
+      const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
+      const hasSurveillance = item.Surveillance === 1 || item.Surveillance === '1';
+      
+      return regionMatch && yearMatch && quarterMatch && diseaseMatch && hasSurveillance;
     });
-  }, [surveillanceData, userRegionCountries]);
+  }, [data, userRegionCountries, selectedYear, selectedQuarter, selectedDisease]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -430,35 +402,18 @@ const RISPLanding: React.FC = () => {
         
         if (dashboardData && dashboardData.data && Array.isArray(dashboardData.data)) {
           console.log("API data loaded:", dashboardData.data.length, "records");
+          console.log("Sample data record:", dashboardData.data[0]);
+          console.log("Vaccination records (===1):", dashboardData.data.filter((item: any) => item.Vaccination === 1).length);
+          console.log("Vaccination records (==='1'):", dashboardData.data.filter((item: any) => item.Vaccination === '1').length);
+          console.log("Surveillance records (===1):", dashboardData.data.filter((item: any) => item.Surveillance === 1).length);
+          console.log("Surveillance records (==='1'):", dashboardData.data.filter((item: any) => item.Surveillance === '1').length);
           setData(dashboardData.data);
         } else {
           console.warn("Invalid API data format:", dashboardData);
           setData([]);
         }
 
-        // Set sample vaccination data
-        setVaccinationData([
-          { Country: 'Türkiye', Disease: 'FMD', Year: 2024, Region: 'SEEN' },
-          { Country: 'Armenia', Disease: 'FMD', Year: 2024, Region: 'SEEN' },
-          { Country: 'Georgia', Disease: 'PPR', Year: 2024, Region: 'SEEN' },
-          { Country: 'Iran', Disease: 'LSD', Year: 2024, Region: 'SEEN' },
-          { Country: 'Egypt', Disease: 'FMD', Year: 2024, Region: 'Near East' },
-          { Country: 'Jordan', Disease: 'PPR', Year: 2024, Region: 'Near East' },
-          { Country: 'Algeria', Disease: 'FMD', Year: 2024, Region: 'North Africa' },
-          { Country: 'Morocco', Disease: 'PPR', Year: 2024, Region: 'North Africa' },
-        ]);
-
-        // Set sample surveillance data
-        setSurveillanceData([
-          { Country: 'Türkiye', Disease: 'FMD', Year: 2024, Region: 'SEEN' },
-          { Country: 'Azerbaijan', Disease: 'FMD', Year: 2024, Region: 'SEEN' },
-          { Country: 'Pakistan', Disease: 'FMD', Year: 2024, Region: 'SEEN' },
-          { Country: 'Iraq', Disease: 'PPR', Year: 2024, Region: 'SEEN' },
-          { Country: 'Lebanon', Disease: 'FMD', Year: 2024, Region: 'Near East' },
-          { Country: 'Syria', Disease: 'PPR', Year: 2024, Region: 'Near East' },
-          { Country: 'Tunisia', Disease: 'FMD', Year: 2024, Region: 'North Africa' },
-          { Country: 'Libya', Disease: 'LSD', Year: 2024, Region: 'North Africa' },
-        ]);
+        // No need for separate vaccination/surveillance data - they come from the same table
       } catch (err: any) {
         console.warn('API fetch error:', err.message);
         setData([]);
@@ -558,8 +513,8 @@ const RISPLanding: React.FC = () => {
       {/* Dashboard Section */}
       <div className="w-full space-y-4">
 
-        {/* Filters - Only show in outbreaks mode */}
-        {viewMode === 'outbreaks' && (
+        {/* Filters - Show for outbreaks, vaccination, and surveillance modes */}
+        {(viewMode === 'outbreaks' || viewMode === 'vaccination' || viewMode === 'surveillance') && (
           <div className="bg-white rounded-lg shadow p-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
@@ -611,7 +566,15 @@ const RISPLanding: React.FC = () => {
             </div>
             
             <div className="text-sm text-gray-600 bg-gray-50 rounded p-2">
-              Showing <span className="font-bold">{filteredData.length}</span> report{filteredData.length !== 1 ? 's' : ''}
+              Showing <span className="font-bold">
+                {viewMode === 'outbreaks' && filteredData.length}
+                {viewMode === 'vaccination' && filteredVaccinationData.length}
+                {viewMode === 'surveillance' && filteredSurveillanceData.length}
+              </span> {viewMode === 'outbreaks' ? 'report' : viewMode}{(
+                (viewMode === 'outbreaks' && filteredData.length !== 1) ||
+                (viewMode === 'vaccination' && filteredVaccinationData.length !== 1) ||
+                (viewMode === 'surveillance' && filteredSurveillanceData.length !== 1)
+              ) ? 's' : ''}
               {userRegion && ' in ' + userRegion}
             </div>
             </div>
@@ -942,29 +905,62 @@ const RISPLanding: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Outbreak Data */}
               <div className="p-3 bg-red-50 rounded">
-                <h4 className="font-medium text-red-800 mb-2">Outbreak Reports</h4>
-                <div className="text-2xl font-bold text-red-600">{selectedCountryData.totalOutbreaks}</div>
-                <div className="text-sm text-gray-600">{selectedCountryData.reports.length} reports</div>
-                {selectedCountryData.diseases.length > 0 && (
-                  <div className="mt-2">
-                    <div className="text-sm font-medium text-gray-700">Diseases:</div>
-                    <div className="text-sm text-gray-600">
-                      {selectedCountryData.diseases.join(', ')}
+                <h4 className="font-medium text-red-800 mb-2">Outbreaks</h4>
+                {(() => {
+                  // Check if data was reported for this country
+                  const hasAnyData = selectedCountryData.reports && selectedCountryData.reports.length > 0;
+                  
+                  if (!hasAnyData) {
+                    return (
+                      <div className="text-center text-gray-500 text-sm">
+                        Data was not reported
+                      </div>
+                    );
+                  }
+                  
+                  // Check if there are any outbreaks
+                  if (selectedCountryData.totalOutbreaks === 0) {
+                    return (
+                      <div className="text-center text-gray-500 text-sm">
+                        No outbreaks reported for the period
+                      </div>
+                    );
+                  }
+                  
+                  // Show disease breakdown
+                  const diseaseOutbreaks = selectedCountryData.outbreakReports.reduce((acc: any, report: any) => {
+                    const disease = report.Disease;
+                    const outbreaks = parseInt(String(report.Outbreaks || 0), 10) || 0;
+                    acc[disease] = (acc[disease] || 0) + outbreaks;
+                    return acc;
+                  }, {});
+                  
+                  return (
+                    <div>
+                      <div className="text-2xl font-bold text-red-600 mb-2">{selectedCountryData.totalOutbreaks}</div>
+                      <div className="space-y-1">
+                        {Object.entries(diseaseOutbreaks).map(([disease, count]: [string, any]) => (
+                          <div key={disease} className="flex justify-between text-sm">
+                            <span className="text-gray-700">{disease}:</span>
+                            <span className="font-medium text-red-600">{count}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Vaccination Data */}
               <div className="p-3 bg-green-50 rounded">
                 <h4 className="font-medium text-green-800 mb-2">Vaccination Data</h4>
-                <div className="text-2xl font-bold text-green-600">{selectedCountryData.vaccinations.length}</div>
-                <div className="text-sm text-gray-600">vaccination programs</div>
-                {selectedCountryData.vaccinations.length > 0 && (
+                <div className="text-2xl font-bold text-green-600">{selectedCountryData.vaccinationReports.length}</div>
+                <div className="text-sm text-gray-600">vaccination reports</div>
+                {selectedCountryData.vaccinationReports.length > 0 && (
                   <div className="mt-2">
-                    <div className="text-sm font-medium text-gray-700">Species:</div>
+                    <div className="text-sm font-medium text-gray-700">Diseases:</div>
                     <div className="text-sm text-gray-600">
-                      {Array.from(new Set(selectedCountryData.vaccinations.map((r: any) => r.SpeciesVaccinated).filter(Boolean))).join(', ')}
+                      {Array.from(new Set(selectedCountryData.vaccinationReports.map((r: any) => r.Disease).filter(Boolean))).join(', ')}
                     </div>
                   </div>
                 )}
@@ -973,14 +969,14 @@ const RISPLanding: React.FC = () => {
               {/* Surveillance Data */}
               <div className="p-3 bg-blue-50 rounded">
                 <h4 className="font-medium text-blue-800 mb-2">Surveillance Data</h4>
-                <div className="text-2xl font-bold text-blue-600">{selectedCountryData.surveillance.length}</div>
-                <div className="text-sm text-gray-600">surveillance activities</div>
-                {selectedCountryData.surveillance.length > 0 && (
+                <div className="text-2xl font-bold text-blue-600">{selectedCountryData.surveillanceReports.length}</div>
+                <div className="text-sm text-gray-600">surveillance reports</div>
+                {selectedCountryData.surveillanceReports.length > 0 && (
                   <div className="mt-2">
-                    <div className="text-sm font-medium text-gray-700">Activities:</div>
+                    <div className="text-sm font-medium text-gray-700">Diseases:</div>
                     <div className="text-sm text-gray-600">
-                      {Array.from(new Set(selectedCountryData.surveillance.map((r: any) => r.SurveillanceActivity).filter(Boolean))).slice(0, 3).join(', ')}
-                      {Array.from(new Set(selectedCountryData.surveillance.map((r: any) => r.SurveillanceActivity).filter(Boolean))).length > 3 && '...'}
+                      {Array.from(new Set(selectedCountryData.surveillanceReports.map((r: any) => r.Disease).filter(Boolean))).slice(0, 3).join(', ')}
+                      {Array.from(new Set(selectedCountryData.surveillanceReports.map((r: any) => r.Disease).filter(Boolean))).length > 3 && '...'}
                     </div>
                   </div>
                 )}
@@ -990,9 +986,8 @@ const RISPLanding: React.FC = () => {
               <div className="p-3 bg-gray-50 rounded">
                 <h4 className="font-medium text-gray-800 mb-2">Quarter Summary</h4>
                 <div className="text-sm text-gray-600">
-                  <div>Total Reports: {selectedCountryData.reports.length + selectedCountryData.vaccinations.length + selectedCountryData.surveillance.length}</div>
-                  <div>Period: Q{selectedCountryData.quarter} {selectedCountryData.year}</div>
-                  <div>Status: {selectedCountryData.hasData ? 'Data Available' : 'No Data'}</div>
+                  <div>Total Reports: {selectedCountryData.outbreakReports.length + selectedCountryData.vaccinationReports.length + selectedCountryData.surveillanceReports.length}</div>
+                  <div>Last Updated: {selectedCountryData.lastReported}</div>
                 </div>
               </div>
             </div>

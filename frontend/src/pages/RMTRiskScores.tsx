@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { getPathwaysForChart } from '../utils/pathwaysConfig';
 
@@ -52,6 +52,11 @@ interface ConnectionRow {
 
 const RMTRiskScores: React.FC = (): React.ReactElement => {
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // State from navigation (when coming back from results page)
+  const navigationState = useMemo(() => location.state || {}, [location.state]);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -61,8 +66,8 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   const [sourceCountries, setSourceCountries] = useState<Country[]>([]);
   const [selectedSourceCountry, setSelectedSourceCountry] = useState<string>('');
   
-  // Carousel/step state
-  const [currentStep, setCurrentStep] = useState(0);
+  // Carousel/step state - initialize from navigation state if available
+  const [currentStep, setCurrentStep] = useState(navigationState.currentStep || 0);
   const stepTitles = ['Disease Status', 'Mitigation Measures', 'Pathways', 'Connections'];
   
   // Form data state
@@ -249,6 +254,31 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     // Set default selected connection field
     setSelectedConnectionField('liveAnimalContact');
   }, []);
+
+  // Restore state from sessionStorage or navigation state
+  useEffect(() => {
+    // Check if we have saved state in sessionStorage
+    const savedState = sessionStorage.getItem('rmtState');
+    if (savedState) {
+      try {
+        const rmtState = JSON.parse(savedState);
+        setCurrentStep(rmtState.currentStep || 0);
+        setReceiverCountry(rmtState.receiverCountry);
+        setSourceCountries(rmtState.sourceCountries || []);
+        setDiseaseStatus(rmtState.diseaseStatus || []);
+        setMitigationMeasures(rmtState.mitigationMeasures || []);
+        setConnections(rmtState.connections || []);
+        setDiseaseStatusDate(rmtState.diseaseStatusDate);
+        setMitigationMeasuresDate(rmtState.mitigationMeasuresDate);
+      } catch (error) {
+        console.error('Error restoring RMT state:', error);
+      }
+    }
+    // If navigation state has currentStep, use that (for coming back from results)
+    else if (navigationState.currentStep !== undefined) {
+      setCurrentStep(navigationState.currentStep);
+    }
+  }, [navigationState]);
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -700,6 +730,8 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   };
 
   const handleRestart = () => {
+    // Clear sessionStorage
+    sessionStorage.removeItem('rmtState');
     setCurrentStep(0);
     setReceiverCountry(null);
     setSourceCountries([]);
@@ -707,6 +739,12 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     setDiseaseStatus([]);
     setMitigationMeasures([]);
     setConnections([]);
+  };
+
+  const handleBackToOverview = () => {
+    // Clear sessionStorage when going back to overview
+    sessionStorage.removeItem('rmtState');
+    navigate('/rmt');
   };
 
   const handleCalculateResults = () => {
@@ -718,6 +756,19 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
         alert('No connection data available. Please fill in the connection details.');
         return;
       }
+
+      // Save current state to sessionStorage before navigating
+      const rmtState = {
+        currentStep,
+        receiverCountry,
+        sourceCountries,
+        diseaseStatus,
+        mitigationMeasures,
+        connections,
+        diseaseStatusDate,
+        mitigationMeasuresDate
+      };
+      sessionStorage.setItem('rmtState', JSON.stringify(rmtState));
 
       // Prepare disease status and mitigation measures data as objects keyed by country ID
       const diseaseStatusData: Record<number, any> = {};
@@ -1441,12 +1492,12 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       {/* Navigation buttons */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8">
         <div className="flex flex-wrap gap-2">
-          <Link
-            to="/rmt"
+          <button
+            onClick={handleBackToOverview}
             className="px-4 py-2 text-[#015039] border-2 border-[#015039] rounded-md hover:bg-[#15736d] hover:text-white transition-colors duration-300"
           >
             Back to Overview
-          </Link>
+          </button>
           <button
             onClick={handleRestart}
             className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"

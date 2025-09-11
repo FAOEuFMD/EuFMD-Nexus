@@ -45,13 +45,7 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
       'West Bank and Gaza': 'Palestine',
       'Gaza Strip': 'Palestine',
       'Palestinian Territory': 'Palestine',
-      // Add more mappings if needed for other countries
-      'United States of America': 'United States',
-      'Russian Federation': 'Russia',
-      'Syrian Arab Republic': 'Syria',
-      'Republic of Korea': 'South Korea',
-      "Democratic People's Republic of Korea": 'North Korea',
-      'United Kingdom of Great Britain and Northern Ireland': 'United Kingdom',
+    
     };
     
     return nameMapping[geoJsonName] || geoJsonName;
