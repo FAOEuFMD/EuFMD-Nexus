@@ -2,6 +2,77 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom scrollbar styles for popup cards */
+.popup-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.popup-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.popup-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.popup-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.popup-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Leaflet popup styles to allow overflow */
+.leaflet-popup-pane {
+  z-index: 9999 !important;
+}
+
+.leaflet-popup {
+  z-index: 10000 !important;
+}
+
+.leaflet-popup-content-wrapper {
+  z-index: 10001 !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 8px !important;
+  max-width: none !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+.leaflet-popup-tip-container {
+  z-index: 10001 !important;
+}
+
+.leaflet-popup-close-button {
+  z-index: 10002 !important;
+}
+
+/* Custom popup styling */
+.custom-popup .leaflet-popup-content-wrapper {
+  max-width: 400px !important;
+  max-height: 500px !important;
+  overflow: visible !important;
+}
+
+.custom-popup .leaflet-popup-content {
+  overflow: visible !important;
+}
+
+/* Keep map container contained but allow popup overflow */
+.leaflet-container {
+  z-index: 1 !important;
+}
+
 /* Vue app CSS classes for consistency */
 .nav-btn {
   padding: 6px;

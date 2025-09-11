@@ -5,6 +5,33 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '../stores/authStore';
 
+// Component to disable all map interactions
+const MapDisabler = () => {
+  const map = useMap();
+  
+  useEffect(() => {
+    // Disable all map interactions completely
+    map.off('click');
+    map.off('dblclick');
+    map.off('mousedown');
+    map.off('mouseup');
+    map.off('mousemove');
+    map.dragging.disable();
+    map.touchZoom.disable();
+    map.doubleClickZoom.disable();
+    map.scrollWheelZoom.disable();
+    map.boxZoom.disable();
+    map.keyboard.disable();
+  }, [map]);
+  
+  return null;
+};
+
+// Import GeoJSON files - keeping for potential future use
+// import seenCountriesGeoJSON from '../data/geojson/seen-countries.json';
+// import nearEastCountriesGeoJSON from '../data/geojson/near-east-countries.json';
+// import northAfricaCountriesGeoJSON from '../data/geojson/north-africa-countries.json';
+
 // Fix for default markers in React Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -78,6 +105,14 @@ const countryToRegion: { [key: string]: string } = {
   'Tunisia': 'North Africa',
 };
 
+// Region center coordinates and zoom levels for static map view
+const regionSettings: { [key: string]: { center: [number, number], zoom: number } } = {
+  'South East European Neighbourhood (SEEN)': { center: [38.0, 50.0], zoom: 4 },
+  'Near East': { center: [32.0, 36.0], zoom: 5 },
+  'North Africa': { center: [28.0, 5.0], zoom: 4 },
+  'default': { center: [50, 20], zoom: 3 } // Fallback for unknown regions or no user
+};
+
 // Static country coordinates for major countries (same as FastReport)
 const countryCoordinates: CountryCoordinates = {
   'Afghanistan': [33.9391, 67.7100],
@@ -130,6 +165,20 @@ const countryCoordinates: CountryCoordinates = {
   'Tunisia': [33.8869, 9.5375],
 };
 
+// Function to get the appropriate GeoJSON data based on user region - commented out for now
+// const getRegionGeoJSON = (userRegion: string) => {
+//   switch (userRegion) {
+//     case 'South East European Neighbourhood (SEEN)':
+//       return seenCountriesGeoJSON;
+//     case 'Near East':
+//       return nearEastCountriesGeoJSON;
+//     case 'North Africa':
+//       return northAfricaCountriesGeoJSON;
+//     default:
+//       return null;
+//   }
+// };
+
 const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredData }) => {
   const map = useMap();
   
@@ -161,6 +210,7 @@ const RISPLanding: React.FC = () => {
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [selectedDisease, setSelectedDisease] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewModeType>('default');
+  const [selectedCountryData, setSelectedCountryData] = useState<any>(null);
 
   // Get user's region based on their country
   const userRegion = useMemo(() => {
@@ -172,6 +222,14 @@ const RISPLanding: React.FC = () => {
   const userRegionCountries = useMemo(() => {
     if (!userRegion) return [];
     return Object.keys(countryToRegion).filter(country => countryToRegion[country] === userRegion);
+  }, [userRegion]);
+
+  // Get map settings based on user's region
+  const mapSettings = useMemo(() => {
+    if (!userRegion || !regionSettings[userRegion]) {
+      return regionSettings['default'];
+    }
+    return regionSettings[userRegion];
   }, [userRegion]);
 
   // Get available years and diseases from data
@@ -189,6 +247,127 @@ const RISPLanding: React.FC = () => {
     const diseases = Array.from(new Set(data.map(item => item.Disease).filter(Boolean))).sort();
     return diseases;
   }, [data]);
+
+  // Get most recent quarter data for each country
+  const mostRecentQuarterData = useMemo(() => {
+    // Find the most recent year and quarter combination
+    const sortedData = data
+      .filter(item => userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
+      .sort((a, b) => {
+        if (a.Year !== b.Year) return (b.Year || 0) - (a.Year || 0);
+        return (b.Quarter || 0) - (a.Quarter || 0);
+      });
+    
+    const mostRecentYear = sortedData.length > 0 ? sortedData[0].Year : new Date().getFullYear();
+    const mostRecentQuarter = sortedData.length > 0 ? sortedData[0].Quarter : Math.ceil((new Date().getMonth() + 1) / 3);
+    
+    // Get all data from the most recent quarter and group by country
+    const recentData = data.filter(item => 
+      item.Year === mostRecentYear && 
+      item.Quarter === mostRecentQuarter &&
+      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
+    );
+    
+    // Get vaccination data for the most recent year (no quarter data available)
+    const recentVaccinationData = vaccinationData.filter(item =>
+      item.Year === mostRecentYear &&
+      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
+    );
+    
+    // Get surveillance data for the most recent year (no quarter data available)
+    const recentSurveillanceData = surveillanceData.filter(item =>
+      item.Year === mostRecentYear &&
+      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
+    );
+    
+    // Group by country and aggregate the data
+    const countryDataWithReports = recentData.reduce((acc, item) => {
+      const country = item.Country;
+      if (!acc[country]) {
+        acc[country] = {
+          country,
+          year: mostRecentYear,
+          quarter: mostRecentQuarter,
+          totalOutbreaks: 0,
+          diseases: [],
+          reports: [],
+          vaccinations: [],
+          surveillance: [],
+          hasData: true
+        };
+      }
+      
+      const outbreaks = parseInt(String(item.Outbreaks || 0), 10) || 0;
+      acc[country].totalOutbreaks += outbreaks;
+      
+      if (item.Disease && !acc[country].diseases.includes(item.Disease)) {
+        acc[country].diseases.push(item.Disease);
+      }
+      
+      acc[country].reports.push(item);
+      
+      return acc;
+    }, {} as Record<string, any>);
+    
+    // Add vaccination data to countries
+    recentVaccinationData.forEach(vaccine => {
+      const country = vaccine.Country;
+      if (!countryDataWithReports[country]) {
+        countryDataWithReports[country] = {
+          country,
+          year: mostRecentYear,
+          quarter: mostRecentQuarter,
+          totalOutbreaks: 0,
+          diseases: [],
+          reports: [],
+          vaccinations: [],
+          surveillance: [],
+          hasData: true
+        };
+      }
+      countryDataWithReports[country].vaccinations.push(vaccine);
+    });
+    
+    // Add surveillance data to countries
+    recentSurveillanceData.forEach(surv => {
+      const country = surv.Country;
+      if (!countryDataWithReports[country]) {
+        countryDataWithReports[country] = {
+          country,
+          year: mostRecentYear,
+          quarter: mostRecentQuarter,
+          totalOutbreaks: 0,
+          diseases: [],
+          reports: [],
+          vaccinations: [],
+          surveillance: [],
+          hasData: true
+        };
+      }
+      countryDataWithReports[country].surveillance.push(surv);
+    });
+    
+    // Add countries with no data for the most recent quarter
+    const allCountryData = userRegionCountries.map(country => {
+      if (countryDataWithReports[country]) {
+        return countryDataWithReports[country];
+      } else {
+        return {
+          country,
+          year: mostRecentYear,
+          quarter: mostRecentQuarter,
+          totalOutbreaks: 0,
+          diseases: [],
+          reports: [],
+          vaccinations: [],
+          surveillance: [],
+          hasData: false
+        };
+      }
+    });
+    
+    return allCountryData;
+  }, [data, userRegionCountries, vaccinationData, surveillanceData]);
 
   // Filter data based on user's region countries and selected filters
   const filteredData = useMemo(() => {
@@ -368,10 +547,12 @@ const RISPLanding: React.FC = () => {
           </h3>
         </div>
         
-        {/* Share Information Button */}
-        <Link to="/risp/outbreak">
-          <button className="w-1/4 nav-btn">Share Information</button>
-        </Link>
+        {/* Share Information Button - Moved to the right */}
+        <div className="flex justify-end">
+          <Link to="/risp/outbreak">
+            <button className="nav-btn">Share Information</button>
+          </Link>
+        </div>
       </section>
 
       {/* Dashboard Section */}
@@ -438,24 +619,50 @@ const RISPLanding: React.FC = () => {
         )}
 
         {/* Map and Action Buttons Layout */}
-        <div className="flex gap-4">
+        <div className="flex gap-4" style={{ overflow: 'visible' }}>
           {/* Map - 3/4 width */}
-          <div className="w-3/4 bg-white rounded-lg shadow overflow-hidden">
-            <div className="h-96 w-full">
+          <div className="w-3/4 bg-white rounded-lg shadow" style={{ position: 'relative', overflow: 'visible' }}>
+            {/* Map Header - only show for overview mode */}
+            {viewMode === 'default' && (
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Overview of last quarter reported
+                  {mostRecentQuarterData.length > 0 && ` (Q${mostRecentQuarterData[0].quarter} ${mostRecentQuarterData[0].year})`}
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Data bubbles show activity for each country in your region. Click for detailed information.
+                </p>
+              </div>
+            )}
+            <div className="h-96 w-full overflow-hidden rounded-b-lg" style={{ 
+              position: 'relative', 
+              zIndex: 1
+            }}>
               <MapContainer
-                center={[50, 20]}
-                zoom={3}
-                scrollWheelZoom={true}
+                center={mapSettings.center}
+                zoom={mapSettings.zoom}
+                scrollWheelZoom={false}
                 className="h-full w-full"
-                zoomControl={true}
-                doubleClickZoom={true}
-                touchZoom={true}
+                zoomControl={false}
+                doubleClickZoom={false}
+                touchZoom={false}
+                dragging={false}
+                boxZoom={false}
+                keyboard={false}
+                bounceAtZoomLimits={false}
+                style={{ 
+                  position: 'relative',
+                  zIndex: 1
+                }}
               >
                 <TileLayer
                   url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
                   attribution="&copy; United Nations Geospatial Information Section"
                   maxZoom={18}
                 />
+                
+                {/* Component to disable all map interactions */}
+                <MapDisabler />
                 
                 {/* Show different content based on view mode */}
                 {viewMode === 'outbreaks' && (
@@ -469,8 +676,18 @@ const RISPLanding: React.FC = () => {
                         key={`${report.id}-${report.Country}-${report.Disease}`}
                         position={coords}
                         icon={createCustomMarker(report.Disease, report.Outbreaks)}
+                        eventHandlers={{
+                          click: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          },
+                          mousedown: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          }
+                        }}
                       >
-                        <Popup maxWidth={300}>
+                        <Popup maxWidth={300} autoPan={false} keepInView={false}>
                           <div className="p-2">
                             <h3 className="font-bold text-lg text-gray-800">{report.Country}</h3>
                             <div className="space-y-1 text-sm">
@@ -515,8 +732,18 @@ const RISPLanding: React.FC = () => {
                           iconSize: [20, 20],
                           iconAnchor: [10, 10]
                         })}
+                        eventHandlers={{
+                          click: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          },
+                          mousedown: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          }
+                        }}
                       >
-                        <Popup maxWidth={300}>
+                        <Popup maxWidth={300} autoPan={false} keepInView={false}>
                           <div className="p-2">
                             <h3 className="font-bold text-lg text-gray-800">{vaccine.Country}</h3>
                             <div className="space-y-1 text-sm">
@@ -548,8 +775,18 @@ const RISPLanding: React.FC = () => {
                           iconSize: [20, 20],
                           iconAnchor: [10, 10]
                         })}
+                        eventHandlers={{
+                          click: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          },
+                          mousedown: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          }
+                        }}
                       >
-                        <Popup maxWidth={300}>
+                        <Popup maxWidth={300} autoPan={false} keepInView={false}>
                           <div className="p-2">
                             <h3 className="font-bold text-lg text-gray-800">{surveillance.Country}</h3>
                             <div className="space-y-1 text-sm">
@@ -566,29 +803,66 @@ const RISPLanding: React.FC = () => {
                 )}
                 
                 {viewMode === 'default' && (
-                  // Show colored country markers for default view
-                  userRegionCountries.map((country) => {
-                    const coords = countryCoordinates[country];
+                  // Show data bubbles for most recent quarter instead of country boundaries
+                  mostRecentQuarterData.map((countryData) => {
+                    const coords = countryCoordinates[countryData.country];
                     if (!coords) return null;
+                    
+                    // Calculate bubble size and style based on data availability
+                    const baseSize = 40;
+                    const maxSize = 80;
+                    const hasData = countryData.hasData;
+                    const size = hasData ? Math.min(maxSize, baseSize + Math.max(0, countryData.totalOutbreaks * 3)) : baseSize;
+                    
+                    // Different styling for countries with/without data
+                    const bubbleStyle = hasData 
+                      ? "background: linear-gradient(135deg, #015039 0%, #10b981 100%);"
+                      : "background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);";
                     
                     return (
                       <Marker
-                        key={`country-${country}`}
+                        key={`recent-data-${countryData.country}`}
                         position={coords}
                         icon={L.divIcon({
-                          className: 'country-marker',
-                          html: `<div style="background-color: #3498db; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-                          iconSize: [20, 20],
-                          iconAnchor: [10, 10]
+                          className: 'data-bubble',
+                          html: `
+                            <div style="
+                              ${bubbleStyle}
+                              width: ${size}px;
+                              height: ${size}px;
+                              border-radius: 50%;
+                              border: 3px solid white;
+                              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              color: white;
+                              font-weight: bold;
+                              font-size: ${Math.max(10, size * 0.2)}px;
+                              position: relative;
+                            ">
+                              <div style="text-align: center;">
+                                <div style="font-size: ${Math.max(8, size * 0.15)}px; line-height: 1;">${countryData.country.slice(0, 3).toUpperCase()}</div>
+                                ${hasData && countryData.totalOutbreaks > 0 ? `<div style="font-size: ${Math.max(12, size * 0.25)}px; line-height: 1;">${countryData.totalOutbreaks}</div>` : ''}
+                                ${!hasData ? `<div style="font-size: ${Math.max(6, size * 0.12)}px; line-height: 1;">No Data</div>` : ''}
+                              </div>
+                            </div>
+                          `,
+                          iconSize: [size, size],
+                          iconAnchor: [size/2, size/2]
                         })}
-                      >
-                        <Popup>
-                          <div className="p-2">
-                            <h3 className="font-bold text-lg text-gray-800">{country}</h3>
-                            <p className="text-sm text-gray-600">Region: {userRegion}</p>
-                          </div>
-                        </Popup>
-                      </Marker>
+                        eventHandlers={{
+                          click: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                            setSelectedCountryData(countryData);
+                          },
+                          mousedown: (e) => {
+                            e.originalEvent?.stopPropagation();
+                            e.originalEvent?.preventDefault();
+                          }
+                        }}
+                      />
                     );
                   })
                 )}
@@ -600,7 +874,7 @@ const RISPLanding: React.FC = () => {
           
           {/* Action Buttons Sidebar - 1/4 width */}
           <div className="w-1/4 bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Visualize:</h3>
             <div className="space-y-4">
               <button 
                 onClick={() => setViewMode('default')}
@@ -661,27 +935,82 @@ const RISPLanding: React.FC = () => {
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-3 text-gray-800">Disease Legend:</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {availableDiseases.map(disease => (
-              <div key={disease} className="flex items-center">
-                <div 
-                  className="w-4 h-4 rounded-full border border-white mr-2 shadow"
-                  style={{ backgroundColor: getMarkerColor(disease) }}
-                ></div>
-                <span className="text-sm">{disease}</span>
+        {/* Country Information Card */}
+        {selectedCountryData ? (
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="font-semibold mb-3 text-gray-800">{selectedCountryData.country} - Last Quarter Data</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Outbreak Data */}
+              <div className="p-3 bg-red-50 rounded">
+                <h4 className="font-medium text-red-800 mb-2">Outbreak Reports</h4>
+                <div className="text-2xl font-bold text-red-600">{selectedCountryData.totalOutbreaks}</div>
+                <div className="text-sm text-gray-600">{selectedCountryData.reports.length} reports</div>
+                {selectedCountryData.diseases.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-sm font-medium text-gray-700">Diseases:</div>
+                    <div className="text-sm text-gray-600">
+                      {selectedCountryData.diseases.join(', ')}
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+
+              {/* Vaccination Data */}
+              <div className="p-3 bg-green-50 rounded">
+                <h4 className="font-medium text-green-800 mb-2">Vaccination Data</h4>
+                <div className="text-2xl font-bold text-green-600">{selectedCountryData.vaccinations.length}</div>
+                <div className="text-sm text-gray-600">vaccination programs</div>
+                {selectedCountryData.vaccinations.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-sm font-medium text-gray-700">Species:</div>
+                    <div className="text-sm text-gray-600">
+                      {Array.from(new Set(selectedCountryData.vaccinations.map((r: any) => r.SpeciesVaccinated).filter(Boolean))).join(', ')}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Surveillance Data */}
+              <div className="p-3 bg-blue-50 rounded">
+                <h4 className="font-medium text-blue-800 mb-2">Surveillance Data</h4>
+                <div className="text-2xl font-bold text-blue-600">{selectedCountryData.surveillance.length}</div>
+                <div className="text-sm text-gray-600">surveillance activities</div>
+                {selectedCountryData.surveillance.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-sm font-medium text-gray-700">Activities:</div>
+                    <div className="text-sm text-gray-600">
+                      {Array.from(new Set(selectedCountryData.surveillance.map((r: any) => r.SurveillanceActivity).filter(Boolean))).slice(0, 3).join(', ')}
+                      {Array.from(new Set(selectedCountryData.surveillance.map((r: any) => r.SurveillanceActivity).filter(Boolean))).length > 3 && '...'}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Summary */}
+              <div className="p-3 bg-gray-50 rounded">
+                <h4 className="font-medium text-gray-800 mb-2">Quarter Summary</h4>
+                <div className="text-sm text-gray-600">
+                  <div>Total Reports: {selectedCountryData.reports.length + selectedCountryData.vaccinations.length + selectedCountryData.surveillance.length}</div>
+                  <div>Period: Q{selectedCountryData.quarter} {selectedCountryData.year}</div>
+                  <div>Status: {selectedCountryData.hasData ? 'Data Available' : 'No Data'}</div>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={() => setSelectedCountryData(null)}
+              className="mt-3 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm text-gray-700"
+            >
+              Close Details
+            </button>
           </div>
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500">
-              <strong>Note:</strong> Marker size indicates the number of outbreaks. 
-              Larger markers represent more outbreak reports.
+        ) : (
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="font-semibold mb-3 text-gray-800">Country Information</h3>
+            <p className="text-gray-600 text-center py-8">
+              Click on a country bubble above to see detailed information for the last quarter
             </p>
           </div>
-        </div>
+        )}
 
         {/* Summary Statistics */}
         {filteredData.length > 0 && (
