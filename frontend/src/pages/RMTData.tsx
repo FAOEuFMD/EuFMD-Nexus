@@ -8,73 +8,23 @@ interface Country {
   subregion?: string;
 }
 
-interface DiseaseStatusEntry {
-  id?: number;
-  country_id: number;
-  country_name?: string;
-  FMD: number;
-  PPR: number;
-  LSD: number;
-  RVF: number;
-  SPGP: number;
-  date: string;
-}
-
-interface MitigationMeasureEntry {
-  id?: number;
-  country_id: number;
-  country_name?: string;
-  FMD: number;
-  PPR: number;
-  LSD: number;
-  RVF: number;
-  SPGP: number;
-  date: string;
-}
-
-const RMTData: React.FC = () => {
+const RMTDataNew: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Data states
   const [countries, setCountries] = useState<Country[]>([]);
-  const [diseaseStatus, setDiseaseStatus] = useState<DiseaseStatusEntry[]>([]);
-  const [mitigationMeasures, setMitigationMeasures] = useState<MitigationMeasureEntry[]>([]);
+  const [countryDiseaseStatus, setCountryDiseaseStatus] = useState<any[]>([]);
+  const [countryMitigationMeasures, setCountryMitigationMeasures] = useState<any[]>([]);
+  const [showTable, setShowTable] = useState(false);
+  const [activeTable, setActiveTable] = useState<'disease' | 'mitigation' | null>(null);
   
-  // UI states
-  const [showDiseaseStatusTable, setShowDiseaseStatusTable] = useState(false);
-  const [showMitigationMeasuresTable, setShowMitigationMeasuresTable] = useState(false);
-  const [showDiseaseStatusForm, setShowDiseaseStatusForm] = useState(false);
-  const [showMitigationMeasuresForm, setShowMitigationMeasuresForm] = useState(false);
-  const [tableTitle, setTableTitle] = useState('');
-  
-  // Form states for Disease Status
-  const [newDiseaseStatus, setNewDiseaseStatus] = useState<Partial<DiseaseStatusEntry>>({
-    country_id: 0,
-    FMD: 0,
-    PPR: 0,
-    LSD: 0,
-    RVF: 0,
-    SPGP: 0,
-    date: new Date().toISOString().split('T')[0]
-  });
-  
-  // Form states for Mitigation Measures
-  const [newMitigationMeasure, setNewMitigationMeasure] = useState<Partial<MitigationMeasureEntry>>({
-    country_id: 0,
-    FMD: 0,
-    PPR: 0,
-    LSD: 0,
-    RVF: 0,
-    SPGP: 0,
-    date: new Date().toISOString().split('T')[0]
-  });
+  const diseases = ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'];
 
   useEffect(() => {
-    loadInitialData();
+    loadCountries();
   }, []);
 
-  const loadInitialData = async () => {
+  const loadCountries = async () => {
     setLoading(true);
     try {
       const countriesData = await apiService.countries.getAll();
@@ -86,15 +36,26 @@ const RMTData: React.FC = () => {
     }
   };
 
-  const fetchDiseaseStatus = async () => {
+  const loadDiseaseStatusData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/rmt/disease-status-rmt');
-      const data = await response.json();
-      setDiseaseStatus(data);
-      setShowDiseaseStatusTable(true);
-      setShowMitigationMeasuresTable(false);
-      setTableTitle('Disease Status');
+      const response = await apiService.rmt.getDiseaseStatus();
+      const allDiseaseStatusRecords = Array.isArray(response.data) ? response.data : [];
+      
+      // Format the data to include country names and show all records
+      const formattedData = allDiseaseStatusRecords.map((record: any) => {
+        const country = countries.find(c => c.id === record.country_id);
+        return {
+          ...record,
+          countryName: country ? country.name_un : `Country ${record.country_id}`,
+          date: record.date ? new Date(record.date).toISOString().split('T')[0] : 'N/A'
+        };
+      });
+      
+      setCountryDiseaseStatus(formattedData);
+      setShowTable(true);
+      setActiveTable('disease');
     } catch (err: any) {
       setError(err.message || 'Failed to load disease status data');
     } finally {
@@ -102,15 +63,26 @@ const RMTData: React.FC = () => {
     }
   };
 
-  const fetchMitigationMeasures = async () => {
+  const loadMitigationMeasuresData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/rmt/mitigation-measures-rmt');
-      const data = await response.json();
-      setMitigationMeasures(data);
-      setShowMitigationMeasuresTable(true);
-      setShowDiseaseStatusTable(false);
-      setTableTitle('Mitigation Measures');
+      const response = await apiService.rmt.getMitigationMeasures();
+      const allMitigationRecords = Array.isArray(response.data) ? response.data : [];
+      
+      // Format the data to include country names and show all records
+      const formattedData = allMitigationRecords.map((record: any) => {
+        const country = countries.find(c => c.id === record.country_id);
+        return {
+          ...record,
+          countryName: country ? country.name_un : `Country ${record.country_id}`,
+          date: record.date ? new Date(record.date).toISOString().split('T')[0] : 'N/A'
+        };
+      });
+      
+      setCountryMitigationMeasures(formattedData);
+      setShowTable(true);
+      setActiveTable('mitigation');
     } catch (err: any) {
       setError(err.message || 'Failed to load mitigation measures data');
     } finally {
@@ -118,106 +90,58 @@ const RMTData: React.FC = () => {
     }
   };
 
-  const closeTable = () => {
-    setDiseaseStatus([]);
-    setMitigationMeasures([]);
-    setShowDiseaseStatusTable(false);
-    setShowMitigationMeasuresTable(false);
-    setShowDiseaseStatusForm(false);
-    setShowMitigationMeasuresForm(false);
-    setTableTitle('');
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toISOString().split("T")[0];
-  };
-
-  const newDiseaseStatusForm = () => {
-    setShowDiseaseStatusForm(true);
-  };
-
-  const newMitigationMeasuresForm = () => {
-    setShowMitigationMeasuresForm(true);
-  };
-
-  const handleSubmitDiseaseStatus = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDiseaseStatus.country_id) {
-      alert('Please select a country');
-      return;
-    }
-
-    const data = {
-      country_id: newDiseaseStatus.country_id,
-      date: newDiseaseStatus.date,
-      FMD: newDiseaseStatus.FMD,
-      PPR: newDiseaseStatus.PPR,
-      LSD: newDiseaseStatus.LSD,
-      RVF: newDiseaseStatus.RVF,
-      SPGP: newDiseaseStatus.SPGP,
-    };
-
+  const handleSave = async () => {
+    if (!activeTable) return;
+    
+    setSaving(true);
+    setError(null);
+    
     try {
-      const response = await fetch('/api/rmt/disease-status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+      const currentDate = new Date().toISOString().split('T')[0]; // Today's date in YYYY-MM-DD format
       
-      if (response.ok) {
-        setShowDiseaseStatusForm(false);
-        fetchDiseaseStatus(); // Refresh the table
-      } else {
-        alert('Error submitting disease status');
+      if (activeTable === 'disease') {
+        // Save disease status data
+        for (const row of countryDiseaseStatus) {
+          const dataToSave = {
+            country_id: row.country_id,
+            FMD: row.FMD || 0,
+            PPR: row.PPR || 0,
+            LSD: row.LSD || 0,
+            RVF: row.RVF || 0,
+            SPGP: row.SPGP || 0,
+            date: currentDate
+          };
+          
+          await apiService.rmt.postDiseaseStatus(dataToSave);
+        }
+        alert('Disease status data saved successfully!');
+      } else if (activeTable === 'mitigation') {
+        // Save mitigation measures data
+        for (const row of countryMitigationMeasures) {
+          const dataToSave = {
+            country_id: row.country_id,
+            FMD: row.FMD || 0,
+            PPR: row.PPR || 0,
+            LSD: row.LSD || 0,
+            RVF: row.RVF || 0,
+            SPGP: row.SPGP || 0,
+            date: currentDate
+          };
+          
+          await apiService.rmt.postMitigationMeasures(dataToSave);
+        }
+        alert('Mitigation measures data saved successfully!');
       }
+      
     } catch (error) {
-      console.error("Error submitting disease status:", error);
-      alert('Error submitting disease status');
+      console.error('Error saving data:', error);
+      setError('Failed to save data. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSubmitMitigationMeasure = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMitigationMeasure.country_id) {
-      alert('Please select a country');
-      return;
-    }
-
-    const data = {
-      country_id: newMitigationMeasure.country_id,
-      date: newMitigationMeasure.date,
-      FMD: newMitigationMeasure.FMD,
-      PPR: newMitigationMeasure.PPR,
-      LSD: newMitigationMeasure.LSD,
-      RVF: newMitigationMeasure.RVF,
-      SPGP: newMitigationMeasure.SPGP,
-    };
-
-    try {
-      const response = await fetch('/api/rmt/mitigation-measures', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      
-      if (response.ok) {
-        setShowMitigationMeasuresForm(false);
-        fetchMitigationMeasures(); // Refresh the table
-      } else {
-        alert('Error submitting mitigation measures');
-      }
-    } catch (error) {
-      console.error("Error submitting mitigation measures:", error);
-      alert('Error submitting mitigation measures');
-    }
-  };
-
-  if (loading) {
+  if (loading && countries.length === 0) {
     return (
       <div className="flex justify-center items-center h-96">
         <div className="text-xl">Loading RMT data...</div>
@@ -226,439 +150,184 @@ const RMTData: React.FC = () => {
   }
 
   return (
-    <div>
-      <div className="min-h-32">
-        <h1 className="font-black capitalize text-2xl my-3">
-          RMT Data Entry
-        </h1>
-        
-        {error && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-            <div className="flex">
-              <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <h1 className="font-black capitalize text-2xl my-3">
+        RMT Data Entry
+      </h1>
+      
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Main action buttons - matching Vue layout exactly */}
+      {/* Main action buttons */}
+      <div className="space-y-4 mb-8">
         <button 
-          onClick={fetchDiseaseStatus}
-          className="nav-btn w-1/3 mb-2"
+          onClick={loadDiseaseStatusData}
+          className="bg-[#15736d] hover:bg-[#438f8a] text-white px-6 py-3 rounded-md transition-colors duration-300 mr-4"
+          disabled={loading}
         >
-          Add Disease Status
+          {loading ? 'Loading...' : 'Update Disease Status'}
         </button>
 
         <button
-          onClick={fetchMitigationMeasures}
-          className="nav-btn w-1/3 mb-2"
+          onClick={loadMitigationMeasuresData}
+          className="bg-[#15736d] hover:bg-[#438f8a] text-white px-6 py-3 rounded-md transition-colors duration-300"
+          disabled={loading}
         >
-          Add Mitigation Measures
+          {loading ? 'Loading...' : 'Update Mitigation Measures'}
         </button>
       </div>
-      
-      {/* Disease Status Section */}
-      <div className="flex flex-col justify-center w-full max-w-5xl mx-auto mb-8">
-        {tableTitle && showDiseaseStatusTable && (
-          <h2 className="text-xl font-bold mb-2 text-center">{tableTitle}</h2>
-        )}
-        
-        {showDiseaseStatusTable && (
-          <div className="flex justify-center mt-4">
-            <button 
-              onClick={newDiseaseStatusForm}
-              className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300"
-            >
-              New Disease Status
-            </button>
-            <button 
-              onClick={closeTable}
-              className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300 ml-2"
-            >
-              Close
-            </button>         
-          </div>
-        )}
 
-        {/* Disease Status Form */}
-        {showDiseaseStatusForm && (
-          <div className="flex justify-center mt-4">
-            <form onSubmit={handleSubmitDiseaseStatus} className="w-full max-w-lg mb-8">
-              <div className="flex flex-wrap -mx-3 mb-6">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-country">
-                    Country
-                  </label>
-                  <select 
-                    value={newDiseaseStatus.country_id || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, country_id: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-country"
-                    required
-                  >
-                    <option value="">Select a country...</option>
-                    {countries.map(country => (
-                      <option key={country.id} value={country.id}>
-                        {country.name_un}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="w-full md:w-1/2 px-3">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-date">
-                    Date
-                  </label>
-                  <input 
-                    value={newDiseaseStatus.date || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, date: e.target.value }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-date" 
-                    type="date"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap -mx-3 mb-2">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-fmd">
-                    FMD
-                  </label>
-                  <input 
-                    value={newDiseaseStatus.FMD || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, FMD: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-fmd" 
-                    type="number"
-                    required
-                  />
-                </div>
-                <div className="w-full md:w-1/2 px-3">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-ppr">
-                    PPR
-                  </label>
-                  <input 
-                    value={newDiseaseStatus.PPR || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, PPR: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-ppr" 
-                    type="number"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap -mx-3 mb-2">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-lsd">
-                    LSD
-                  </label>
-                  <input 
-                    value={newDiseaseStatus.LSD || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, LSD: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-lsd" 
-                    type="number"
-                    required
-                  />
-                </div>
-                <div className="w-full md:w-1/2 px-3">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-rvf">
-                    RVF
-                  </label>
-                  <input 
-                    value={newDiseaseStatus.RVF || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, RVF: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-rvf" 
-                    type="number"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap -mx-3 mb-2">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-spgp">
-                    SPGP
-                  </label>
-                  <input 
-                    value={newDiseaseStatus.SPGP || ''}
-                    onChange={(e) => setNewDiseaseStatus(prev => ({ ...prev, SPGP: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-spgp" 
-                    type="number"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex justify-center mt-4">
-                <button 
-                  className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300 ml-2" 
-                  type="submit"
-                >
-                  Submit
-                </button>
-                <button 
-                  className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300 ml-2" 
-                  type="button"
-                  onClick={() => setShowDiseaseStatusForm(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Disease Status Table */}
-        {diseaseStatus.length > 0 && showDiseaseStatusTable && (
-          <table className="w-full border bg-white text-center">
-            <thead>
-              <tr className="bg-greens text-white text-sm sticky top-0 z-20 font-medium uppercase tracking-wider whitespace-nowrap">
-                <th className="px-5 py-1 text-left">Country</th>
-                <th className="p-1">FMD</th>
-                <th className="p-1">PPR</th>
-                <th className="p-1">LSD</th>
-                <th className="p-1">RVF</th>
-                <th className="p-1">SPGP</th>
-                <th className="p-1">DATE</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {diseaseStatus.map((status) => (
-                <tr key={status.id}>
-                  <td className="px-5 py-1 text-left cursor-pointer">
-                    {status.country_name}
-                  </td>
-                  <td className="px-5 py-3">
-                    {status.FMD}
-                  </td>
-                  <td className="px-5 py-3">
-                    {status.PPR}
-                  </td>
-                  <td className="px-5 py-3">
-                    {status.LSD}
-                  </td>
-                  <td className="px-5 py-3">
-                    {status.RVF}
-                  </td>
-                  <td className="px-5 py-3">
-                    {status.SPGP}
-                  </td>
-                  <td className="px-5 py-3">
-                    {formatDate(status.date)}
-                  </td>
+      {/* Disease Status Table */}
+      {showTable && activeTable === 'disease' && countryDiseaseStatus.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-4">Disease Status</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse bg-white border">
+              <thead>
+                <tr className="bg-[#15736d] text-white">
+                  <th className="border border-gray-300 px-4 py-2 text-left">ID</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">Country</th>
+                  {diseases.map(disease => (
+                    <th key={disease} className="border border-gray-300 px-4 py-2 text-center">
+                      {disease}
+                    </th>
+                  ))}
+                  <th className="border border-gray-300 px-4 py-2 text-center">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Mitigation Measures Section */}
-      <div className="flex flex-col justify-center w-full max-w-5xl mx-auto mb-8">
-        {tableTitle && showMitigationMeasuresTable && (
-          <h2 className="text-xl font-bold mb-2">{tableTitle}</h2>
-        )}
-        
-        {showMitigationMeasuresTable && (
-          <div className="flex justify-center mt-4">
-            <button 
-              onClick={newMitigationMeasuresForm}
-              className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300"
-            >
-              New Mitigation Measures
-            </button>
-            <button 
-              onClick={closeTable}
-              className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300 ml-2"
-            >
-              Close
-            </button>         
-          </div>
-        )}
-
-        {/* Mitigation Measures Form */}
-        {showMitigationMeasuresForm && (
-          <div className="flex justify-center mt-4">
-            <form onSubmit={handleSubmitMitigationMeasure} className="w-full max-w-lg mb-8">
-              <div className="flex flex-wrap -mx-3 mb-6">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-country-mm">
-                    Country
-                  </label>
-                  <select 
-                    value={newMitigationMeasure.country_id || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, country_id: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-country-mm"
-                    required
-                  >
-                    <option value="">Select a country...</option>
-                    {countries.map(country => (
-                      <option key={country.id} value={country.id}>
-                        {country.name_un}
-                      </option>
+              </thead>
+              <tbody>
+                {countryDiseaseStatus.map((row) => (
+                  <tr key={row.id}>
+                    <td className="border border-gray-300 px-4 py-2">
+                      {row.id}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 font-medium">
+                      {row.countryName}
+                    </td>
+                    {diseases.map(disease => (
+                      <td key={disease} className="border border-gray-300 px-2 py-2 text-center">
+                        <select
+                          value={row[disease] !== null && row[disease] !== undefined ? String(row[disease]) : ''}
+                          onChange={(e) => {
+                            const newValue = e.target.value === '' ? null : parseInt(e.target.value);
+                            setCountryDiseaseStatus(prev => 
+                              prev.map(item => 
+                                item.id === row.id 
+                                  ? { ...item, [disease]: newValue }
+                                  : item
+                              )
+                            );
+                          }}
+                          className="w-full px-2 py-1 rounded border text-center bg-white"
+                        >
+                          <option value="">N/A</option>
+                          <option value="0">0</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                        </select>
+                      </td>
                     ))}
-                  </select>
-                </div>
-                <div className="w-full md:w-1/2 px-3">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-date-mm">
-                    Date
-                  </label>
-                  <input 
-                    value={newMitigationMeasure.date || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, date: e.target.value }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-date-mm" 
-                    type="date"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap -mx-3 mb-2">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-fmd-mm">
-                    FMD
-                  </label>
-                  <input 
-                    value={newMitigationMeasure.FMD || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, FMD: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-fmd-mm" 
-                    type="number"
-                    required
-                  />
-                </div>
-                <div className="w-full md:w-1/2 px-3">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-ppr-mm">
-                    PPR
-                  </label>
-                  <input 
-                    value={newMitigationMeasure.PPR || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, PPR: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-ppr-mm" 
-                    type="number"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap -mx-3 mb-2">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-lsd-mm">
-                    LSD
-                  </label>
-                  <input 
-                    value={newMitigationMeasure.LSD || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, LSD: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-lsd-mm" 
-                    type="number"
-                    required
-                  />
-                </div>
-                <div className="w-full md:w-1/2 px-3">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-rvf-mm">
-                    RVF
-                  </label>
-                  <input 
-                    value={newMitigationMeasure.RVF || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, RVF: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-rvf-mm" 
-                    type="number"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap -mx-3 mb-2">
-                <div className="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-                  <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" htmlFor="grid-spgp-mm">
-                    SPGP
-                  </label>
-                  <input 
-                    value={newMitigationMeasure.SPGP || ''}
-                    onChange={(e) => setNewMitigationMeasure(prev => ({ ...prev, SPGP: parseInt(e.target.value) }))}
-                    className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500" 
-                    id="grid-spgp-mm" 
-                    type="number"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="flex justify-center mt-4">
-                <button 
-                  className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300 ml-2" 
-                  type="submit"
-                >
-                  Submit
-                </button>
-                <button 
-                  className="nav-btn text-white border-2 border-green-600 px-4 py-2 rounded my-2 shadow-none hover:shadow-md hover:shadow-black/30 transition-all duration-300 ml-2" 
-                  type="button"
-                  onClick={() => setShowMitigationMeasuresForm(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {row.date}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Mitigation Measures Table */}
-        {mitigationMeasures.length > 0 && showMitigationMeasuresTable && (
-          <table className="w-full border bg-white text-center">
-            <thead>
-              <tr className="bg-greens text-white text-sm sticky top-0 z-20 font-medium uppercase tracking-wider whitespace-nowrap">
-                <th className="px-5 py-1 text-left">Country</th>
-                <th className="p-1">FMD</th>
-                <th className="p-1">PPR</th>
-                <th className="p-1">LSD</th>
-                <th className="p-1">RVF</th>
-                <th className="p-1">SPGP</th>
-                <th className="p-1">DATE</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {mitigationMeasures.map((measure) => (
-                <tr key={measure.id}>
-                  <td className="px-5 py-1 text-left cursor-pointer">
-                    {measure.country_name}
-                  </td>
-                  <td className="px-5 py-3">
-                    {measure.FMD}
-                  </td>
-                  <td className="px-5 py-3">
-                    {measure.PPR}
-                  </td>
-                  <td className="px-5 py-3">
-                    {measure.LSD}
-                  </td>
-                  <td className="px-5 py-3">
-                    {measure.RVF}
-                  </td>
-                  <td className="px-5 py-3">
-                    {measure.SPGP}
-                  </td>
-                  <td className="px-5 py-3">
-                    {formatDate(measure.date)}
-                  </td>
+      {/* Mitigation Measures Table */}
+      {showTable && activeTable === 'mitigation' && countryMitigationMeasures.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-4">Mitigation Measures</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse bg-white border">
+              <thead>
+                <tr className="bg-[#15736d] text-white">
+                  <th className="border border-gray-300 px-4 py-2 text-left">ID</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">Country</th>
+                  {diseases.map(disease => (
+                    <th key={disease} className="border border-gray-300 px-4 py-2 text-center">
+                      {disease}
+                    </th>
+                  ))}
+                  <th className="border border-gray-300 px-4 py-2 text-center">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>   
+              </thead>
+              <tbody>
+                {countryMitigationMeasures.map((row) => (
+                  <tr key={row.id}>
+                    <td className="border border-gray-300 px-4 py-2">
+                      {row.id}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-2 font-medium">
+                      {row.countryName}
+                    </td>
+                    {diseases.map(disease => (
+                      <td key={disease} className="border border-gray-300 px-2 py-2 text-center">
+                        <select
+                          value={row[disease] !== null && row[disease] !== undefined ? String(row[disease]) : ''}
+                          onChange={(e) => {
+                            const newValue = e.target.value === '' ? null : parseInt(e.target.value);
+                            setCountryMitigationMeasures(prev => 
+                              prev.map(item => 
+                                item.id === row.id 
+                                  ? { ...item, [disease]: newValue }
+                                  : item
+                              )
+                            );
+                          }}
+                          className="w-full px-2 py-1 rounded border text-center bg-white"
+                        >
+                          <option value="">N/A</option>
+                          <option value="0">0</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                        </select>
+                      </td>
+                    ))}
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      {row.date}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Save Button */}
+      {showTable && ((activeTable === 'disease' && countryDiseaseStatus.length > 0) || 
+                     (activeTable === 'mitigation' && countryMitigationMeasures.length > 0)) && (
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`px-6 py-3 text-white font-medium rounded-lg transition-colors ${
+              saving 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-[#15736d] hover:bg-[#124a47]'
+            }`}
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
-export default RMTData;
+export default RMTDataNew;

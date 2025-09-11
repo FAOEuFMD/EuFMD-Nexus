@@ -34,6 +34,48 @@ const safeParseData = (data: any, fallback: any = []): any => {
   return fallback;
 };
 
+// Function to normalize disease names to avoid duplicates
+const normalizeDiseaseNames = (diseaseNamesList: any[]) => {
+  return diseaseNamesList.map(item => {
+    let normalizedName = item.disease_name;
+    
+    // Normalize FMD variations
+    if (normalizedName) {
+      if (normalizedName.toLowerCase().includes('foot and mouth') || 
+          normalizedName.toLowerCase() === 'fmd' ||
+          normalizedName.toLowerCase().includes('foot-and-mouth')) {
+        normalizedName = 'Foot and Mouth Disease';
+      }
+    }
+    
+    return {
+      ...item,
+      disease_name: normalizedName
+    };
+  });
+};
+
+// Function to merge duplicate diseases (same normalized name)
+const mergeDuplicateDiseases = (data: any[]) => {
+  const diseaseMap = new Map();
+  
+  data.forEach(item => {
+    const key = item.disease_name;
+    if (diseaseMap.has(key)) {
+      // Merge data - keep first entry but combine any relevant fields
+      const existing = diseaseMap.get(key);
+      // For surveillance, we can merge details if they're different
+      if (item.details && existing.details && item.details !== existing.details) {
+        existing.details = `${existing.details}; ${item.details}`;
+      }
+    } else {
+      diseaseMap.set(key, { ...item });
+    }
+  });
+  
+  return Array.from(diseaseMap.values());
+};
+
 // Format array data for display
 const formatArrayData = (data: any): string => {
   const parsed = safeParseData(data, []);
@@ -115,6 +157,10 @@ const RISPSummary: React.FC = () => {
           };
         });
 
+        // Normalize and merge duplicate disease names in surveillance data
+        const normalizedSurveillance = normalizeDiseaseNames(parsedSurveillance);
+        const mergedSurveillance = mergeDuplicateDiseases(normalizedSurveillance);
+
         // Load vaccination data
         const vaccinationResponse = await apiService.risp.getRISPVaccinations(currentYear.toString());
         
@@ -126,7 +172,7 @@ const RISPSummary: React.FC = () => {
         });
 
         setOutbreakData(parsedOutbreaks);
-        setSurveillanceData(parsedSurveillance);
+        setSurveillanceData(mergedSurveillance);
         setVaccinationData(campaignsWithCurrentData);
       } catch (error) {
         console.error('Error loading summary data:', error);

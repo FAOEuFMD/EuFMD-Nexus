@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -30,51 +31,28 @@ interface CountryCoordinates {
   [key: string]: [number, number];
 }
 
-// Static country coordinates for major countries
+// Static country coordinates for target regions (Europe, West Eurasia, Central Asia, South Asia, North Africa, Near East)
 const countryCoordinates: CountryCoordinates = {
   'Afghanistan': [33.9391, 67.7100],
-  'Albania': [41.1533, 20.1683],
   'Algeria': [28.0339, 1.6596],
   'Armenia': [40.0691, 45.0382],
   'Azerbaijan': [40.1431, 47.5769],
-  'Bangladesh': [23.6850, 90.3563],
-  'Belarus': [53.7098, 27.9534],
-  'Bosnia and Herzegovina': [43.9159, 17.6791],
-  'Bulgaria': [42.7339, 25.4858],
-  'China': [35.8617, 104.1954],
-  'Croatia': [45.1000, 15.2000],
-  'Czech Republic': [49.8175, 15.4730],
-  'Estonia': [58.5953, 25.0136],
   'Georgia': [42.3154, 43.3569],
-  'Germany': [51.1657, 10.4515],
-  'Greece': [39.0742, 21.8243],
-  'Hungary': [47.1625, 19.5033],
-  'India': [20.5937, 78.9629],
   'Iran': [32.4279, 53.6880],
   'Iraq': [33.2232, 43.6793],
-  'Italy': [41.8719, 12.5674],
-  'Kazakhstan': [48.0196, 66.9237],
-  'Kyrgyzstan': [41.2044, 74.7661],
-  'Latvia': [56.8796, 24.6032],
-  'Lithuania': [55.1694, 23.8813],
-  'Moldova': [47.4116, 28.3699],
-  'Mongolia': [46.8625, 103.8467],
-  'Montenegro': [42.7087, 19.3744],
-  'North Macedonia': [41.6086, 21.7453],
+  'Jordan': [30.5852, 36.2384],
+  'Lebanon': [33.8547, 35.8623],
   'Pakistan': [30.3753, 69.3451],
-  'Poland': [51.9194, 19.1451],
-  'Romania': [45.9432, 24.9668],
-  'Russia': [61.5240, 105.3188],
-  'Serbia': [44.0165, 21.0059],
-  'Slovakia': [48.6690, 19.6990],
-  'Slovenia': [46.1512, 14.9955],
-  'Tajikistan': [38.8610, 71.2761],
+  'Palestine': [31.9522, 35.2332],
+  'Palestine, State of': [31.9522, 35.2332],
+  'Syria': [34.8021, 38.9968],
+  'Syrian Arab Republic': [34.8021, 38.9968],
   'Turkey': [38.9637, 35.2433],
-  'Turkmenistan': [38.9697, 59.5563],
-  'Ukraine': [48.3794, 31.1656],
-  'United Kingdom': [55.3781, -3.4360],
-  'Uzbekistan': [41.3775, 64.5853],
-  'Vietnam': [14.0583, 108.2772],
+  'Egypt': [26.8206, 30.8025],
+  'Libya': [26.3351, 17.2283],
+  'Morocco': [31.7917, -7.0926],
+  'Sudan': [12.8628, 30.2176],
+  'Tunisia': [33.8869, 9.5375],
 };
 
 const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredData }) => {
@@ -125,39 +103,55 @@ const FastReport: React.FC = () => {
   // Filter data based on selected filters
   const filteredData = useMemo(() => {
     return data.filter(item => {
-      const yearMatch = selectedYear === 'all' || item.Year.toString() === selectedYear;
+      const yearMatch = selectedYear === 'all' || item.Year?.toString() === selectedYear;
       const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
       const regionMatch = selectedRegion === 'all' || item.Region === selectedRegion;
       return yearMatch && diseaseMatch && regionMatch;
     });
   }, [data, selectedYear, selectedDisease, selectedRegion]);
+  
+  // Data to use for markers - only include entries with actual outbreaks
+  const markerData = useMemo(() => {
+    return filteredData.filter(item => {
+      if (!item.Outbreaks) return false;
+      const outbreaksStr = String(item.Outbreaks).trim();
+      if (outbreaksStr === '' || outbreaksStr === '0' || outbreaksStr.toLowerCase() === 'null') return false;
+      const outbreaksNum = parseInt(outbreaksStr, 10);
+      return !isNaN(outbreaksNum) && outbreaksNum > 0;
+    });
+  }, [filteredData]);
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
-        setLoading(true);
-        
+        console.log('Attempting to fetch data from API...');
         const response = await fetch('/api/fast-report/create-dashboard');
         
         if (!response.ok) {
-          throw new Error('Failed to fetch fast report data');
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
+        
         const dashboardData = await response.json();
         
-        // Extract data from the dashboard response
-        if (dashboardData && dashboardData.data) {
+        // Validate API response structure
+        if (dashboardData && dashboardData.data && Array.isArray(dashboardData.data)) {
+          console.log("Successfully loaded API data:", dashboardData.data.length, "records");
           setData(dashboardData.data);
+        } else if (dashboardData && Array.isArray(dashboardData)) {
+          // Handle case where API returns array directly
+          console.log("Successfully loaded API data (direct array):", dashboardData.length, "records");
+          setData(dashboardData);
         } else {
-          throw new Error('Invalid response data structure');
+          console.warn("Invalid API data format:", dashboardData);
+          throw new Error('Invalid API response format - expected array or {data: array}');
         }
-        
-        setError(null);
       } catch (err: any) {
-        console.error('Error loading data:', err);
-        setError(err.message || 'Failed to load fast report data');
-        
-        // For development, use mock data
-        setData(mockFastReportData);
+        console.error('Failed to fetch from API:', err.message);
+        setError(`Unable to load data: ${err.message}`);
+        setData([]); // No fallback data - show empty state
       } finally {
         setLoading(false);
       }
@@ -181,11 +175,25 @@ const FastReport: React.FC = () => {
 
   const createCustomMarker = (disease: string, outbreaks: string) => {
     const color = getMarkerColor(disease);
-    const size = outbreaks === '0' ? 15 : Math.min(30, 15 + parseInt(outbreaks || '0') * 2);
+    
+    // Parse outbreaks, ensure it's a positive number
+    let outbreaksNum = 0;
+    if (outbreaks) {
+      const outbreaksStr = String(outbreaks).trim();
+      if (outbreaksStr !== '' && outbreaksStr.toLowerCase() !== 'null') {
+        const parsed = parseInt(outbreaksStr, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          outbreaksNum = parsed;
+        }
+      }
+    }
+    
+    // Size based on number of outbreaks (minimum 15px)
+    const size = Math.min(30, 15 + outbreaksNum * 2);
     
     return L.divIcon({
       className: 'custom-marker',
-      html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">${outbreaks || '0'}</div>`,
+      html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">${outbreaksNum > 0 ? outbreaksNum : ''}</div>`,
       iconSize: [size, size],
       iconAnchor: [size/2, size/2]
     });
@@ -202,10 +210,23 @@ const FastReport: React.FC = () => {
   if (error) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-red-600 text-xl mb-4">Error: {error}</div>
+        <div className="text-red-600 text-xl mb-4">Error Loading Data</div>
         <div className="text-gray-600">
-          <p>Unable to load Fast Report data. Please ensure the FastAPI server is running and accessible.</p>
-          <p className="mt-2 text-sm">The map is currently showing sample data for demonstration purposes.</p>
+          <p>{error}</p>
+          <p className="mt-2 text-sm">Please ensure the FastAPI server is running and the database is accessible.</p>
+          <p className="mt-2 text-sm">Check the browser console for more details.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (data.length === 0 && !loading) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="text-gray-600 text-xl mb-4">No Data Available</div>
+        <div className="text-gray-600">
+          <p>No fast report data found in the database.</p>
+          <p className="mt-2 text-sm">Please check if data has been submitted through the data entry forms.</p>
         </div>
       </div>
     );
@@ -291,12 +312,12 @@ const FastReport: React.FC = () => {
             touchZoom={true}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
+              attribution="&copy; United Nations Geospatial Information Section"
               maxZoom={18}
             />
             
-            {filteredData.map((report) => {
+            {markerData.map((report) => {
               const coords = countryCoordinates[report.Country];
               if (!coords) return null;
               
@@ -334,7 +355,7 @@ const FastReport: React.FC = () => {
               );
             })}
             
-            <MapController filteredData={filteredData} />
+            <MapController filteredData={markerData} />
           </MapContainer>
         </div>
       </div>
@@ -396,65 +417,5 @@ const FastReport: React.FC = () => {
     </div>
   );
 };
-
-// Mock data for development/testing
-const mockFastReportData: FastReportData[] = [
-  {
-    id: 1,
-    Year: 2023,
-    Quarter: 4,
-    Region: 'Europe',
-    Country: 'United Kingdom',
-    Disease: 'FMD',
-    Outbreaks: '3',
-    Cases: '15',
-    Outbreak_Description: 'Foot and Mouth Disease outbreak in livestock farms',
-    Vaccination: 1,
-    Vaccination_Description: 'Emergency vaccination program implemented',
-    Source: 'UK Veterinary Authorities'
-  },
-  {
-    id: 2,
-    Year: 2023,
-    Quarter: 3,
-    Region: 'Europe',
-    Country: 'Germany',
-    Disease: 'ASF',
-    Outbreaks: '2',
-    Cases: '8',
-    Outbreak_Description: 'African Swine Fever in wild boar population',
-    Vaccination: 0,
-    Vaccination_Description: '',
-    Source: 'German Federal Office for Food Safety'
-  },
-  {
-    id: 3,
-    Year: 2023,
-    Quarter: 2,
-    Region: 'Asia',
-    Country: 'China',
-    Disease: 'PPR',
-    Outbreaks: '5',
-    Cases: '120',
-    Outbreak_Description: 'Peste des Petits Ruminants in sheep and goat farms',
-    Vaccination: 1,
-    Vaccination_Description: 'Preventive vaccination in surrounding areas',
-    Source: 'Chinese Veterinary Services'
-  },
-  {
-    id: 4,
-    Year: 2023,
-    Quarter: 1,
-    Region: 'Africa',
-    Country: 'Egypt',
-    Disease: 'LUMPY',
-    Outbreaks: '1',
-    Cases: '25',
-    Outbreak_Description: 'Lumpy Skin Disease in cattle',
-    Vaccination: 1,
-    Vaccination_Description: 'Ring vaccination implemented',
-    Source: 'Egyptian Veterinary Organization'
-  }
-];
 
 export default FastReport;

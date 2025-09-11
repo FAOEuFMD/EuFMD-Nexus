@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { calculateRiskScores } from '../utils/calculateRiskScores';
 
 // Import map and chart components
 import RiskScoreMap from '../components/RMT/maps/RiskScoreMap';
-import DiseaseStatusHeatmap from '../components/RMT/charts/DiseaseStatusHeatmap';
 import PathwayEffectivenessRadar from '../components/RMT/charts/PathwayEffectivenessRadar';
-import EnhancedRiskPathwayChart from '../components/RMT/charts/RiskPathwayChart';
+import SimpleHeatmap from '../components/RMT/charts/SimpleHeatmap';
+import SimpleBarChart from 'components/RMT/charts/SimpleBarChart';
 
 // Types
 interface RiskScore {
@@ -44,8 +44,6 @@ interface MitigationMeasure {
   country_id?: number;
 }
 
-// Removed unused interface
-
 interface PathwayScores {
   name_un: string;
   scores: {
@@ -70,6 +68,7 @@ interface PathwayScores {
 
 const RMTResults: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -126,14 +125,12 @@ const RMTResults: React.FC = () => {
         
         // If we have data in state, use it directly
         if (stateDisease && stateMitigation && sourceCountriesData && sourceCountriesData.length > 0) {
-          console.log("Using data from state");
           diseaseStatusData = stateDisease;
           mitigationMeasuresData = stateMitigation;
           countriesData = sourceCountriesData;
         }
         // Otherwise fetch from API
         else {
-          console.log("Fetching data from API");
           // Create promises for all API calls
           const apiCalls = selectedCountries.map((countryId: number) => Promise.all([
             apiService.rmt.getDiseaseStatusByCountry(countryId),
@@ -188,17 +185,6 @@ const RMTResults: React.FC = () => {
           connections,
           sourceCountries: countriesData
         });
-        
-        console.log('---------- DEBUG RMT RESULTS ----------');
-        console.log('Calculated risk scores:', calculatedScores);
-        console.log('Disease status data:', diseaseStatusData);
-        console.log('Mitigation measures data:', mitigationMeasuresData); 
-        console.log('Source countries data:', countriesData);
-        console.log('Connections data:', connections);
-        console.log('-------------------------------------');
-        console.log('Disease status data:', diseaseStatusData);
-        console.log('Mitigation measures data:', mitigationMeasuresData);
-        console.log('Source countries data:', countriesData);
         
         setRiskScores(calculatedScores);
         
@@ -317,9 +303,6 @@ const RMTResults: React.FC = () => {
       countryRiskScores[score.sourceCountry][score.disease] = normalizedScore;
     });
     
-    console.log('Max risk score found:', maxRiskScore);
-    console.log('Normalization factor:', normalizationFactor);
-    
     return sourceCountries.map(country => {
       const scores = countryRiskScores[country.name_un] || {};
       
@@ -376,6 +359,39 @@ const RMTResults: React.FC = () => {
     return 'text-gray-900'; // Dark text on light backgrounds
   };
 
+  // Handle going back to previous step (Connections page)
+  const handlePrevious = () => {
+    const { 
+      connections, 
+      selectedCountries, 
+      receiverCountryName,
+      diseaseStatusData,
+      mitigationMeasuresData,
+      sourceCountriesData
+    } = location.state || {};
+    
+    // Navigate back to risk scores page with the same data, but set to the Connections step (step 3)
+    navigate('/rmt/risk-scores', {
+      state: {
+        connections,
+        selectedCountries,
+        receiverCountryName,
+        diseaseStatusData,
+        mitigationMeasuresData,
+        sourceCountriesData,
+        currentStep: 3 // Set to Connections step
+      }
+    });
+  };
+
+  // Handle starting a new assessment (clear all stored data)
+  const handleStartNewAssessment = () => {
+    // Clear stored RMT state
+    sessionStorage.removeItem('rmtState');
+    // Navigate to the main RMT page
+    navigate('/rmt');
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -391,14 +407,19 @@ const RMTResults: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <h2 className="text-2xl font-semibold mb-4">
+      <h2 className="text-xl sm:text-2xl font-semibold mb-4">
         Risk Assessment Results for {receiverCountry}
       </h2>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
           <p>{error}</p>
-          <Link to="/rmt" className="underline hover:text-red-800">Return to start</Link>
+          <button 
+            onClick={handleStartNewAssessment}
+            className="underline hover:text-red-800"
+          >
+            Return to start
+          </button>
         </div>
       )}
 
@@ -406,17 +427,14 @@ const RMTResults: React.FC = () => {
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Risk Map Visualization</h3>
         <p className="text-gray-600 mb-4">
-          This map shows the overall risk level for each source country relative to {receiverCountry}.
-          Countries are colored according to their risk level: green (low risk), yellow (low-medium risk),
-          orange (medium-high risk), and red (high risk). The target country ({receiverCountry}) is 
-          highlighted in gray.
+          This map shows the overall risk level for each source country relative to {receiverCountry}. Countries with a similar level of risk are colored with the same color, on a scale from green (lower risk score) to red (higher risk score). The target country is highlighted in gray.
         </p>
         <div className="mb-3">
-          <label className="mr-2 font-medium">Select Disease: </label>
+          <label className="mr-2 font-medium text-sm sm:text-base">Select Disease: </label>
           <select 
             value={selectedDisease} 
             onChange={(e) => setSelectedDisease(e.target.value)}
-            className="border rounded px-2 py-1 bg-white min-w-[150px]"
+            className="border rounded px-2 py-1 bg-white min-w-[120px] sm:min-w-[150px] text-sm sm:text-base"
             style={{ 
               paddingRight: '2rem',
               backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
@@ -436,31 +454,22 @@ const RMTResults: React.FC = () => {
           targetCountryName={receiverCountry}
           selectedDisease={selectedDisease}
         />
-        {/* Debug map kept as fallback if needed 
-        <DebugRiskMap 
-          countryData={mapData}
-          targetCountryName={receiverCountry}
-          selectedDisease={selectedDisease}
-        />
-        */}
       </div>
 
       {/* Risk scores table */}
       <div className="mb-10">
         <h3 className="text-xl font-semibold mb-2">Risk Scores Summary</h3>
         <p className="text-gray-600 mb-4">
-          This table presents the risk scores for each disease across all source countries.
-          Higher scores (orange to red) indicate higher risk of disease introduction.
+          This table presents the risk scores for each disease across all source countries. Higher scores indicate a higher risk of entry of the pathogen. The scores should be used to compare the risk of entry of a pathogen among source countries, but should not be compared among different diseases.
         </p>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse rmt-table">
+          <table className="w-full border-collapse rmt-table min-w-[600px]">
             <thead>
               <tr className="bg-[#15736d] text-white">
                 <th className="px-4 py-2 text-left">Source Country</th>
                 {diseases.map(disease => (
                   <th key={disease} className="px-4 py-2 text-center">{disease}</th>
                 ))}
-                <th className="px-4 py-2 text-center">Average</th>
               </tr>
             </thead>
             <tbody>
@@ -471,10 +480,6 @@ const RMTResults: React.FC = () => {
                     acc[score.disease] = score.riskScore;
                     return acc;
                   }, {} as Record<string, number>);
-                
-                // Calculate average score
-                const totalScore = diseases.reduce((sum, disease) => sum + (countryScores[disease] || 0), 0);
-                const averageScore = Math.round((totalScore / diseases.length) * 10) / 10;
                 
                 return (
                   <tr key={country.id} className="border-b">
@@ -492,11 +497,6 @@ const RMTResults: React.FC = () => {
                         </td>
                       );
                     })}
-                    <td className="px-4 py-2 text-center">
-                      <span className={`inline-block w-8 h-8 rounded-full ${getRiskColor(averageScore)} ${getTextColor(averageScore)} text-center leading-8`}>
-                        {averageScore}
-                      </span>
-                    </td>
                   </tr>
                 );
               })}
@@ -514,7 +514,9 @@ const RMTResults: React.FC = () => {
         </p>
         <div className="flex justify-center">
           <div className="w-full">
-            <DiseaseStatusHeatmap diseaseStatusData={diseaseStatus} />
+            <SimpleHeatmap 
+              diseaseStatusData={diseaseStatus} 
+            />
           </div>
         </div>
       </div>
@@ -526,7 +528,9 @@ const RMTResults: React.FC = () => {
           This radar chart shows how effective each pathway is for the transmission of each disease.
           A higher score indicates the pathway is more effective for disease transmission.
         </p>
-        <PathwayEffectivenessRadar pathwaysData={pathwaysData} />
+        <PathwayEffectivenessRadar 
+          pathwaysData={pathwaysData} 
+        />
       </div>
 
       {/* Enhanced Risk Pathway Chart */}
@@ -536,23 +540,33 @@ const RMTResults: React.FC = () => {
           This chart shows the contribution of each pathway to the overall risk for each source country.
           Use the disease selector to view pathway contributions for a specific disease.
         </p>
-        <EnhancedRiskPathwayChart pathwayScores={pathwayScores} />
+        <SimpleBarChart 
+          pathwayScores={pathwayScores} 
+        />
       </div>
 
       {/* Actions */}
-      <div className="flex justify-between mt-10">
-        <Link 
-          to="/rmt" 
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+      <div className="flex flex-col sm:flex-row justify-between mt-10 gap-4">
+        <button 
+          onClick={handleStartNewAssessment}
+          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors text-center"
         >
           Start New Assessment
-        </Link>
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 bg-[#15736d] text-white hover:bg-[#0f5a54] rounded transition-colors"
-        >
-          Print Results
         </button>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button
+            onClick={handlePrevious}
+            className="px-4 py-2 font-semibold text-[#015039] bg-transparent border-2 border-[#015039] rounded transition-all duration-300 hover:bg-[#15736d] hover:text-white"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-[#15736d] text-white hover:bg-[#0f5a54] rounded transition-colors"
+          >
+            Print Results
+          </button>
+        </div>
       </div>
     </div>
   );

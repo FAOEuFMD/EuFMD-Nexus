@@ -14,13 +14,13 @@ const RMT: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <p className="text-xl font-light text-center mb-6">
+      <p className="text-lg sm:text-xl font-light text-center mb-6">
         Welcome to the Risk Monitoring Tool for FAST diseases
       </p>
       
       <hr className="my-6 border-t-0 bg-neutral-100" />
       
-      <div className="text-justify mx-16 leading-relaxed mb-6">
+      <div className="text-left mx-4 sm:mx-8 lg:mx-16 leading-relaxed mb-6">
         <p className="mb-4">
           The <strong>Risk Monitoring Tool (RMT)</strong> is a simple and easy-to-use tool designed to
           assist animal health authorities to identify and prioritize the risks related 
@@ -54,7 +54,7 @@ const RMT: React.FC = () => {
 
         <div className="mb-8">
           <h4 className="font-bold mb-4">The RMT-FAST can be used for:</h4>
-          <div className="flex justify-between gap-10">
+          <div className="flex flex-col lg:flex-row justify-between gap-6 lg:gap-10">
             <div className="flex-1">
               <ul className="list-disc ml-5 space-y-2">
                 <li>
@@ -105,8 +105,8 @@ const RMT: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex justify-between flex-wrap gap-4 mb-6">
-          <div className="flex-1 min-w-72 p-5 rounded-lg shadow-md bg-gray-50">
+        <div className="flex flex-col lg:flex-row justify-between flex-wrap gap-4 mb-6">
+          <div className="flex-1 min-w-[280px] p-5 rounded-lg shadow-md bg-gray-50">
             <h3 className="font-bold text-lg mb-3">Premise</h3>
             <p className="mb-3">The risk of introduction of FAST diseases (and other animal diseases) is proportional to:</p>
             <ul className="list-disc ml-5 space-y-2">
@@ -130,7 +130,7 @@ const RMT: React.FC = () => {
             </ul>
           </div>
           
-          <div className="flex-1 min-w-72 p-5 rounded-lg shadow-md bg-gray-50">
+          <div className="flex-1 min-w-[280px] p-5 rounded-lg shadow-md bg-gray-50">
             <p className="mb-3">The tool uses information provided by both EuFMD and the user:</p>
             <ul className="list-disc ml-5 space-y-2">
               <li>

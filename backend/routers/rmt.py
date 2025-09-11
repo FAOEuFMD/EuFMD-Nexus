@@ -58,18 +58,16 @@ async def get_disease_status_date():
 async def get_disease_status():
     """Get all disease status records"""
     try:
-        # Get the most recent disease status for each country
+        # Get only the most recent disease status record for each country
         query = """
-        WITH LatestDiseaseStatus AS (
-            SELECT country_id, MAX(date) as latest_date
-            FROM disease_status
-            GROUP BY country_id
-        )
-        SELECT ds.* 
+        SELECT ds.id, ds.country_id, ds.FMD, ds.PPR, ds.LSD, ds.RVF, ds.SPGP,
+               DATE_FORMAT(ds.date, '%Y-%m-%d %H:%i:%s') as date
         FROM disease_status ds
-        INNER JOIN LatestDiseaseStatus lds 
-            ON ds.country_id = lds.country_id 
-            AND ds.date = lds.latest_date
+        WHERE ds.date = (
+            SELECT MAX(ds2.date) 
+            FROM disease_status ds2 
+            WHERE ds2.country_id = ds.country_id
+        )
         ORDER BY ds.country_id
         """
         result = await db_helper.execute_main_query(query)
@@ -158,18 +156,16 @@ async def get_mitigation_measures_date():
 async def get_mitigation_measures():
     """Get all mitigation measures"""
     try:
-        # Get the most recent mitigation measures for each country
+        # Get only the most recent mitigation measures record for each country
         query = """
-        WITH LatestMitigationMeasures AS (
-            SELECT country_id, MAX(date) as latest_date
-            FROM mitigation_measures
-            GROUP BY country_id
-        )
-        SELECT mm.* 
+        SELECT mm.id, mm.country_id, mm.FMD, mm.PPR, mm.LSD, mm.RVF, mm.SPGP,
+               DATE_FORMAT(mm.date, '%Y-%m-%d %H:%i:%s') as date
         FROM mitigation_measures mm
-        INNER JOIN LatestMitigationMeasures lmm 
-            ON mm.country_id = lmm.country_id 
-            AND mm.date = lmm.latest_date
+        WHERE mm.date = (
+            SELECT MAX(mm2.date) 
+            FROM mitigation_measures mm2 
+            WHERE mm2.country_id = mm.country_id
+        )
         ORDER BY mm.country_id
         """
         result = await db_helper.execute_main_query(query)
