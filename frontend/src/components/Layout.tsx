@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import FeedbackButton from './Feedback/FeedbackButton';
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -48,6 +49,9 @@ const Layout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      
+      {/* Feedback Button - Fixed position, available on all pages */}
+      <FeedbackButton />
     </div>
   );
 };

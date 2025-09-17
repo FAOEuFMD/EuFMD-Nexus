@@ -201,3 +201,22 @@ class ResponseModel(BaseModel):
 class ErrorModel(BaseModel):
     message: str
     error: Optional[str] = None
+
+# Feedback Models
+class FeedbackCreate(BaseModel):
+    score: int  # 1 to 10 scale
+    comment: Optional[str] = None
+    page: Optional[str] = None
+    country: Optional[str] = None
+    user_id: Optional[int] = None
+
+class Feedback(BaseModel):
+    id: int
+    score: int
+    comment: Optional[str] = None
+    page: Optional[str] = None
+    country: Optional[str] = None
+    user_id: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
