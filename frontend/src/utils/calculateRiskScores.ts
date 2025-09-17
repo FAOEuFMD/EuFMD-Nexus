@@ -1,8 +1,7 @@
 import { calculateConnectionScoresPerPathway } from './calculateConnectionScoresPerPathway';
 import { PATHWAYS_EFFECTIVENESS, Disease } from './pathwaysConfig';
-import { calculateRiskPerDisease } from './calculateRiskPerDisease';
 
-interface Connections {
+export interface Connections {
   liveAnimalContact: number;
   legalImport: number;
   proximity: number;
@@ -51,54 +50,98 @@ export function calculateRiskScores({
   mitigationMeasures,
   sourceCountries
 }: {
-  connections: Connections;
+  connections: Record<number, Connections>;
   diseaseStatus: Record<number, DiseaseStatus>;
   mitigationMeasures: Record<number, MitigationMeasures>;
   sourceCountries: Array<{ id: number; name_un: string }>;
 }): RiskScoreResult[] {
-  // Calculate connection scores per pathway
-  const connectionScores = calculateConnectionScoresPerPathway(connections);
-  
-  // Calculate the sum of all connection strength for normalization
-  const totalConnectionStrength = 
-    connectionScores.airborne + 
-    connectionScores.vectorborne + 
-    connectionScores.wildAnimals + 
-    connectionScores.animalProduct + 
-    connectionScores.liveAnimal + 
-    connectionScores.fomite;
-  
   const results: RiskScoreResult[] = [];
   const diseases: Disease[] = ["FMD", "PPR", "LSD", "RVF", "SPGP"];
-  
+
   // For each source country
   sourceCountries.forEach(country => {
     const countryId = country.id;
     const countryName = country.name_un;
-    
-    // Skip if no disease status or mitigation measures data for this country
-    if (!diseaseStatus[countryId] || !mitigationMeasures[countryId]) {
+
+    // Skip if no disease status, mitigation measures, or connections data for this country
+    if (!diseaseStatus[countryId] || !mitigationMeasures[countryId] || !connections[countryId]) {
       return;
     }
-    
-    // Calculate risk per disease for this country
-    const riskScores = calculateRiskPerDisease(
-      connectionScores,
-      diseaseStatus[countryId],
-      mitigationMeasures[countryId]
-    );
-    
+
+    // Prepare data structure like Vue app expects, using this country's specific connections
+    const countryData = {
+      connections: connections[countryId], // Use country-specific connections
+      diseaseStatus: {
+        FMD: diseaseStatus[countryId].dFMD,
+        PPR: diseaseStatus[countryId].dPPR,
+        LSD: diseaseStatus[countryId].dLSD,
+        RVF: diseaseStatus[countryId].dRVF,
+        SPGP: diseaseStatus[countryId].dSPGP,
+      },
+      mitigationMeasures: {
+        FMD: mitigationMeasures[countryId].mFMD,
+        PPR: mitigationMeasures[countryId].mPPR,
+        LSD: mitigationMeasures[countryId].mLSD,
+        RVF: mitigationMeasures[countryId].mRVF,
+        SPGP: mitigationMeasures[countryId].mSPGP,
+      }
+    };
+
+    // Calculate connection scores per pathway
+    const connectionScores = calculateConnectionScoresPerPathway(countryData.connections);
+
+    // Check if all connection input values are 0 (meaning no connections for this country)
+    const allConnectionsZero = 
+      countryData.connections.liveAnimalContact === 0 &&
+      countryData.connections.legalImport === 0 &&
+      countryData.connections.proximity === 0 &&
+      countryData.connections.illegalImport === 0 &&
+      countryData.connections.connection === 0 &&
+      countryData.connections.livestockDensity === 0;
+
+    // Calculate risk per disease for this country using Vue app logic
+    const riskScores: Record<string, number> = {};
+    diseases.forEach(disease => {
+      const diseaseValue = countryData.diseaseStatus[disease];
+      
+      // If disease status is 0 or null, or all connections are 0, return 0 risk
+      if (diseaseValue === 0 || diseaseValue === null || allConnectionsZero) {
+        riskScores[disease] = 0;
+        return;
+      }
+      
+      // Get mitigation value or default to 0 if null
+      const mitigationValue = countryData.mitigationMeasures[disease] === null ? 0 : countryData.mitigationMeasures[disease] as number;
+      
+      // Calculate risk score using Vue app formula
+      riskScores[disease] = (
+        (diseaseValue + (4 - mitigationValue)) *
+        (
+          (PATHWAYS.airborne[disease] * connectionScores.airborne) +
+          (PATHWAYS.vectorborne[disease] * connectionScores.vectorborne) +
+          (PATHWAYS.wildAnimals[disease] * connectionScores.wildAnimals) +
+          (PATHWAYS.animalProduct[disease] * connectionScores.animalProduct) +
+          (PATHWAYS.liveAnimal[disease] * connectionScores.liveAnimal) +
+          (PATHWAYS.fomite[disease] * connectionScores.fomite)
+        )
+      );
+    });
+
+    // Calculate the sum of all connection strength for display
+    const totalConnectionStrength =
+      connectionScores.airborne +
+      connectionScores.vectorborne +
+      connectionScores.wildAnimals +
+      connectionScores.animalProduct +
+      connectionScores.liveAnimal +
+      connectionScores.fomite;
+
     // Format the results
     diseases.forEach(disease => {
-      // Include all scores including zero scores
-      
       // Get disease risk value
-      const diseaseKey = `d${disease}` as keyof DiseaseStatus;
-      const diseaseRisk = (diseaseStatus[countryId][diseaseKey] as number) || 0;
-      
-      // Mitigation measures are already used in the calculateRiskPerDisease function
-      
-      // Calculate normalized pathway score for this disease
+      const diseaseRisk = countryData.diseaseStatus[disease] || 0;
+
+      // Calculate pathway score for this disease
       let pathwayScore = 0;
       if (totalConnectionStrength > 0) {
         pathwayScore = (
@@ -110,7 +153,7 @@ export function calculateRiskScores({
           (PATHWAYS.fomite[disease] * connectionScores.fomite)
         );
       }
-      
+
       results.push({
         sourceCountry: countryName,
         sourceCountryId: countryId,

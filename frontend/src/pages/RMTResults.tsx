@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { calculateRiskScores } from '../utils/calculateRiskScores';
+import { calculateRiskScores, Connections } from '../utils/calculateRiskScores';
 
 // Import map and chart components
 import RiskScoreMap from '../components/RMT/maps/RiskScoreMap';
@@ -24,6 +24,17 @@ interface Country {
   id: number;
   name_un: string;
   iso3: string;
+}
+
+interface ConnectionRow {
+  id: number;
+  countryName: string;
+  liveAnimalContact: number | null;
+  legalImport: number | null;
+  proximity: number | null;
+  illegalImport: number | null;
+  connection: number | null;
+  livestockDensity: number | null;
 }
 
 interface DiseaseStatus {
@@ -178,11 +189,44 @@ const RMTResults: React.FC = () => {
         
         setSourceCountries(countriesData);
         
+        // Transform connections array to be indexed by country ID
+        const connectionsPerCountry: Record<number, Connections> = {};
+        
+        // connections should now be an array of ConnectionRow objects
+        if (Array.isArray(connections)) {
+          connections.forEach((connRow: ConnectionRow) => {
+            connectionsPerCountry[connRow.id] = {
+              liveAnimalContact: connRow.liveAnimalContact || 0,
+              legalImport: connRow.legalImport || 0,
+              proximity: connRow.proximity || 0,
+              illegalImport: connRow.illegalImport || 0,
+              connection: connRow.connection || 0,
+              livestockDensity: connRow.livestockDensity || 0
+            };
+          });
+        } else {
+          // Fallback for old format (single connections object)
+          countriesData.forEach(country => {
+            connectionsPerCountry[country.id] = { 
+              liveAnimalContact: connections.liveAnimalContact || 0,
+              legalImport: connections.legalImport || 0,
+              proximity: connections.proximity || 0,
+              illegalImport: connections.illegalImport || 0,
+              connection: connections.connection || 0,
+              livestockDensity: connections.livestockDensity || 0
+            };
+          });
+        }
+
+        console.log('Original connections:', connections);
+        console.log('Connections per country:', connectionsPerCountry);
+        console.log('Countries data:', countriesData);
+        
         // Calculate risk scores
         const calculatedScores = calculateRiskScores({
           diseaseStatus: diseaseStatusData,
           mitigationMeasures: mitigationMeasuresData,
-          connections,
+          connections: connectionsPerCountry,
           sourceCountries: countriesData
         });
         

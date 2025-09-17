@@ -75,8 +75,8 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
   ));
   
   // Max height for bars in pixels - adjusted to fit within container
-  // Container is h-80 (320px) minus top/bottom padding (100px) minus space for country labels (40px)
-  const maxBarHeight = 180;
+  // Container is h-80 (320px) minus top/bottom padding (140px) minus space for country labels and axis (40px)
+  const maxBarHeight = 140;
 
   // Y-axis tick values
   const yAxisTicks = [];
@@ -90,7 +90,7 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
   }
 
   return (
-    <div className="h-96 w-full rmt-step mb-6">
+    <div className="w-full rmt-step mb-6">
       {/* Header with disease selector (matching original) */}
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold">Risk Pathway Scores</h3>
@@ -111,12 +111,12 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
         </div>
       </div>
 
-      {/* Chart container with proper containment */}
-      <div className="h-80 relative bg-white rounded border border-gray-200 overflow-hidden">
-        <div className="absolute inset-0" style={{ padding: '50px 130px 50px 60px' }}>
+      {/* Chart container with proper containment and responsive height */}
+      <div className="h-80 relative bg-white rounded border border-gray-200 overflow-hidden max-w-full">
+        <div className="absolute inset-0 overflow-hidden" style={{ padding: '60px 60px 80px 60px' }}>
         
           {/* Y-axis */}
-          <div className="absolute left-0 top-12 bottom-12 flex flex-col justify-between items-end pr-3" style={{ width: '55px' }}>
+          <div className="absolute left-0 top-16 bottom-20 flex flex-col justify-between items-end pr-3" style={{ width: '55px' }}>
             {yAxisTicks.reverse().map((tick, index) => (
               <div key={index} className="text-xs text-gray-600 relative">
                 <span>{tick.toFixed(1)}</span>
@@ -126,14 +126,14 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
           </div>
 
           {/* Chart area */}
-          <div className="ml-12 h-full flex items-end justify-around relative border-l border-b border-gray-300">
+          <div className="ml-12 h-full flex items-end justify-around relative border-l border-b border-gray-300 overflow-hidden lg:mr-32">
             
             {/* Horizontal grid lines */}
             {yAxisTicks.map((tick, index) => (
               <div
                 key={index}
                 className="absolute left-0 right-0 border-t border-gray-200"
-                style={{ bottom: `${(tick / safeMaxTotal) * 85}%` }}
+                style={{ bottom: `${(tick / safeMaxTotal) * 100}%` }}
               ></div>
             ))}
 
@@ -142,18 +142,8 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
               const scaledHeight = safeMaxTotal > 0 ? (totalHeight / safeMaxTotal) * maxBarHeight : 0;
               
               return (
-                <div key={index} className="flex flex-col items-center h-full" style={{ width: '60px' }}>
-                  {/* Country name at top */}
-                  <div className="mb-2 text-xs text-gray-700">
-                    <div className="whitespace-nowrap text-center" style={{ fontSize: '11px' }}>
-                      {countryData.country}
-                    </div>
-                  </div>
-                  
-                  {/* Spacer to push bar to bottom */}
-                  <div className="flex-1"></div>
-                  
-                  {/* Stacked bar */}
+                <div key={index} className="flex flex-col items-center justify-end" style={{ width: '60px', height: '100%' }}>
+                  {/* Stacked bar positioned directly on the bottom border */}
                   <div 
                     className="relative flex flex-col-reverse border border-gray-400"
                     style={{ 
@@ -205,13 +195,33 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
             })}
           </div>
 
+          {/* Country labels positioned below the chart area */}
+          <div className="ml-12 flex justify-around relative lg:mr-32" style={{ height: '60px', paddingTop: '15px' }}>
+            {chartData.map((countryData, index) => (
+              <div key={index} className="flex justify-center" style={{ width: '60px' }}>
+                <div 
+                  className="whitespace-nowrap text-center"
+                  style={{ 
+                    fontSize: '11px',
+                    transform: 'rotate(45deg)',
+                    transformOrigin: 'center top',
+                    width: 'max-content',
+                    color: '#374151'
+                  }}
+                >
+                  {countryData.country}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* X-axis label */}
-          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-sm text-gray-700 font-medium">
+          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-sm text-gray-700 font-medium">
             Country
           </div>
 
-          {/* Legend - positioned like original Nivo chart */}
-          <div className="absolute right-2 top-12 bottom-12 flex flex-col justify-center" style={{ width: '120px' }}>
+          {/* Legend - positioned like original Nivo chart with responsive behavior */}
+          <div className="absolute right-2 top-16 bottom-20 hidden lg:flex flex-col justify-center" style={{ width: '110px' }}>
             <div className="space-y-2">
               {pathwayKeys.map(pathway => (
                 <div key={pathway} className="flex items-center text-xs">
@@ -227,6 +237,21 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
             </div>
           </div>
         </div>
+      </div>
+      
+      {/* Mobile legend below chart for smaller screens */}
+      <div className="lg:hidden mt-4 flex flex-wrap justify-center gap-3">
+        {pathwayKeys.map(pathway => (
+          <div key={pathway} className="flex items-center text-xs">
+            <div
+              className="w-4 h-4 border border-gray-400 mr-1 flex-shrink-0"
+              style={{ backgroundColor: pathwayConfig[pathway].color }}
+            ></div>
+            <span className="text-gray-700">
+              {pathwayConfig[pathway].label}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

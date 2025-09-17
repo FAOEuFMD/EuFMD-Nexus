@@ -799,14 +799,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       // Navigate to results page with all required data
       navigate('/rmt/results', {
         state: {
-          connections: {
-            liveAnimalContact: connectionData.liveAnimalContact || 0,
-            legalImport: connectionData.legalImport || 0,
-            proximity: connectionData.proximity || 0,
-            illegalImport: connectionData.illegalImport || 0,
-            connection: connectionData.connection || 0,
-            livestockDensity: connectionData.livestockDensity || 0
-          },
+          connections: connections, // Pass the entire connections array per country
           selectedCountries: sourceCountries.map(country => country.id),
           receiverCountryName: receiverCountry?.name_un,
           diseaseStatusData,
