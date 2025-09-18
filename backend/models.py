@@ -59,6 +59,7 @@ class DiseaseStatus(BaseModel):
     RVF: int
     SPGP: int
     date: str
+    user_id: Optional[int] = None
 
 class DiseaseStatusCreate(BaseModel):
     country_id: int
@@ -78,6 +79,7 @@ class MitigationMeasure(BaseModel):
     RVF: int
     SPGP: int
     date: str
+    user_id: Optional[int] = None
 
 class MitigationMeasureCreate(BaseModel):
     country_id: int
@@ -94,6 +96,32 @@ class RiskScore(BaseModel):
     risk_type: str
     score: float
     date_calculated: Optional[datetime] = None
+
+# Connections Models
+class ConnectionsCreate(BaseModel):
+    country_id: int
+    liveAnimalContact: int = 0
+    legalImport: int = 0
+    proximity: int = 0
+    illegalImport: int = 0
+    connection: int = 0
+    livestockDensity: int = 0
+
+class Connections(BaseModel):
+    id: Optional[int] = None
+    country_id: int
+    liveAnimalContact: int = 0
+    legalImport: int = 0
+    proximity: int = 0
+    illegalImport: int = 0
+    connection: int = 0
+    livestockDensity: int = 0
+    user_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
 
 # PCP Models
 class PCPEntry(BaseModel):
