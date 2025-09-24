@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -9,7 +9,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const { login, loading } = useAuthStore();
+  const { login, loading, user } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -23,11 +23,21 @@ const Login: React.FC = () => {
 
     try {
       await login(email, password);
-      navigate('/');
+      // Redirect will happen in useEffect when user is set
     } catch (err: any) {
       setError(err.message || 'Login failed');
     }
   };
+
+  useEffect(() => {
+    if (user && user.role) {
+      if (user.role === 'rmt') {
+        navigate('/rmt');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [user, navigate]);
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
