@@ -941,7 +941,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                     >
                       <option value="">Type name of the country</option>
                       <option value="allEUNeighbourCountries">
-                        Select all EU neighbouring countries
+                        Select all European neighbouring countries
                       </option>
                       {countries
                         .filter(country => country.id !== receiverCountry?.id)
