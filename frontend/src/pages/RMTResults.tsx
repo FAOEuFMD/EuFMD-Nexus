@@ -250,26 +250,11 @@ const RMTResults: React.FC = () => {
         });
         setDiseaseStatus(dsChartData);
         
-        // Calculate scores per pathway for the risk pathway charts
+        // Calculate scores per pathway for the risk pathway charts (Vue logic)
         const scoresByPathway = countriesData.map(country => {
           const countryId = country.id;
-          const countryScores = calculatedScores.filter(score => score.sourceCountryId === countryId);
-          
-          // Group scores by disease and then by pathway
-          const diseasePathwayScores: any = {};
-          diseases.forEach(disease => {
-            diseasePathwayScores[disease] = {
-              airborne: 0,
-              vectorborne: 0,
-              wildAnimals: 0,
-              animalProduct: 0,
-              liveAnimal: 0,
-              fomite: 0
-            };
-          });
-          
           // Get connection scores for this country (provide defaults if undefined)
-          const countryConnections = connections[countryId] || {
+          const countryConnections = connectionsPerCountry[countryId] || {
             liveAnimalContact: 0,
             legalImport: 0,
             proximity: 0,
@@ -278,38 +263,42 @@ const RMTResults: React.FC = () => {
             livestockDensity: 0
           };
           const connectionScores = calculateConnectionScoresPerPathway(countryConnections);
-          
-          countryScores.forEach(score => {
-            // Calculate per-pathway scores using the same formula as Vue app:
-            // pathway_score = (disease_status + (4 - mitigation_measure)) * (pathway_effectiveness * connection_score)
-            const diseaseStatusKey = `d${score.disease}` as keyof DiseaseStatus;
-            const mitigationMeasureKey = `m${score.disease}` as keyof MitigationMeasure;
-            
-            const diseaseStatus = diseaseStatusData[score.sourceCountryId]?.[diseaseStatusKey] || 0;
-            const mitigationMeasure = mitigationMeasuresData[score.sourceCountryId]?.[mitigationMeasureKey] || 0;
-            
-            if (diseaseStatus === 0) {
-              // If disease status is 0, all pathways contribute 0
-              diseasePathwayScores[score.disease].airborne = 0;
-              diseasePathwayScores[score.disease].vectorborne = 0;
-              diseasePathwayScores[score.disease].wildAnimals = 0;
-              diseasePathwayScores[score.disease].animalProduct = 0;
-              diseasePathwayScores[score.disease].liveAnimal = 0;
-              diseasePathwayScores[score.disease].fomite = 0;
-            } else {
-              // Calculate pathway contributions using Vue app formula
-              const baseRisk = diseaseStatus + (4 - mitigationMeasure);
-              
-              diseasePathwayScores[score.disease].airborne = baseRisk * (PATHWAYS_EFFECTIVENESS.airborne[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.airborne] * connectionScores.airborne);
-              diseasePathwayScores[score.disease].vectorborne = baseRisk * (PATHWAYS_EFFECTIVENESS.vectorborne[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.vectorborne] * connectionScores.vectorborne);
-              diseasePathwayScores[score.disease].wildAnimals = baseRisk * (PATHWAYS_EFFECTIVENESS.wildAnimals[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.wildAnimals] * connectionScores.wildAnimals);
-              diseasePathwayScores[score.disease].animalProduct = baseRisk * (PATHWAYS_EFFECTIVENESS.animalProduct[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.animalProduct] * connectionScores.animalProduct);
-              diseasePathwayScores[score.disease].liveAnimal = baseRisk * (PATHWAYS_EFFECTIVENESS.liveAnimal[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.liveAnimal] * connectionScores.liveAnimal);
-              diseasePathwayScores[score.disease].fomite = baseRisk * (PATHWAYS_EFFECTIVENESS.fomite[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.fomite] * connectionScores.fomite);
+
+          // For each disease, calculate pathway contributions and total risk as sum of those
+          const diseasePathwayScores: any = {};
+          diseases.forEach(disease => {
+            // DiseaseStatus and MitigationMeasure keys
+            const diseaseStatusKey = `d${disease}` as keyof DiseaseStatus;
+            const mitigationMeasureKey = `m${disease}` as keyof MitigationMeasure;
+            const ds = diseaseStatusData[countryId]?.[diseaseStatusKey] ?? 0;
+            const mm = mitigationMeasuresData[countryId]?.[mitigationMeasureKey] ?? 0;
+
+            // If disease status is 0, all pathways are 0
+            if (ds === 0) {
+              diseasePathwayScores[disease] = {
+                airborne: 0,
+                vectorborne: 0,
+                wildAnimals: 0,
+                animalProduct: 0,
+                liveAnimal: 0,
+                fomite: 0
+              };
+              return;
             }
+
+            const baseRisk = ds + (4 - mm);
+            diseasePathwayScores[disease] = {
+              airborne: baseRisk * (PATHWAYS_EFFECTIVENESS.airborne[disease as keyof typeof PATHWAYS_EFFECTIVENESS.airborne] * connectionScores.airborne),
+              vectorborne: baseRisk * (PATHWAYS_EFFECTIVENESS.vectorborne[disease as keyof typeof PATHWAYS_EFFECTIVENESS.vectorborne] * connectionScores.vectorborne),
+              wildAnimals: baseRisk * (PATHWAYS_EFFECTIVENESS.wildAnimals[disease as keyof typeof PATHWAYS_EFFECTIVENESS.wildAnimals] * connectionScores.wildAnimals),
+              animalProduct: baseRisk * (PATHWAYS_EFFECTIVENESS.animalProduct[disease as keyof typeof PATHWAYS_EFFECTIVENESS.animalProduct] * connectionScores.animalProduct),
+              liveAnimal: baseRisk * (PATHWAYS_EFFECTIVENESS.liveAnimal[disease as keyof typeof PATHWAYS_EFFECTIVENESS.liveAnimal] * connectionScores.liveAnimal),
+              fomite: baseRisk * (PATHWAYS_EFFECTIVENESS.fomite[disease as keyof typeof PATHWAYS_EFFECTIVENESS.fomite] * connectionScores.fomite)
+            };
           });
-          
-          // Calculate overall scores (average across diseases)
+
+          // For the selected disease, the sum of pathway contributions is the risk score
+          // For the "scores" field (used for overall bar), use the sum for each pathway across all diseases
           const overallScores = {
             airborne: 0,
             vectorborne: 0,
@@ -318,7 +307,6 @@ const RMTResults: React.FC = () => {
             liveAnimal: 0,
             fomite: 0
           };
-          
           diseases.forEach(disease => {
             overallScores.airborne += diseasePathwayScores[disease].airborne;
             overallScores.vectorborne += diseasePathwayScores[disease].vectorborne;
@@ -327,19 +315,13 @@ const RMTResults: React.FC = () => {
             overallScores.liveAnimal += diseasePathwayScores[disease].liveAnimal;
             overallScores.fomite += diseasePathwayScores[disease].fomite;
           });
-          
-          Object.keys(overallScores).forEach(key => {
-            overallScores[key as keyof typeof overallScores] = 
-              Math.round((overallScores[key as keyof typeof overallScores] / diseases.length) * 10) / 10;
-          });
-          
+
           return {
             name_un: country.name_un,
             scores: overallScores,
             diseaseScores: diseasePathwayScores
           };
         });
-        
         setPathwayScores(scoresByPathway);
         
       } catch (err: any) {
