@@ -75,8 +75,8 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
   ));
   
   // Max height for bars in pixels - adjusted to fit within container
-  // Container is h-80 (320px) minus top/bottom padding (140px) minus space for country labels and axis (40px)
-  const maxBarHeight = 140;
+  // Container is h-96 (384px) minus top/bottom padding (160px) minus space for country labels and axis (40px)
+  const maxBarHeight = 184;
 
   // Y-axis tick values
   const yAxisTicks = [];
@@ -112,8 +112,8 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
       </div>
 
       {/* Chart container with proper containment and responsive height */}
-      <div className="h-80 relative bg-white rounded border border-gray-200 overflow-hidden max-w-full">
-        <div className="absolute inset-0 overflow-hidden" style={{ padding: '60px 60px 80px 60px' }}>
+      <div className="h-96 relative bg-white rounded border border-gray-200 overflow-hidden max-w-full">
+        <div className="absolute inset-0 overflow-hidden" style={{ padding: '60px 60px 100px 60px' }}>
         
           {/* Y-axis */}
           <div className="absolute left-0 top-16 bottom-20 flex flex-col justify-between items-end pr-3" style={{ width: '55px' }}>
@@ -196,17 +196,17 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
           </div>
 
           {/* Country labels positioned below the chart area */}
-          <div className="ml-12 flex justify-around relative lg:mr-32" style={{ height: '60px', paddingTop: '15px' }}>
+          <div className="ml-12 flex justify-around relative lg:mr-32" style={{ height: '80px', paddingTop: '15px' }}>
             {chartData.map((countryData, index) => (
               <div key={index} className="flex justify-center" style={{ width: '60px' }}>
                 <div 
-                  className="whitespace-nowrap text-center"
+                  className="text-center leading-tight"
                   style={{ 
-                    fontSize: '11px',
-                    transform: 'rotate(45deg)',
-                    transformOrigin: 'center top',
+                    fontSize: '10px',
                     width: 'max-content',
-                    color: '#374151'
+                    maxWidth: '55px',
+                    color: '#374151',
+                    lineHeight: '1.2'
                   }}
                 >
                   {countryData.country}

@@ -39,13 +39,14 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
   const getStandardizedCountryName = (geoJsonName: string): string => {
     const nameMapping: { [key: string]: string } = {
       'Turkey': 'Türkiye',
-      'Iran (Islamic Republic of)': 'Iran',
-      'Palestine, State of': 'Palestine',
-      'West Bank': 'Palestine',
-      'West Bank and Gaza': 'Palestine',
-      'Gaza Strip': 'Palestine',
-      'Palestinian Territory': 'Palestine',
-    
+      'Iran (Islamic Republic of)': 'Iran (Islamic Republic of)',
+      'Palestine, State of': 'Palestine, State of',
+      'West Bank': 'Palestine, State of',
+      'West Bank and Gaza': 'Palestine, State of',
+      'Gaza Strip': 'Palestine, State of',
+      'Palestinian Territory': 'Palestine, State of',
+      'Syrian Arab Republic': 'Syrian Arab Republic',
+      'Syria': 'Syrian Arab Republic',
     };
     
     return nameMapping[geoJsonName] || geoJsonName;
@@ -148,7 +149,7 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
           'Egypt': 'EGY',
           'Jordan': 'JOR', 
           'Lebanon': 'LBN',
-          'Palestine': 'PSE',
+          'Palestine, State of': 'PSE',
           'Libya': 'LBY',
           'Turkey': 'TUR',
           'Türkiye': 'TUR',
@@ -156,13 +157,13 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
           'Armenia': 'ARM',
           'Georgia': 'GEO',
           'Iraq': 'IRQ',
-          'Iran': 'IRN',
+          'Iran (Islamic Republic of)': 'IRN',
           'Pakistan': 'PAK',
           'Mauritania': 'MRT',
           'Algeria': 'DZA',
           'Morocco': 'MAR',
           'Tunisia': 'TUN',
-          'Syria': 'SYR',
+          'Syrian Arab Republic': 'SYR',
           'Sudan': 'SDN',
           'Israel': 'ISR',
           'Afghanistan': 'AFG'

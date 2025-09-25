@@ -6,7 +6,7 @@ from models import (
     Connections, ConnectionsCreate
 )
 from database import db_helper
-from auth import get_current_user
+from auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/api/rmt-data", tags=["rmt-data"])
 
@@ -14,120 +14,69 @@ def user_can_save_rmt_data(user: Dict[str, Any]) -> bool:
     """Check if user has permission to save RMT data"""
     return user.get('role') in ['admin', 'rmt', 'risp']
 
-def get_user_or_default_disease_status(user_id: Optional[int] = None, country_id: Optional[int] = None):
-    """Get user-specific disease status or fall back to default data"""
-    
-    # Build base query
-    query = "SELECT * FROM disease_status"
-    params = []
-    conditions = []
-    
-    if user_id and country_id:
-        # Try user-specific data for specific country first
-        user_query = query + " WHERE user_id = %s AND country_id = %s"
-        user_params = [user_id, country_id]
-        
-        result = db_helper.execute_main_query(user_query, user_params)
-        if not result["error"] and result["data"]:
-            return result["data"]
-    
-    elif user_id:
-        # Try user-specific data for all countries first
-        user_query = query + " WHERE user_id = %s"
-        user_params = [user_id]
-        
-        result = db_helper.execute_main_query(user_query, user_params)
-        if not result["error"] and result["data"]:
-            return result["data"]
-    
-    # Fall back to default data (user_id IS NULL)
-    if country_id:
-        conditions.append("user_id IS NULL AND country_id = %s")
-        params.append(country_id)
-    else:
-        conditions.append("user_id IS NULL")
-    
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    
-    result = db_helper.execute_main_query(query, params)
-    return result["data"] if not result["error"] else []
-
-def get_user_or_default_mitigation_measures(user_id: Optional[int] = None, country_id: Optional[int] = None):
-    """Get user-specific mitigation measures or fall back to default data"""
-    
-    # Build base query
-    query = "SELECT * FROM mitigation_measures"
-    params = []
-    conditions = []
-    
-    if user_id and country_id:
-        # Try user-specific data for specific country first
-        user_query = query + " WHERE user_id = %s AND country_id = %s"
-        user_params = [user_id, country_id]
-        
-        result = db_helper.execute_main_query(user_query, user_params)
-        if not result["error"] and result["data"]:
-            return result["data"]
-    
-    elif user_id:
-        # Try user-specific data for all countries first
-        user_query = query + " WHERE user_id = %s"
-        user_params = [user_id]
-        
-        result = db_helper.execute_main_query(user_query, user_params)
-        if not result["error"] and result["data"]:
-            return result["data"]
-    
-    # Fall back to default data (user_id IS NULL)
-    if country_id:
-        conditions.append("user_id IS NULL AND country_id = %s")
-        params.append(country_id)
-    else:
-        conditions.append("user_id IS NULL")
-    
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    
-    result = db_helper.execute_main_query(query, params)
-    return result["data"] if not result["error"] else []
-
-def get_user_connections(user_id: Optional[int] = None, country_id: Optional[int] = None):
-    """Get user-specific connections data"""
-    
-    query = "SELECT * FROM connections"
-    params = []
-    conditions = []
-    
-    if user_id:
-        conditions.append("user_id = %s")
-        params.append(user_id)
-        
-        if country_id:
-            conditions.append("country_id = %s")
-            params.append(country_id)
-    
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    
-    result = db_helper.execute_main_query(query, params)
-    return result["data"] if not result["error"] else []
-
 # Disease Status Endpoints
 @router.get("/disease-status")
-async def get_disease_status(
-    user_id: Optional[int] = None, 
-    country_id: Optional[int] = None
-):
-    """Get disease status data - user-specific or default"""
+async def get_disease_status(user=Depends(get_current_user_optional)):
+    """Get all disease status records, user-specific if logged in, else default (user_id IS NULL)"""
     try:
-        data = get_user_or_default_disease_status(user_id, country_id)
-        return data
+        if user is None:
+            # Not logged in: only return default data (user_id IS NULL)
+            query = """
+            SELECT id, country_id, FMD, PPR, LSD, RVF, SPGP,
+                   DATE_FORMAT(date, '%Y-%m-%d %H:%i:%s') as date
+            FROM disease_status
+            WHERE user_id IS NULL
+              AND date = (
+                SELECT MAX(date) 
+                FROM disease_status 
+                WHERE country_id = disease_status.country_id AND user_id IS NULL
+            )
+            ORDER BY country_id
+            """
+            result = await db_helper.execute_main_query(query)
+            if result["error"]:
+                raise HTTPException(status_code=500, detail=result["error"])
+            return result["data"]
+        else:
+            # Logged in: merge user data with default data, prioritizing user data per country
+            query = """
+            SELECT 
+                COALESCE(user_ds.id, default_ds.id) as id,
+                COALESCE(user_ds.country_id, default_ds.country_id) as country_id,
+                COALESCE(user_ds.FMD, default_ds.FMD) as FMD,
+                COALESCE(user_ds.PPR, default_ds.PPR) as PPR,
+                COALESCE(user_ds.LSD, default_ds.LSD) as LSD,
+                COALESCE(user_ds.RVF, default_ds.RVF) as RVF,
+                COALESCE(user_ds.SPGP, default_ds.SPGP) as SPGP,
+                DATE_FORMAT(COALESCE(user_ds.date, default_ds.date), '%Y-%m-%d %H:%i:%s') as date
+            FROM 
+                (SELECT id, country_id, FMD, PPR, LSD, RVF, SPGP, date
+                 FROM disease_status
+                 WHERE user_id IS NULL
+                   AND date = (
+                     SELECT MAX(date) 
+                     FROM disease_status 
+                     WHERE country_id = disease_status.country_id AND user_id IS NULL
+                   )) default_ds
+            LEFT JOIN 
+                (SELECT id, country_id, FMD, PPR, LSD, RVF, SPGP, date
+                 FROM disease_status
+                 WHERE user_id = :user_id
+                   AND date = (
+                     SELECT MAX(date) 
+                     FROM disease_status 
+                     WHERE country_id = disease_status.country_id AND user_id = :user_id
+                   )) user_ds
+            ON default_ds.country_id = user_ds.country_id
+            ORDER BY default_ds.country_id
+            """
+            params = {"user_id": user["id"]}
+            result = await db_helper.execute_main_query(query, params)
+            if result["error"]:
+                raise HTTPException(status_code=500, detail=result["error"])
+            return result["data"]
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving disease status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/disease-status", response_model=ResponseModel)
 async def save_disease_status(
@@ -188,19 +137,67 @@ async def save_disease_status(
 
 # Mitigation Measures Endpoints
 @router.get("/mitigation-measures")
-async def get_mitigation_measures(
-    user_id: Optional[int] = None, 
-    country_id: Optional[int] = None
-):
-    """Get mitigation measures data - user-specific or default"""
+async def get_mitigation_measures(user=Depends(get_current_user_optional)):
+    """Get all mitigation measures, user-specific if logged in, else default (user_id IS NULL)"""
     try:
-        data = get_user_or_default_mitigation_measures(user_id, country_id)
-        return data
+        if user is None:
+            # Not logged in: only return default data (user_id IS NULL)
+            query = """
+            SELECT id, country_id, FMD, PPR, LSD, RVF, SPGP,
+                   DATE_FORMAT(date, '%Y-%m-%d %H:%i:%s') as date
+            FROM mitigation_measures
+            WHERE user_id IS NULL
+              AND date = (
+                SELECT MAX(date) 
+                FROM mitigation_measures 
+                WHERE country_id = mitigation_measures.country_id AND user_id IS NULL
+            )
+            ORDER BY country_id
+            """
+            result = await db_helper.execute_main_query(query)
+            if result["error"]:
+                raise HTTPException(status_code=500, detail=result["error"])
+            return result["data"]
+        else:
+            # Logged in: merge user data with default data, prioritizing user data per country
+            query = """
+            SELECT 
+                COALESCE(user_mm.id, default_mm.id) as id,
+                COALESCE(user_mm.country_id, default_mm.country_id) as country_id,
+                COALESCE(user_mm.FMD, default_mm.FMD) as FMD,
+                COALESCE(user_mm.PPR, default_mm.PPR) as PPR,
+                COALESCE(user_mm.LSD, default_mm.LSD) as LSD,
+                COALESCE(user_mm.RVF, default_mm.RVF) as RVF,
+                COALESCE(user_mm.SPGP, default_mm.SPGP) as SPGP,
+                DATE_FORMAT(COALESCE(user_mm.date, default_mm.date), '%Y-%m-%d %H:%i:%s') as date
+            FROM 
+                (SELECT id, country_id, FMD, PPR, LSD, RVF, SPGP, date
+                 FROM mitigation_measures
+                 WHERE user_id IS NULL
+                   AND date = (
+                     SELECT MAX(date) 
+                     FROM mitigation_measures 
+                     WHERE country_id = mitigation_measures.country_id AND user_id IS NULL
+                   )) default_mm
+            LEFT JOIN 
+                (SELECT id, country_id, FMD, PPR, LSD, RVF, SPGP, date
+                 FROM mitigation_measures
+                 WHERE user_id = :user_id
+                   AND date = (
+                     SELECT MAX(date) 
+                     FROM mitigation_measures 
+                     WHERE country_id = mitigation_measures.country_id AND user_id = :user_id
+                   )) user_mm
+            ON default_mm.country_id = user_mm.country_id
+            ORDER BY default_mm.country_id
+            """
+            params = {"user_id": user["id"]}
+            result = await db_helper.execute_main_query(query, params)
+            if result["error"]:
+                raise HTTPException(status_code=500, detail=result["error"])
+            return result["data"]
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving mitigation measures: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/mitigation-measures", response_model=ResponseModel)
 async def save_mitigation_measures(
@@ -261,14 +258,17 @@ async def save_mitigation_measures(
 
 # Connections Endpoints
 @router.get("/connections")
-async def get_connections(
-    user_id: Optional[int] = None, 
-    country_id: Optional[int] = None
-):
+async def get_connections(user=Depends(get_current_user_optional)):
     """Get connections data - user-specific only (no default data)"""
     try:
-        data = get_user_connections(user_id, country_id)
-        return data
+        if user is None:
+            return []
+        
+        query = "SELECT * FROM connections WHERE user_id = :user_id"
+        params = {"user_id": user["id"]}
+        
+        result = await db_helper.execute_main_query(query, params)
+        return result["data"] if not result["error"] else []
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

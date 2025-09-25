@@ -129,6 +129,47 @@ async def get_current_user(request: Request, credentials: Optional[HTTPAuthoriza
     
     return user
 
+async def get_current_user_optional(request: Request, credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    """Get current user from JWT token if available, otherwise return None"""
+    token = None
+    
+    # Try to get token from Authorization header (Bearer token)
+    if credentials:
+        token = credentials.credentials
+    
+    # If no Bearer token, try x-access-token header (for Vue app compatibility)
+    if not token:
+        token = request.headers.get("x-access-token")
+    
+    if not token:
+        return None
+    
+    try:
+        payload = jwt.decode(token, settings.super_secret, algorithms=[settings.algorithm])
+        user_id: int = payload.get("user_id")
+        user_role: str = payload.get("user_role")
+        country: str = payload.get("country")
+        
+        if user_id is None:
+            return None
+            
+        token_data = TokenData(user_id=user_id, user_role=user_role, country=country)
+    except JWTError:
+        return None
+    
+    # Get user from database
+    query = "SELECT id, name, email, role, country FROM users WHERE id = %s"
+    result = await db_helper.execute_main_query(query, (user_id,))
+    
+    if result["error"] or not result["data"]:
+        return None
+    
+    user = result["data"][0]
+    user["user_id"] = user["id"]
+    user["user_role"] = user["role"]
+    
+    return user
+
 def require_auth(func):
     """Decorator to require authentication"""
     async def wrapper(*args, **kwargs):

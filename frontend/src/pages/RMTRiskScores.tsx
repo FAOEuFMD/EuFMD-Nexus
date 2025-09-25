@@ -355,100 +355,17 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     setLoading(true);
     try {
       if (value === 'allEUNeighbourCountries') {
-        // Handle EU neighbour countries selection
+        // Refactored: Add each EU neighbour country one by one as if individually selected
         try {
           const euNeighboursResponse = await apiService.rmt.getEUNeighbours();
-          console.log('EU neighbours response:', euNeighboursResponse);
-          
-          // The backend sends results.data directly, so with Axios we get it in response.data
           const euNeighbours = euNeighboursResponse.data;
-          console.log('EU neighbours data:', euNeighbours);
-          
           if (Array.isArray(euNeighbours) && euNeighbours.length > 0) {
-            setSourceCountries(euNeighbours);
-            
-            // Fetch disease status and mitigation measures for all EU countries
-            try {
-              const promises = euNeighbours.flatMap(country => [
-                apiService.rmt.getDiseaseStatusByCountry(country.id),
-                apiService.rmt.getMitigationMeasuresByCountry(country.id)
-              ]);
-              
-              const results = await Promise.all(promises);
-              
-              // Process results - odd indices are disease status, even are mitigation measures
-              const diseaseStatusData: DiseaseStatusRow[] = [];
-              const mitigationMeasuresData: MitigationMeasureRow[] = [];
-              const connectionsData: ConnectionRow[] = [];
-              
-              for (let i = 0; i < euNeighbours.length; i++) {
-                const country = euNeighbours[i];
-                
-                // Process API results
-                const diseaseResult = results[i * 2];
-                diseaseStatusData.push({
-                  id: country.id,
-                  countryName: country.name_un,
-                  FMD: diseaseResult.data?.scores?.[0]?.FMD ?? null,
-                  PPR: diseaseResult.data?.scores?.[0]?.PPR ?? null,
-                  LSD: diseaseResult.data?.scores?.[0]?.LSD ?? null,
-                  RVF: diseaseResult.data?.scores?.[0]?.RVF ?? null,
-                  SPGP: diseaseResult.data?.scores?.[0]?.SPGP ?? null
-                });
-                
-                const mitigationResult = results[i * 2 + 1];
-                mitigationMeasuresData.push({
-                  id: country.id,
-                  countryName: country.name_un,
-                  FMD: mitigationResult.data?.scores?.[0]?.FMD ?? null,
-                  PPR: mitigationResult.data?.scores?.[0]?.PPR ?? null,
-                  LSD: mitigationResult.data?.scores?.[0]?.LSD ?? null,
-                  RVF: mitigationResult.data?.scores?.[0]?.RVF ?? null,
-                  SPGP: mitigationResult.data?.scores?.[0]?.SPGP ?? null
-                });
+            for (const country of euNeighbours) {
+              // Use the same logic as for single country selection
+              if (!sourceCountries.find(c => c.id === country.id)) {
+                // eslint-disable-next-line no-await-in-loop
+                await handleSourceCountrySelection(country.name_un);
               }
-              
-              setDiseaseStatus(diseaseStatusData);
-              setMitigationMeasures(mitigationMeasuresData);
-              setConnections(connectionsData);
-              
-            } catch (dataError) {
-              console.warn('Failed to fetch EU countries data, using defaults:', dataError);
-              // Initialize with null values if data fetching fails
-              const diseaseStatusData = euNeighbours.map(country => ({
-                id: country.id,
-                countryName: country.name_un,
-                FMD: null,
-                PPR: null,
-                LSD: null,
-                RVF: null,
-                SPGP: null
-              }));
-              
-              const mitigationMeasuresData = euNeighbours.map(country => ({
-                id: country.id,
-                countryName: country.name_un,
-                FMD: null,
-                PPR: null,
-                LSD: null,
-                RVF: null,
-                SPGP: null
-              }));
-              
-              const connectionsData = euNeighbours.map(country => ({
-                id: country.id,
-                countryName: country.name_un,
-                liveAnimalContact: null,
-                legalImport: null,
-                proximity: null,
-                illegalImport: null,
-                connection: null,
-                livestockDensity: null
-              }));
-              
-              setDiseaseStatus(diseaseStatusData);
-              setMitigationMeasures(mitigationMeasuresData);
-              setConnections(connectionsData);
             }
           } else {
             throw new Error('Invalid or empty EU neighbours response');
@@ -456,55 +373,21 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
         } catch (euError) {
           console.warn('EU neighbours endpoint failed, using fallback approach:', euError);
           // Fallback: Use hardcoded list of EU neighboring countries
-          const euNeighbourCountries = countries.filter(country => {
-            const euNeighbourNames = [
-              'Albania', 'Armenia', 'Azerbaijan', 'Belarus', 'Bosnia and Herzegovina',
-              'Georgia', 'Moldova', 'Montenegro', 'North Macedonia', 'Serbia',
-              'Turkey', 'Ukraine', 'Russia', 'Norway', 'Switzerland', 'United Kingdom',
-              'Algeria', 'Egypt', 'Libya', 'Morocco', 'Tunisia'
-            ];
-            return euNeighbourNames.includes(country.name_un) && country.id !== receiverCountry?.id;
-          });
-          console.log('Using fallback EU neighbour countries:', euNeighbourCountries);
-          setSourceCountries(euNeighbourCountries);
-          
-          // Initialize data arrays for fallback countries
-          const diseaseStatusData = euNeighbourCountries.map(country => ({
-            id: country.id,
-            countryName: country.name_un,
-            FMD: null,
-            PPR: null,
-            LSD: null,
-            RVF: null,
-            SPGP: null
-          }));
-          
-          const mitigationMeasuresData = euNeighbourCountries.map(country => ({
-            id: country.id,
-            countryName: country.name_un,
-            FMD: null,
-            PPR: null,
-            LSD: null,
-            RVF: null,
-            SPGP: null
-          }));
-          
-          const connectionsData = euNeighbourCountries.map(country => {
-            return {
-              id: country.id,
-              countryName: country.name_un,
-              liveAnimalContact: null,
-              legalImport: null,
-              proximity: null,
-              illegalImport: null,
-              connection: null,
-              livestockDensity: null
-            };
-          });
-          
-          setDiseaseStatus(diseaseStatusData);
-          setMitigationMeasures(mitigationMeasuresData);
-          setConnections(connectionsData);
+          const euNeighbourNames = [
+            'Albania', 'Armenia', 'Azerbaijan', 'Belarus', 'Bosnia and Herzegovina',
+            'Georgia', 'Moldova', 'Montenegro', 'North Macedonia', 'Serbia',
+            'Turkey', 'Ukraine', 'Russia', 'Norway', 'Switzerland', 'United Kingdom',
+            'Algeria', 'Egypt', 'Libya', 'Morocco', 'Tunisia'
+          ];
+          const euNeighbourCountries = countries.filter(country =>
+            euNeighbourNames.includes(country.name_un) && country.id !== receiverCountry?.id
+          );
+          for (const country of euNeighbourCountries) {
+            if (!sourceCountries.find(c => c.id === country.id)) {
+              // eslint-disable-next-line no-await-in-loop
+              await handleSourceCountrySelection(country.name_un);
+            }
+          }
         }
       } else {
         // Handle single country selection
