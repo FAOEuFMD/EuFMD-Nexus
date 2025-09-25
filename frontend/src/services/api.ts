@@ -14,16 +14,11 @@ const api: AxiosInstance = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    // Skip auth for RMT endpoints since they don't require authentication
-    const isRMTEndpoint = config.url?.includes('/api/rmt/');
-    
-    if (!isRMTEndpoint) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        // Set token in both header formats for compatibility
-        config.headers['x-access-token'] = token;  // Express backend format
-        config.headers['Authorization'] = `Bearer ${token}`;  // FastAPI format
-      }
+    const token = localStorage.getItem('token');
+    if (token) {
+      // Set token in both header formats for compatibility
+      config.headers['x-access-token'] = token;  // Express backend format
+      config.headers['Authorization'] = `Bearer ${token}`;  // FastAPI format
     }
     return config;
   },
@@ -97,6 +92,12 @@ export const apiService = {
     
     postMitigationMeasures: (data: any) =>
       api.post('/api/rmt/mitigation-measures', data),
+    
+    getConnections: () =>
+      api.get('/api/rmt-data/connections'),
+    
+    postConnections: (data: any) =>
+      api.post('/api/rmt-data/connections', data),
   },
 
   // PCP endpoints

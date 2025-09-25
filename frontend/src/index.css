@@ -843,22 +843,22 @@
   /* Force table background colors to print */
   .rmt-table td {
     background-color: transparent !important;
-    color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Ensure risk score cells keep their background colors */
   .rmt-table td span {
-    color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Force background colors for all risk color classes */
   .bg-green-500, .bg-yellow-500, .bg-orange-500, .bg-red-500 {
-    color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Ensure heatmap cells keep their background colors */
   .w-12.h-12 {
-    color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Prevent page breaks inside charts and maps */
