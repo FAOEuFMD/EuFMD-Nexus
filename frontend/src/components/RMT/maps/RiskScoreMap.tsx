@@ -39,13 +39,14 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
   const getStandardizedCountryName = (geoJsonName: string): string => {
     const nameMapping: { [key: string]: string } = {
       'Turkey': 'Türkiye',
-      'Iran (Islamic Republic of)': 'Iran',
-      'Palestine, State of': 'Palestine',
-      'West Bank': 'Palestine',
-      'West Bank and Gaza': 'Palestine',
-      'Gaza Strip': 'Palestine',
-      'Palestinian Territory': 'Palestine',
-    
+      'Iran (Islamic Republic of)': 'Iran (Islamic Republic of)',
+      'Palestine, State of': 'Palestine, State of',
+      'West Bank': 'Palestine, State of',
+      'West Bank and Gaza': 'Palestine, State of',
+      'Gaza Strip': 'Palestine, State of',
+      'Palestinian Territory': 'Palestine, State of',
+      'Syrian Arab Republic': 'Syrian Arab Republic',
+      'Syria': 'Syrian Arab Republic',
     };
     
     return nameMapping[geoJsonName] || geoJsonName;
@@ -80,7 +81,7 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
   const getCountryStyle = (feature: Feature<Geometry, any> | undefined) => {
     if (!feature) return {};
     
-    const geoJsonCountryName = feature.properties.NAME_EN || feature.properties.name;
+    const geoJsonCountryName = feature.properties.ROMNAM || feature.properties.NAME_EN || feature.properties.name;
     const standardizedCountryName = getStandardizedCountryName(geoJsonCountryName);
     
     // Highlight the target country differently
@@ -131,49 +132,118 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
         setIsLoading(true);
         console.log("Fetching GeoJSON data for map...");
         
-        // First try the GitHub URL
+        // Get list of countries we need (source countries + target country)
+        const neededCountries = new Set<string>();
+        
+        // Add target country
+        neededCountries.add(targetCountryName);
+        
+        // Add all source countries from countryData
+        countryData.forEach(country => {
+          neededCountries.add(country.name_un);
+        });
+        
+        // Convert country names to potential ISO3 codes
+        // This is a simplified mapping - you might need to enhance this
+        const countryToISO3: { [key: string]: string } = {
+          'Egypt': 'EGY',
+          'Jordan': 'JOR', 
+          'Lebanon': 'LBN',
+          'Palestine, State of': 'PSE',
+          'Libya': 'LBY',
+          'Turkey': 'TUR',
+          'Türkiye': 'TUR',
+          'Azerbaijan': 'AZE',
+          'Armenia': 'ARM',
+          'Georgia': 'GEO',
+          'Iraq': 'IRQ',
+          'Iran (Islamic Republic of)': 'IRN',
+          'Pakistan': 'PAK',
+          'Mauritania': 'MRT',
+          'Algeria': 'DZA',
+          'Morocco': 'MAR',
+          'Tunisia': 'TUN',
+          'Syrian Arab Republic': 'SYR',
+          'Sudan': 'SDN',
+          'Israel': 'ISR',
+          'Afghanistan': 'AFG'
+        };
+        
+        // Convert country names to ISO3 codes
+        const iso3Codes = Array.from(neededCountries).map(country => 
+          countryToISO3[country] || country
+        ).filter(Boolean);
+        
+        // Try UN GeoServices API directly
         try {
-          const response = await fetch(
-            'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson'
-          );
+          const UN_GEOSERVICES_BASE = "https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/109/query";
+          
+          // Build the query parameters
+          const params = new URLSearchParams({
+            outFields: "ISO3CD,ROMNAM",
+            returnGeometry: "true",
+            f: "geojson",
+            where: iso3Codes.length > 0 ? `ISO3CD IN ('${iso3Codes.join("','")}')` : "1=1"
+          });
+          
+          const response = await fetch(`${UN_GEOSERVICES_BASE}?${params}`);
           
           if (!response.ok) {
-            throw new Error('GitHub fetch failed');
+            throw new Error(`UN GeoServices API error: ${response.status} ${response.statusText}`);
           }
           
           const data = await response.json();
-          console.log("Successfully loaded GeoJSON from GitHub");
-          setCountriesGeoJSON(data);
-        } 
-        // If GitHub fails, try a fallback URL
-        catch (githubError) {
-          console.warn("Failed to fetch from GitHub, trying fallback URL:", githubError);
           
-          // Fallback to a more reliable source or a local file
-          const fallbackResponse = await fetch(
-            // You can also add this file to your public folder and reference it as /countries.geojson
-            'https://datahub.io/core/geo-countries/r/countries.geojson'
-          );
-          
-          if (!fallbackResponse.ok) {
-            throw new Error('Fallback fetch also failed');
+          // Validate the GeoJSON structure
+          if (!data || typeof data !== 'object') {
+            throw new Error('Invalid response from UN GeoServices');
           }
           
-          const fallbackData = await fallbackResponse.json();
-          console.log("Successfully loaded GeoJSON from fallback source");
-          setCountriesGeoJSON(fallbackData);
+          if (!data.type || data.type !== 'FeatureCollection') {
+            throw new Error('Response is not a valid GeoJSON FeatureCollection');
+          }
+          
+          if (!Array.isArray(data.features)) {
+            throw new Error('GeoJSON features is not an array');
+          }
+          
+          // Validate and filter features
+          const validFeatures = data.features.filter((feature: any) => {
+            return feature && 
+                   feature.type === 'Feature' && 
+                   feature.geometry && 
+                   feature.properties &&
+                   feature.geometry.coordinates;
+          });
+          
+          if (validFeatures.length === 0) {
+            throw new Error('No valid features found in UN GeoServices response');
+          }
+          
+          const validatedData = {
+            type: 'FeatureCollection',
+            features: validFeatures
+          };
+          
+          console.log(`Successfully loaded ${validatedData.features.length} valid countries from UN GeoServices`);
+          setCountriesGeoJSON(validatedData);
+        } 
+        // If UN API fails, just show background map without country overlays
+        catch (unError) {
+          console.warn("Failed to fetch from UN GeoServices, showing background map only:", unError);
+          setCountriesGeoJSON(null); // This will show only the background tile layer
         }
         
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching GeoJSON from all sources:', error);
+        console.error('Error in fetchGeoJSON:', error);
         setMapError('Failed to load map data. Please check your internet connection and try again.');
         setIsLoading(false);
       }
     };
     
     fetchGeoJSON();
-  }, []);
+  }, [countryData, targetCountryName]);
 
   // Handle feature interactions
   const onEachFeature = (feature: Feature<Geometry, any>, layer: any) => {

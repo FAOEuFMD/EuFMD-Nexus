@@ -825,6 +825,112 @@
   }
 }
 
+/* Print styles for RMT Results page */
+@media print {
+  /* Ensure background colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide non-essential elements */
+  .rmt-step {
+    border: 2px solid #15736d !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Force table background colors to print */
+  .rmt-table td {
+    background-color: transparent !important;
+    color-adjust: exact !important;
+  }
+
+  /* Ensure risk score cells keep their background colors */
+  .rmt-table td span {
+    color-adjust: exact !important;
+  }
+
+  /* Force background colors for all risk color classes */
+  .bg-green-500, .bg-yellow-500, .bg-orange-500, .bg-red-500 {
+    color-adjust: exact !important;
+  }
+
+  /* Ensure heatmap cells keep their background colors */
+  .w-12.h-12 {
+    color-adjust: exact !important;
+  }
+
+  /* Prevent page breaks inside charts and maps */
+  .visualization-container,
+  .rmt-step,
+  .rmt-table-container {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    page-break-before: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Ensure charts don't get cut */
+  .h-80, .h-96 {
+    height: auto !important;
+    min-height: 320px !important;
+  }
+
+  /* Adjust chart containers for print */
+  .h-80 {
+    min-height: 300px !important;
+  }
+
+  .h-96 {
+    min-height: 350px !important;
+  }
+
+  /* Ensure map displays properly */
+  .leaflet-container {
+    height: 400px !important;
+    width: 100% !important;
+  }
+
+  /* Hide print button and navigation */
+  button[onclick*="print"],
+  .flex button:last-child {
+    display: none !important;
+  }
+
+  /* Adjust margins for print */
+  body {
+    margin: 0.5in !important;
+    padding: 0 !important;
+  }
+
+  .container {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ensure proper page breaks between sections */
+  .rmt-step {
+    margin-bottom: 20px !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Force page break before major sections if needed */
+  h2, h3 {
+    break-before: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Ensure legends and small elements don't get orphaned */
+  .rmt-legend-item,
+  .chart-selector {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

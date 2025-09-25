@@ -9,6 +9,7 @@ from config import settings
 from routers import (
     auth,
     rmt,
+    rmt_data,
     pcp,
     fast_report,
     diagnostic_support,
@@ -39,6 +40,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router)
 app.include_router(rmt.router)
+app.include_router(rmt_data.router)
 app.include_router(pcp.router)
 app.include_router(fast_report.router)
 app.include_router(diagnostic_support.router)

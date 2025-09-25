@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { getPathwaysForChart } from '../utils/pathwaysConfig';
+import { rmtDataService } from '../services/rmtDataService';
+import { useAuthStore } from '../stores/authStore';
 
 interface Country {
   id: number;
@@ -53,6 +55,15 @@ interface ConnectionRow {
 const RMTRiskScores: React.FC = (): React.ReactElement => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuthStore();
+  
+  // Check if user can save data (has RMT-related role)
+  const canSaveData = user && ['admin', 'rmt', 'risp'].includes(user.role);
+  
+  // Track if user has made modifications to data
+  const [hasModifications, setHasModifications] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
   
   // State from navigation (when coming back from results page)
   const navigationState = useMemo(() => location.state || {}, [location.state]);
@@ -85,6 +96,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   const diseases = ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'];
   const connectionFields = ['liveAnimalContact', 'legalImport', 'proximity', 'illegalImport', 'connection', 'livestockDensity'];
   
+  // Helper function to get data prioritizing user data over API data
   // Connection field titles and descriptions - matching Vue app exactly
   const connectionFieldInfo: Record<string, { 
     title: string; 
@@ -343,110 +355,17 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     setLoading(true);
     try {
       if (value === 'allEUNeighbourCountries') {
-        // Handle EU neighbour countries selection
+        // Refactored: Add each EU neighbour country one by one as if individually selected
         try {
           const euNeighboursResponse = await apiService.rmt.getEUNeighbours();
-          console.log('EU neighbours response:', euNeighboursResponse);
-          
-          // The backend sends results.data directly, so with Axios we get it in response.data
           const euNeighbours = euNeighboursResponse.data;
-          console.log('EU neighbours data:', euNeighbours);
-          
           if (Array.isArray(euNeighbours) && euNeighbours.length > 0) {
-            setSourceCountries(euNeighbours);
-            
-            // Fetch disease status and mitigation measures for all EU countries
-            try {
-              const promises = euNeighbours.flatMap(country => [
-                apiService.rmt.getDiseaseStatusByCountry(country.id),
-                apiService.rmt.getMitigationMeasuresByCountry(country.id)
-              ]);
-              
-              const results = await Promise.all(promises);
-              
-              // Process results - odd indices are disease status, even are mitigation measures
-              const diseaseStatusData = [];
-              const mitigationMeasuresData = [];
-              const connectionsData = [];
-              
-              for (let i = 0; i < euNeighbours.length; i++) {
-                const country = euNeighbours[i];
-                const diseaseResult = results[i * 2];
-                const mitigationResult = results[i * 2 + 1];
-                
-                diseaseStatusData.push({
-                  id: country.id,
-                  countryName: country.name_un,
-                  FMD: diseaseResult.data?.scores?.[0]?.FMD ?? null,
-                  PPR: diseaseResult.data?.scores?.[0]?.PPR ?? null,
-                  LSD: diseaseResult.data?.scores?.[0]?.LSD ?? null,
-                  RVF: diseaseResult.data?.scores?.[0]?.RVF ?? null,
-                  SPGP: diseaseResult.data?.scores?.[0]?.SPGP ?? null
-                });
-                
-                mitigationMeasuresData.push({
-                  id: country.id,
-                  countryName: country.name_un,
-                  FMD: mitigationResult.data?.scores?.[0]?.FMD ?? null,
-                  PPR: mitigationResult.data?.scores?.[0]?.PPR ?? null,
-                  LSD: mitigationResult.data?.scores?.[0]?.LSD ?? null,
-                  RVF: mitigationResult.data?.scores?.[0]?.RVF ?? null,
-                  SPGP: mitigationResult.data?.scores?.[0]?.SPGP ?? null
-                });
-                
-                connectionsData.push({
-                  id: country.id,
-                  countryName: country.name_un,
-                  liveAnimalContact: null,
-                  legalImport: null,
-                  proximity: null,
-                  illegalImport: null,
-                  connection: null,
-                  livestockDensity: null
-                });
+            for (const country of euNeighbours) {
+              // Use the same logic as for single country selection
+              if (!sourceCountries.find(c => c.id === country.id)) {
+                // eslint-disable-next-line no-await-in-loop
+                await handleSourceCountrySelection(country.name_un);
               }
-              
-              setDiseaseStatus(diseaseStatusData);
-              setMitigationMeasures(mitigationMeasuresData);
-              setConnections(connectionsData);
-              
-            } catch (dataError) {
-              console.warn('Failed to fetch EU countries data, using defaults:', dataError);
-              // Initialize with null values if data fetching fails
-              const diseaseStatusData = euNeighbours.map(country => ({
-                id: country.id,
-                countryName: country.name_un,
-                FMD: null,
-                PPR: null,
-                LSD: null,
-                RVF: null,
-                SPGP: null
-              }));
-              
-              const mitigationMeasuresData = euNeighbours.map(country => ({
-                id: country.id,
-                countryName: country.name_un,
-                FMD: null,
-                PPR: null,
-                LSD: null,
-                RVF: null,
-                SPGP: null
-              }));
-              
-              const connectionsData = euNeighbours.map(country => ({
-                id: country.id,
-                countryName: country.name_un,
-                liveAnimalContact: null,
-                legalImport: null,
-                proximity: null,
-                illegalImport: null,
-                connection: null,
-                livestockDensity: null
-              }));
-              
-              setDiseaseStatus(diseaseStatusData);
-              setMitigationMeasures(mitigationMeasuresData);
-              setConnections(connectionsData);
             }
           } else {
             throw new Error('Invalid or empty EU neighbours response');
@@ -454,53 +373,21 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
         } catch (euError) {
           console.warn('EU neighbours endpoint failed, using fallback approach:', euError);
           // Fallback: Use hardcoded list of EU neighboring countries
-          const euNeighbourCountries = countries.filter(country => {
-            const euNeighbourNames = [
-              'Albania', 'Armenia', 'Azerbaijan', 'Belarus', 'Bosnia and Herzegovina',
-              'Georgia', 'Moldova', 'Montenegro', 'North Macedonia', 'Serbia',
-              'Turkey', 'Ukraine', 'Russia', 'Norway', 'Switzerland', 'United Kingdom',
-              'Algeria', 'Egypt', 'Libya', 'Morocco', 'Tunisia'
-            ];
-            return euNeighbourNames.includes(country.name_un) && country.id !== receiverCountry?.id;
-          });
-          console.log('Using fallback EU neighbour countries:', euNeighbourCountries);
-          setSourceCountries(euNeighbourCountries);
-          
-          // Initialize data arrays for fallback countries
-          const diseaseStatusData = euNeighbourCountries.map(country => ({
-            id: country.id,
-            countryName: country.name_un,
-            FMD: null,
-            PPR: null,
-            LSD: null,
-            RVF: null,
-            SPGP: null
-          }));
-          
-          const mitigationMeasuresData = euNeighbourCountries.map(country => ({
-            id: country.id,
-            countryName: country.name_un,
-            FMD: null,
-            PPR: null,
-            LSD: null,
-            RVF: null,
-            SPGP: null
-          }));
-          
-          const connectionsData = euNeighbourCountries.map(country => ({
-            id: country.id,
-            countryName: country.name_un,
-            liveAnimalContact: null,
-            legalImport: null,
-            proximity: null,
-            illegalImport: null,
-            connection: null,
-            livestockDensity: null
-          }));
-          
-          setDiseaseStatus(diseaseStatusData);
-          setMitigationMeasures(mitigationMeasuresData);
-          setConnections(connectionsData);
+          const euNeighbourNames = [
+            'Albania', 'Armenia', 'Azerbaijan', 'Belarus', 'Bosnia and Herzegovina',
+            'Georgia', 'Moldova', 'Montenegro', 'North Macedonia', 'Serbia',
+            'Turkey', 'Ukraine', 'Russia', 'Norway', 'Switzerland', 'United Kingdom',
+            'Algeria', 'Egypt', 'Libya', 'Morocco', 'Tunisia'
+          ];
+          const euNeighbourCountries = countries.filter(country =>
+            euNeighbourNames.includes(country.name_un) && country.id !== receiverCountry?.id
+          );
+          for (const country of euNeighbourCountries) {
+            if (!sourceCountries.find(c => c.id === country.id)) {
+              // eslint-disable-next-line no-await-in-loop
+              await handleSourceCountrySelection(country.name_un);
+            }
+          }
         }
       } else {
         // Handle single country selection
@@ -514,6 +401,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
             try {
               console.log('Fetching data for country:', selectedCountry.name_un, 'ID:', selectedCountry.id);
               
+              // Fetch from API
               const [diseaseResponse, mitigationResponse] = await Promise.all([
                 apiService.rmt.getDiseaseStatusByCountry(selectedCountry.id),
                 apiService.rmt.getMitigationMeasuresByCountry(selectedCountry.id)
@@ -521,90 +409,122 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
               
               // Debug: Log the actual API responses
               console.log('Disease API Response for', selectedCountry.name_un, ':', diseaseResponse);
-              console.log('Disease API Response Data:', diseaseResponse.data);
-              console.log('Disease API Scores:', diseaseResponse.data?.scores);
+              if (diseaseResponse?.data) {
+                console.log('Disease API Response Data:', diseaseResponse.data);
+                console.log('Disease API Scores:', diseaseResponse.data?.scores);
+              }
               console.log('Mitigation API Response for', selectedCountry.name_un, ':', mitigationResponse);
-              console.log('Mitigation API Response Data:', mitigationResponse.data);
-              console.log('Mitigation API Scores:', mitigationResponse.data?.scores);
+              if (mitigationResponse?.data) {
+                console.log('Mitigation API Response Data:', mitigationResponse.data);
+                console.log('Mitigation API Scores:', mitigationResponse.data?.scores);
+              }
               
               // Check if disease status data already exists for this country
               if (!diseaseStatus.find(d => d.id === selectedCountry.id)) {
-                // Debug the structure of the response
-                console.log('Disease response structure:', JSON.stringify(diseaseResponse.data));
+                let newDiseaseStatus: DiseaseStatusRow | null = null;
                 
-                // Handle the response regardless of structure (array or single object)
-                const scores = diseaseResponse.data?.scores;
-                let scoreData: Record<string, any> = {};
-                
-                // Debug to see what we're getting
-                console.log('Disease scores type:', typeof scores);
-                console.log('Is array?', Array.isArray(scores));
-                console.log('Full disease scores:', scores);
-                
-                // Check if scores is an array, a single object, or just a value indicating status
-                if (Array.isArray(scores) && scores.length > 0) {
-                  console.log('Using first item from scores array');
-                  scoreData = scores[0];
-                } else if (typeof scores === 'object' && scores !== null) {
-                  console.log('Using scores object directly');
-                  scoreData = scores;
-                } else {
-                  console.log('Using data directly');
-                  // If scores is not what we expect, check if FMD, PPR, etc. are directly in data
-                  scoreData = diseaseResponse.data;
+                if (diseaseResponse) {
+                  // Debug: Log the actual API responses
+                  console.log('Disease API Response for', selectedCountry.name_un, ':', diseaseResponse);
+                  if (diseaseResponse.data) {
+                    console.log('Disease API Response Data:', diseaseResponse.data);
+                    console.log('Disease API Scores:', diseaseResponse.data?.scores);
+                  }
+                  
+                  // Debug the structure of the response
+                  console.log('Disease response structure:', JSON.stringify(diseaseResponse?.data));
+                  
+                  // Handle the response regardless of structure (array or single object)
+                  const scores = diseaseResponse.data?.scores;
+                  let scoreData: Record<string, any> = {};
+                  
+                  // Debug to see what we're getting
+                  console.log('Disease scores type:', typeof scores);
+                  console.log('Is array?', Array.isArray(scores));
+                  console.log('Full disease scores:', scores);
+                  
+                  // Check if scores is an array, a single object, or just a value indicating status
+                  if (Array.isArray(scores) && scores.length > 0) {
+                    console.log('Using first item from scores array');
+                    scoreData = scores[0];
+                  } else if (typeof scores === 'object' && scores !== null) {
+                    console.log('Using scores object directly');
+                    scoreData = scores;
+                  } else {
+                    console.log('Using data directly');
+                    // If scores is not what we expect, check if FMD, PPR, etc. are directly in data
+                    scoreData = diseaseResponse?.data || {};
+                  }
+                  
+                  newDiseaseStatus = {
+                    id: selectedCountry.id,
+                    countryName: selectedCountry.name_un,
+                    FMD: (scoreData as Record<string, any>)?.FMD ?? null,
+                    PPR: (scoreData as Record<string, any>)?.PPR ?? null,
+                    LSD: (scoreData as Record<string, any>)?.LSD ?? null,
+                    RVF: (scoreData as Record<string, any>)?.RVF ?? null,
+                    SPGP: (scoreData as Record<string, any>)?.SPGP ?? null
+                  };
                 }
                 
-                const newDiseaseStatus = {
-                  id: selectedCountry.id,
-                  countryName: selectedCountry.name_un,
-                  FMD: (scoreData as Record<string, any>)?.FMD ?? null,
-                  PPR: (scoreData as Record<string, any>)?.PPR ?? null,
-                  LSD: (scoreData as Record<string, any>)?.LSD ?? null,
-                  RVF: (scoreData as Record<string, any>)?.RVF ?? null,
-                  SPGP: (scoreData as Record<string, any>)?.SPGP ?? null
-                };
-                console.log('Parsed disease status for', selectedCountry.name_un, ':', newDiseaseStatus);
-                setDiseaseStatus(prev => [...prev, newDiseaseStatus]);
+                if (newDiseaseStatus) {
+                  console.log('Parsed disease status for', selectedCountry.name_un, ':', newDiseaseStatus);
+                  setDiseaseStatus(prev => [...prev, newDiseaseStatus!]);
+                }
               }
               
               // Check if mitigation measures data already exists for this country
               if (!mitigationMeasures.find(m => m.id === selectedCountry.id)) {
-                // Debug the structure of the response
-                console.log('Mitigation response structure:', JSON.stringify(mitigationResponse.data));
+                let newMitigationMeasure: MitigationMeasureRow | null = null;
                 
-                // Handle the response regardless of structure (array or single object)
-                const scores = mitigationResponse.data?.scores;
-                let scoreData: Record<string, any> = {};
-                
-                // Debug to see what we're getting
-                console.log('Mitigation scores type:', typeof scores);
-                console.log('Is array?', Array.isArray(scores));
-                console.log('Full mitigation scores:', scores);
-                
-                // Check if scores is an array, a single object, or just a value indicating status
-                if (Array.isArray(scores) && scores.length > 0) {
-                  console.log('Using first item from scores array');
-                  scoreData = scores[0];
-                } else if (typeof scores === 'object' && scores !== null) {
-                  console.log('Using scores object directly');
-                  scoreData = scores;
-                } else {
-                  console.log('Using data directly');
-                  // If scores is not what we expect, check if FMD, PPR, etc. are directly in data
-                  scoreData = mitigationResponse.data;
+                if (mitigationResponse) {
+                  // Debug: Log the actual API responses
+                  console.log('Mitigation API Response for', selectedCountry.name_un, ':', mitigationResponse);
+                  if (mitigationResponse.data) {
+                    console.log('Mitigation API Response Data:', mitigationResponse.data);
+                    console.log('Mitigation API Scores:', mitigationResponse.data?.scores);
+                  }
+                  
+                  // Debug the structure of the response
+                  console.log('Mitigation response structure:', JSON.stringify(mitigationResponse?.data));
+                  
+                  // Handle the response regardless of structure (array or single object)
+                  const scores = mitigationResponse.data?.scores;
+                  let scoreData: Record<string, any> = {};
+                  
+                  // Debug to see what we're getting
+                  console.log('Mitigation scores type:', typeof scores);
+                  console.log('Is array?', Array.isArray(scores));
+                  console.log('Full mitigation scores:', scores);
+                  
+                  // Check if scores is an array, a single object, or just a value indicating status
+                  if (Array.isArray(scores) && scores.length > 0) {
+                    console.log('Using first item from scores array');
+                    scoreData = scores[0];
+                  } else if (typeof scores === 'object' && scores !== null) {
+                    console.log('Using scores object directly');
+                    scoreData = scores;
+                  } else {
+                    console.log('Using data directly');
+                    // If scores is not what we expect, check if FMD, PPR, etc. are directly in data
+                    scoreData = mitigationResponse?.data || {};
+                  }
+                  
+                  newMitigationMeasure = {
+                    id: selectedCountry.id,
+                    countryName: selectedCountry.name_un,
+                    FMD: (scoreData as Record<string, any>)?.FMD ?? null,
+                    PPR: (scoreData as Record<string, any>)?.PPR ?? null,
+                    LSD: (scoreData as Record<string, any>)?.LSD ?? null,
+                    RVF: (scoreData as Record<string, any>)?.RVF ?? null,
+                    SPGP: (scoreData as Record<string, any>)?.SPGP ?? null
+                  };
                 }
                 
-                const newMitigationMeasure = {
-                  id: selectedCountry.id,
-                  countryName: selectedCountry.name_un,
-                  FMD: (scoreData as Record<string, any>)?.FMD ?? null,
-                  PPR: (scoreData as Record<string, any>)?.PPR ?? null,
-                  LSD: (scoreData as Record<string, any>)?.LSD ?? null,
-                  RVF: (scoreData as Record<string, any>)?.RVF ?? null,
-                  SPGP: (scoreData as Record<string, any>)?.SPGP ?? null
-                };
-                console.log('Parsed mitigation measures for', selectedCountry.name_un, ':', newMitigationMeasure);
-                setMitigationMeasures(prev => [...prev, newMitigationMeasure]);
+                if (newMitigationMeasure) {
+                  console.log('Parsed mitigation measures for', selectedCountry.name_un, ':', newMitigationMeasure);
+                  setMitigationMeasures(prev => [...prev, newMitigationMeasure!]);
+                }
               }
               
               // Check if connections data already exists for this country
@@ -820,6 +740,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           : row
       )
     );
+    if (canSaveData) {
+      setHasModifications(true);
+    }
   };
 
   const updateMitigationMeasure = (countryId: number, disease: string, value: number) => {
@@ -830,6 +753,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           : row
       )
     );
+    if (canSaveData) {
+      setHasModifications(true);
+    }
   };
 
   const updateConnection = (countryId: number, field: string, value: number) => {
@@ -845,6 +771,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           : row
       )
     );
+    if (canSaveData) {
+      setHasModifications(true);
+    }
   };
   
   // Function to fill empty connection fields with value 0 (preserves existing user entries)
@@ -860,6 +789,84 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
         livestockDensity: row.livestockDensity !== null && row.livestockDensity !== undefined ? row.livestockDensity : 0
       }))
     );
+  };
+
+  // Save user data to database
+  const saveUserData = async () => {
+    if (!canSaveData || !user) return;
+
+    setIsSaving(true);
+    setSaveMessage('');
+
+    try {
+      // Get current date for data records
+      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+      // Save only the data for the current step
+      switch (currentStep) {
+        case 0: // Disease Status
+          const diseaseData = diseaseStatus.map(row => ({
+            country_id: row.id,
+            FMD: row.FMD ?? 0,
+            PPR: row.PPR ?? 0,
+            LSD: row.LSD ?? 0,
+            RVF: row.RVF ?? 0,
+            SPGP: row.SPGP ?? 0,
+            date: currentDate
+          }));
+          await rmtDataService.saveDiseaseStatus(diseaseData);
+          setSaveMessage('Disease status data saved successfully!');
+          break;
+
+        case 1: // Mitigation Measures
+          const mitigationData = mitigationMeasures.map(row => ({
+            country_id: row.id,
+            FMD: row.FMD ?? 0,
+            PPR: row.PPR ?? 0,
+            LSD: row.LSD ?? 0,
+            RVF: row.RVF ?? 0,
+            SPGP: row.SPGP ?? 0,
+            date: currentDate
+          }));
+          await rmtDataService.saveMitigationMeasures(mitigationData);
+          setSaveMessage('Mitigation measures data saved successfully!');
+          break;
+
+        case 2: // Pathways
+          // Pathways don't have user-specific data to save currently
+          setSaveMessage('Pathways data is calculated automatically - no save needed.');
+          break;
+
+        case 3: // Connections
+          const connectionsData = connections.map(row => ({
+            country_id: row.id,
+            liveAnimalContact: row.liveAnimalContact ?? 0,
+            legalImport: row.legalImport ?? 0,
+            proximity: row.proximity ?? 0,
+            illegalImport: row.illegalImport ?? 0,
+            connection: row.connection ?? 0,
+            livestockDensity: row.livestockDensity ?? 0
+          }));
+          await rmtDataService.saveConnections(connectionsData);
+          setSaveMessage('Connections data saved successfully!');
+          break;
+
+        default:
+          setSaveMessage('Unknown step - cannot save data.');
+          break;
+      }
+
+      // Reset modifications flag after successful save
+      setHasModifications(false);
+      setHasModifications(false);
+    } catch (error) {
+      console.error('Error saving data:', error);
+      setSaveMessage('Error saving data. Please try again.');
+    } finally {
+      setIsSaving(false);
+      // Clear message after 3 seconds
+      setTimeout(() => setSaveMessage(''), 3000);
+    }
   };
 
   const renderStepContent = () => {
@@ -1023,6 +1030,18 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                     </div>
                   </div>
                 </div>
+
+                {/* Save button for Disease Status */}
+                {canSaveData && currentStep === 0 && (
+                  <div className="mt-4 mb-4">
+                    <button
+                      onClick={() => setHasModifications(true)}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-[#15736d] border border-[#15736d] rounded hover:bg-[#015039] hover:border-[#015039] transition-all duration-300"
+                    >
+                      Save Data
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1115,6 +1134,18 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                     </p>
                   )}
                 </div>
+
+                {/* Save button for Mitigation Measures */}
+                {canSaveData && currentStep === 1 && (
+                  <div className="mt-4 mb-4">
+                    <button
+                      onClick={() => setHasModifications(true)}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-[#15736d] border border-[#15736d] rounded hover:bg-[#015039] hover:border-[#015039] transition-all duration-300"
+                    >
+                      Save Data
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1409,6 +1440,18 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                     Note: Rate each connection factor based on your knowledge of the relationship between countries.
                   </p>
                 </div>
+
+                {/* Save button for Connections */}
+                {canSaveData && currentStep === 3 && (
+                  <div className="mt-4 mb-4">
+                    <button
+                      onClick={() => setHasModifications(true)}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-[#15736d] border border-[#15736d] rounded hover:bg-[#015039] hover:border-[#015039] transition-all duration-300"
+                    >
+                      Save Data
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1499,7 +1542,25 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           </button>
         </div>
 
+        {/* Save message display */}
+        {saveMessage && (
+          <div className={`mt-4 p-3 rounded-md ${saveMessage.includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+            {saveMessage}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
+          {/* Save button for RMT users when modifications have been made */}
+          {canSaveData && hasModifications && (
+            <button
+              onClick={saveUserData}
+              disabled={isSaving}
+              className="px-4 py-2 font-semibold text-white bg-[#15736d] border-2 border-[#15736d] rounded transition-all duration-300 hover:bg-[#015039] hover:border-[#015039] disabled:bg-gray-400 disabled:border-gray-400 disabled:cursor-not-allowed"
+            >
+              {isSaving ? 'Saving...' : `Save ${stepTitles[currentStep]} Data`}
+            </button>
+          )}
+          
           {currentStep > 0 && (
             <button
               onClick={handlePrevious}
