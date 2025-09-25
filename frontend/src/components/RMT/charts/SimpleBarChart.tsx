@@ -181,7 +181,7 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
                           }}
                           title={`${pathway.label}: ${pathway.value.toFixed(1)}`}
                         >
-                          {segmentHeight >= 12 && (
+                          {pathway.value > 0 && (
                             <span className="text-xs font-medium">
                               {pathway.value.toFixed(1)}
                             </span>
