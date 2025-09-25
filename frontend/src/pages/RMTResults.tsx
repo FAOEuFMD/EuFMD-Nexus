@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { calculateRiskScores, Connections } from '../utils/calculateRiskScores';
+import { calculateConnectionScoresPerPathway } from '../utils/calculateConnectionScoresPerPathway';
+import { PATHWAYS_EFFECTIVENESS } from '../utils/pathwaysConfig';
 
 // Import map and chart components
 import RiskScoreMap from '../components/RMT/maps/RiskScoreMap';
@@ -97,14 +99,14 @@ const RMTResults: React.FC = () => {
   const [selectedDisease, setSelectedDisease] = useState<string>('FMD');
 
   // Pathway data
-  const pathwaysData = [
+  const pathwaysData = useMemo(() => [
     { pathway: "Airborne", FMD: 2, PPR: 0, LSD: 1, RVF: 1, SPGP: 2 },
     { pathway: "Vector-borne", FMD: 0, PPR: 0, LSD: 3, RVF: 3, SPGP: 1 },
     { pathway: "Wild Animals", FMD: 1, PPR: 2, LSD: 0, RVF: 1, SPGP: 0 },
     { pathway: "Animal Product", FMD: 2, PPR: 0, LSD: 1, RVF: 2, SPGP: 1 },
     { pathway: "Live Animal", FMD: 3, PPR: 3, LSD: 2, RVF: 3, SPGP: 3 },
     { pathway: "Fomite", FMD: 2, PPR: 2, LSD: 1, RVF: 0, SPGP: 2 },
-  ];
+  ], []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -266,15 +268,44 @@ const RMTResults: React.FC = () => {
             };
           });
           
+          // Get connection scores for this country (provide defaults if undefined)
+          const countryConnections = connections[countryId] || {
+            liveAnimalContact: 0,
+            legalImport: 0,
+            proximity: 0,
+            illegalImport: 0,
+            connection: 0,
+            livestockDensity: 0
+          };
+          const connectionScores = calculateConnectionScoresPerPathway(countryConnections);
+          
           countryScores.forEach(score => {
-            // Calculate per-pathway scores based on connection strength and pathway effectiveness
-            if (score.riskScore > 0) {
-              diseasePathwayScores[score.disease].airborne = Math.round(score.riskScore * 0.2);
-              diseasePathwayScores[score.disease].vectorborne = Math.round(score.riskScore * 0.15);
-              diseasePathwayScores[score.disease].wildAnimals = Math.round(score.riskScore * 0.1);
-              diseasePathwayScores[score.disease].animalProduct = Math.round(score.riskScore * 0.2);
-              diseasePathwayScores[score.disease].liveAnimal = Math.round(score.riskScore * 0.25);
-              diseasePathwayScores[score.disease].fomite = Math.round(score.riskScore * 0.1);
+            // Calculate per-pathway scores using the same formula as Vue app:
+            // pathway_score = (disease_status + (4 - mitigation_measure)) * (pathway_effectiveness * connection_score)
+            const diseaseStatusKey = `d${score.disease}` as keyof DiseaseStatus;
+            const mitigationMeasureKey = `m${score.disease}` as keyof MitigationMeasure;
+            
+            const diseaseStatus = diseaseStatusData[score.sourceCountryId]?.[diseaseStatusKey] || 0;
+            const mitigationMeasure = mitigationMeasuresData[score.sourceCountryId]?.[mitigationMeasureKey] || 0;
+            
+            if (diseaseStatus === 0) {
+              // If disease status is 0, all pathways contribute 0
+              diseasePathwayScores[score.disease].airborne = 0;
+              diseasePathwayScores[score.disease].vectorborne = 0;
+              diseasePathwayScores[score.disease].wildAnimals = 0;
+              diseasePathwayScores[score.disease].animalProduct = 0;
+              diseasePathwayScores[score.disease].liveAnimal = 0;
+              diseasePathwayScores[score.disease].fomite = 0;
+            } else {
+              // Calculate pathway contributions using Vue app formula
+              const baseRisk = diseaseStatus + (4 - mitigationMeasure);
+              
+              diseasePathwayScores[score.disease].airborne = baseRisk * (PATHWAYS_EFFECTIVENESS.airborne[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.airborne] * connectionScores.airborne);
+              diseasePathwayScores[score.disease].vectorborne = baseRisk * (PATHWAYS_EFFECTIVENESS.vectorborne[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.vectorborne] * connectionScores.vectorborne);
+              diseasePathwayScores[score.disease].wildAnimals = baseRisk * (PATHWAYS_EFFECTIVENESS.wildAnimals[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.wildAnimals] * connectionScores.wildAnimals);
+              diseasePathwayScores[score.disease].animalProduct = baseRisk * (PATHWAYS_EFFECTIVENESS.animalProduct[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.animalProduct] * connectionScores.animalProduct);
+              diseasePathwayScores[score.disease].liveAnimal = baseRisk * (PATHWAYS_EFFECTIVENESS.liveAnimal[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.liveAnimal] * connectionScores.liveAnimal);
+              diseasePathwayScores[score.disease].fomite = baseRisk * (PATHWAYS_EFFECTIVENESS.fomite[score.disease as keyof typeof PATHWAYS_EFFECTIVENESS.fomite] * connectionScores.fomite);
             }
           });
           
@@ -320,7 +351,7 @@ const RMTResults: React.FC = () => {
     };
     
     loadData();
-  }, [location, diseases]);
+  }, [location, diseases, pathwaysData]);
   
   // Format risk scores for the map visualization
   const formatRiskScoresForMap = () => {
