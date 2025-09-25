@@ -402,9 +402,10 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
               console.log('Fetching data for country:', selectedCountry.name_un, 'ID:', selectedCountry.id);
               
               // Fetch from API
-              const [diseaseResponse, mitigationResponse] = await Promise.all([
+              const [diseaseResponse, mitigationResponse, connectionsResponse] = await Promise.all([
                 apiService.rmt.getDiseaseStatusByCountry(selectedCountry.id),
-                apiService.rmt.getMitigationMeasuresByCountry(selectedCountry.id)
+                apiService.rmt.getMitigationMeasuresByCountry(selectedCountry.id),
+                apiService.rmt.getConnections()
               ]);
               
               // Debug: Log the actual API responses
@@ -529,18 +530,47 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
               
               // Check if connections data already exists for this country
               if (!connections.find(c => c.id === selectedCountry.id)) {
-                // Initialize connections for the new country
-                const newConnection = {
-                  id: selectedCountry.id,
-                  countryName: selectedCountry.name_un,
-                  liveAnimalContact: null,
-                  legalImport: null,
-                  proximity: null,
-                  illegalImport: null,
-                  connection: null,
-                  livestockDensity: null
-                };
-                setConnections(prev => [...prev, newConnection]);
+                // Find connections data for this country from the API response
+                let newConnection: ConnectionRow | null = null;
+                
+                if (connectionsResponse && connectionsResponse.data) {
+                  console.log('Connections API Response:', connectionsResponse);
+                  console.log('Connections API Response Data:', connectionsResponse.data);
+                  
+                  // Find the connection data for this specific country
+                  const countryConnections = connectionsResponse.data.find((conn: any) => conn.country_id === selectedCountry.id);
+                  
+                  if (countryConnections) {
+                    console.log('Found connections data for', selectedCountry.name_un, ':', countryConnections);
+                    newConnection = {
+                      id: selectedCountry.id,
+                      countryName: selectedCountry.name_un,
+                      liveAnimalContact: countryConnections.liveAnimalContact ?? null,
+                      legalImport: countryConnections.legalImport ?? null,
+                      proximity: countryConnections.proximity ?? null,
+                      illegalImport: countryConnections.illegalImport ?? null,
+                      connection: countryConnections.connection ?? null,
+                      livestockDensity: countryConnections.livestockDensity ?? null
+                    };
+                  }
+                }
+                
+                // If no data from API, initialize with null values
+                if (!newConnection) {
+                  console.log('No connections data found for', selectedCountry.name_un, ', initializing with null values');
+                  newConnection = {
+                    id: selectedCountry.id,
+                    countryName: selectedCountry.name_un,
+                    liveAnimalContact: null,
+                    legalImport: null,
+                    proximity: null,
+                    illegalImport: null,
+                    connection: null,
+                    livestockDensity: null
+                  };
+                }
+                
+                setConnections(prev => [...prev, newConnection!]);
               }
             } catch (dataError: any) {
               console.error('API Error for country', selectedCountry.name_un, ':', dataError);
