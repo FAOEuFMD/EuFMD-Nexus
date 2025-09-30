@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { diseaseOptions } from '../services/risp/rispService';
 
 // Comprehensive safe parsing function
 const safeParseData = (data: any, fallback: any = []): any => {
@@ -83,6 +84,15 @@ const formatArrayData = (data: any): string => {
     return parsed.join(', ') || 'N/A';
   }
   return String(parsed) || 'N/A';
+};
+
+// Utility to get full display name from diseaseOptions
+const getDiseaseDisplayName = (diseaseName: string): string => {
+  const found = diseaseOptions.find(opt =>
+    diseaseName && (diseaseName.toLowerCase().includes(opt.name.split(' - ')[1]?.toLowerCase() || '') ||
+    opt.name.toLowerCase().includes(diseaseName.toLowerCase()))
+  );
+  return found ? found.name : diseaseName;
 };
 
 const RISPSummary: React.FC = () => {
@@ -176,10 +186,6 @@ const RISPSummary: React.FC = () => {
         setVaccinationData(campaignsWithCurrentData);
       } catch (error) {
         console.error('Error loading summary data:', error);
-        // Set empty arrays on error to prevent crashes
-        setOutbreakData([]);
-        setSurveillanceData([]);
-        setVaccinationData([]);
       } finally {
         setLoading(false);
       }
@@ -188,35 +194,41 @@ const RISPSummary: React.FC = () => {
     loadSummaryData();
   }, [user?.country, currentYear, currentQuarter]);
 
+  // PDF generation logic
   const handlePrint = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF('p', 'pt');
+    doc.setFont('Helvetica', 'normal');
     
-    // Add title
-    doc.setFontSize(20);
-    doc.text('RISP Summary Report', 20, 20);
+    let yPosition = 40;
     
-    // Add subtitle with quarter and year
-    doc.setFontSize(14);
-    doc.text(`${currentQuarter} ${currentYear} - ${user?.country || 'Unknown Country'}`, 20, 35);
+    // Title
+    doc.setFontSize(22);
+    doc.text('RISP Summary Report', 20, yPosition);
+    yPosition += 30;
     
-    let yPosition = 50;
+    // Country and Period
+    doc.setFontSize(12);
+    doc.text(`Country: ${user?.country || ''}`, 20, yPosition);
+    yPosition += 15;
+    doc.text(`Period: ${currentQuarter} ${currentYear}`, 20, yPosition);
+    yPosition += 20;
     
     // Outbreak Data Table
     if (outbreakData.length > 0) {
       doc.setFontSize(16);
-      doc.text('Outbreak Data', 20, yPosition);
+      doc.text('Disease Outbreaks', 20, yPosition);
       yPosition += 10;
       
       const outbreakRows = outbreakData.map(outbreak => [
-        outbreak.disease_name || 'N/A',
-        String(outbreak.number_outbreaks || 0),
+        getDiseaseDisplayName(outbreak.disease_name),
+        outbreak.number_outbreaks,
         formatArrayData(outbreak.species),
         formatArrayData(outbreak.status),
         formatArrayData(outbreak.locations)
       ]);
       
       (doc as any).autoTable({
-        head: [['Disease', 'Outbreaks', 'Species', 'Status', 'Locations']],
+        head: [['Disease', 'Number of Outbreaks', 'Species', 'Status', 'Locations']],
         body: outbreakRows,
         startY: yPosition,
         styles: { fontSize: 8 },
@@ -233,7 +245,7 @@ const RISPSummary: React.FC = () => {
       yPosition += 10;
       
       const surveillanceRows = surveillanceData.map(surveillance => [
-        surveillance.disease_name || 'N/A',
+        getDiseaseDisplayName(surveillance.disease_name),
         surveillance.passive_surveillance ? 'Yes' : 'No',
         formatActiveSurveillance(surveillance.active_surveillance),
         surveillance.details || 'N/A'
@@ -257,7 +269,7 @@ const RISPSummary: React.FC = () => {
       yPosition += 10;
       
       const vaccinationRows = vaccinationData.map(vaccination => [
-        vaccination.disease_name || 'N/A',
+        getDiseaseDisplayName(vaccination.disease_name) || 'N/A',
         vaccination.vaccination_type || 'N/A',
         formatArrayData(vaccination.species),
         formatArrayData(vaccination.geographical_areas),
@@ -342,7 +354,7 @@ const RISPSummary: React.FC = () => {
                 {outbreakData.length > 0 ? (
                   outbreakData.map((outbreak, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 border border-gray-300">{outbreak.disease_name}</td>
+                      <td className="py-2 px-4 border border-gray-300">{getDiseaseDisplayName(outbreak.disease_name)}</td>
                       <td className="py-2 px-4 border border-gray-300">{outbreak.number_outbreaks}</td>
                       <td className="py-2 px-4 border border-gray-300">
                         {formatArrayData(outbreak.species)}
@@ -386,7 +398,7 @@ const RISPSummary: React.FC = () => {
                 {surveillanceData.length > 0 ? (
                   surveillanceData.map((surveillance, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 border border-gray-300">{surveillance.disease_name}</td>
+                      <td className="py-2 px-4 border border-gray-300">{getDiseaseDisplayName(surveillance.disease_name)}</td>
                       <td className="py-2 px-4 border border-gray-300">
                         {Number(surveillance.passive_surveillance) === 1 ? 'Yes' : 'No'}
                       </td>
@@ -430,7 +442,7 @@ const RISPSummary: React.FC = () => {
                 {vaccinationData.length > 0 ? (
                   vaccinationData.map((vaccination, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 border border-gray-300">{vaccination.disease_name || 'N/A'}</td>
+                      <td className="py-2 px-4 border border-gray-300">{getDiseaseDisplayName(vaccination.disease_name) || 'N/A'}</td>
                       <td className="py-2 px-4 border border-gray-300">{vaccination.vaccination_type || 'N/A'}</td>
                       <td className="py-2 px-4 border border-gray-300">
                         {formatArrayData(vaccination.species)}
