@@ -69,26 +69,23 @@ interface CountryCoordinates {
 type ViewModeType = 'default' | 'outbreaks' | 'vaccination' | 'surveillance';
 
 // Region mapping for countries
-const countryToRegion: { [key: string]: string } = {
+export const countryToRegion: { [key: string]: string } = {
   // South East European Neighbourhood (SEEN)
   'Armenia': 'South East European Neighbourhood (SEEN)',
   'Azerbaijan': 'South East European Neighbourhood (SEEN)',
   'Georgia': 'South East European Neighbourhood (SEEN)',
   'Iran (Islamic Republic of)': 'South East European Neighbourhood (SEEN)',
-  'Iran': 'South East European Neighbourhood (SEEN)', // Alternative name
   'Iraq': 'South East European Neighbourhood (SEEN)',
   'Pakistan': 'South East European Neighbourhood (SEEN)',
   'Türkiye': 'South East European Neighbourhood (SEEN)',
-  'Turkey': 'South East European Neighbourhood (SEEN)', // Alternative name
   
   // Near East
   'Egypt': 'Near East',
   'Jordan': 'Near East',
   'Lebanon': 'Near East',
   'Palestine, State of': 'Near East',
-  'Palestine': 'Near East', // Alternative name
   'Syrian Arab Republic': 'Near East',
-  'Syria': 'Near East', // Alternative name
+ 
   
   // North Africa
   'Algeria': 'North Africa',

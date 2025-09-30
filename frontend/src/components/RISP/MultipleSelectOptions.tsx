@@ -13,7 +13,8 @@ interface MultipleSelectOptionsProps {
   onChange: (options: string[]) => void;
   country?: string; // Add country prop for admin levels fetching
   borderingCountry?: string; // New prop for bordering country
-  onBorderingCountryChange?: (country: string) => void; // New prop for handling bordering country changes
+  borderingCountryOptions?: string[]; // New prop for region-based bordering country dropdown
+  onBorderingCountryChange?: (countries: string[]) => void; // Now supports multiple
 }
 
 const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
@@ -24,6 +25,7 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   onChange,
   country,
   borderingCountry,
+  borderingCountryOptions = [],
   onBorderingCountryChange
 }) => {
   // Split initial selected options into regular options and admin levels
@@ -36,6 +38,10 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   const [selectedAdminLevels, setSelectedAdminLevels] = useState<string[]>(initialAdminLevels);
   const [otherInputValue, setOtherInputValue] = useState<string>('');
   const [adminLevels, setAdminLevels] = useState<AdminLevel[]>([]);
+  // Local state for bordering countries (array of strings)
+  const [selectedBorderingCountries, setSelectedBorderingCountries] = useState<string[]>(
+    borderingCountry ? borderingCountry.split(',').map(c => c.trim()) : []
+  );
 
   // Update local state when selectedOptions prop changes
   useEffect(() => {
@@ -43,10 +49,10 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
     const newAdminLevels = selectedOptions.filter(opt => 
       !multipleOptions.includes(opt) && opt !== 'Specify region'
     );
-    
     setSelectedOptionsLocal(newRegularOptions);
     setSelectedAdminLevels(newAdminLevels);
-  }, [selectedOptions, multipleOptions]);
+    setSelectedBorderingCountries(borderingCountry ? borderingCountry.split(',').map(c => c.trim()) : []);
+  }, [selectedOptions, multipleOptions, borderingCountry]);
 
   // Reset local state when modal opens to ensure proper syncing
   useEffect(() => {
@@ -136,25 +142,30 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   };
 
   const saveSelection = () => {
-    // Combine selected options, admin levels, and other input if needed
+    // Combine selected options, admin levels, bordering countries, and other input if needed
     let finalOptions: string[] = [];
-    
     if (selectedOptionsLocal.includes("Specify region")) {
-      // Get all selected values except "Specify region", then add selected admin levels
       finalOptions = [
         ...selectedOptionsLocal.filter(opt => opt !== "Specify region"),
         ...selectedAdminLevels
       ];
     } else if (includesOther() && otherInputValue.trim()) {
-      // If "Other" is selected, use only the other input value
       finalOptions = [otherInputValue.trim()];
     } else {
-      // Normal case - use selected options
       finalOptions = [...selectedOptionsLocal];
     }
-    
+    // If 'Within 50km from the border' is selected, add it to finalOptions
+    if (selectedOptionsLocal.includes('Within 50km from the border')) {
+      // Remove any previous 'Within 50km from the border' entries
+      finalOptions = finalOptions.filter(opt => opt !== 'Within 50km from the border');
+      finalOptions.push('Within 50km from the border');
+    }
+    // Save bordering countries as a comma-separated string
+    if (selectedOptionsLocal.includes('Within 50km from the border') && onBorderingCountryChange) {
+      onBorderingCountryChange(selectedBorderingCountries);
+    }
     onChange(finalOptions);
-    onClose(); // Close the modal after saving
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -221,15 +232,32 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
         {selectedOptionsLocal.includes('Within 50km from the border') && (
           <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Please specify the bordering country:
+              Please select bordering country/countries:
             </label>
-            <input
-              type="text"
-              value={borderingCountry || ''}
-              onChange={(e) => onBorderingCountryChange?.(e.target.value)}
-              placeholder="Enter bordering country name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            />
+            <div className="max-h-40 overflow-y-auto border border-gray-100 rounded p-2 bg-white">
+              {borderingCountryOptions.map(option => {
+                const checked = selectedBorderingCountries.includes(option);
+                return (
+                  <label key={option} className="flex items-center space-x-2 mb-1">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => {
+                        let updated = [...selectedBorderingCountries];
+                        if (e.target.checked) {
+                          updated.push(option);
+                        } else {
+                          updated = updated.filter(c => c !== option);
+                        }
+                        setSelectedBorderingCountries(updated);
+                      }}
+                      className="text-green-greenMain focus:ring-green-greenMain focus:border-green-greenMain"
+                    />
+                    <span className="text-sm text-gray-700">{option}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         )}
 
