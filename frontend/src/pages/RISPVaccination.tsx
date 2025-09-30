@@ -735,11 +735,11 @@ const RISPVaccination: React.FC = () => {
                 </table>
 
                 {/* Save/Update Campaign Button */}
-                <div className="flex justify-end">
+                <div className="flex justify-center mt-4">
                   <button
                     type="button"
                     onClick={() => updateCampaign(index)}
-                    className="text-xs px-3 py-2 bg-green-greenMain text-white rounded hover:bg-green-greenMain2 transition-colors"
+                    className="text-xs px-6 py-2 bg-green-greenMain text-white rounded hover:bg-green-greenMain2 transition-colors"
                   >
                     {campaign.id ? 'Update Campaign' : 'Save Campaign'}
                   </button>

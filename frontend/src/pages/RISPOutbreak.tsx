@@ -52,6 +52,7 @@ const RISPOutbreak: React.FC = () => {
   const [selectedQuarter, setSelectedQuarter] = useState<string>(previousPeriod.quarter);
   const [popoverVisible, setPopoverVisible] = useState<boolean>(false);
   const [popoverIndex, setPopoverIndex] = useState<number | null>(null);
+  const popoverHideTimeout = React.useRef<NodeJS.Timeout | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
@@ -107,12 +108,21 @@ const RISPOutbreak: React.FC = () => {
   );
 
   const showPopover = (index: number) => {
+    if (popoverHideTimeout.current) {
+      clearTimeout(popoverHideTimeout.current);
+      popoverHideTimeout.current = null;
+    }
     setPopoverIndex(index);
     setPopoverVisible(true);
   };
 
   const hidePopover = () => {
-    setPopoverVisible(false);
+    if (popoverHideTimeout.current) {
+      clearTimeout(popoverHideTimeout.current);
+    }
+    popoverHideTimeout.current = setTimeout(() => {
+      setPopoverVisible(false);
+    }, 150); // 150ms delay to allow mouse to move into popover
   };
 
   const isNoOutbreaks = (data: any) => {
@@ -508,7 +518,16 @@ const RISPOutbreak: React.FC = () => {
                             </button>
                           )}
                           {popoverVisible && popoverIndex === index && (
-                            <div className="absolute z-10 inline-block w-64 text-sm text-black transition-opacity duration-300 bg-white border border-gray-200 rounded-lg shadow-sm">
+                            <div
+                              className="absolute z-10 inline-block w-64 text-sm text-black transition-opacity duration-300 bg-white border border-gray-200 rounded-lg shadow-sm"
+                              onMouseEnter={() => {
+                                if (popoverHideTimeout.current) {
+                                  clearTimeout(popoverHideTimeout.current);
+                                  popoverHideTimeout.current = null;
+                                }
+                              }}
+                              onMouseLeave={hidePopover}
+                            >
                               <div className="p-3 space-y-2">
                                 <p className="text-neutral font-neutral">
                                   {tableData[index].description}
