@@ -3,7 +3,7 @@ import RispNavBar from '../components/RISP/RispNavBar';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { diseaseOptions } from '../services/risp/rispService';
 
 // Comprehensive safe parsing function
@@ -227,7 +227,7 @@ const RISPSummary: React.FC = () => {
         formatArrayData(outbreak.locations)
       ]);
       
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [['Disease', 'Number of Outbreaks', 'Species', 'Status', 'Locations']],
         body: outbreakRows,
         startY: yPosition,
@@ -251,7 +251,7 @@ const RISPSummary: React.FC = () => {
         surveillance.details || 'N/A'
       ]);
       
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [['Disease', 'Passive Surveillance', 'Active Surveillance', 'Details']],
         body: surveillanceRows,
         startY: yPosition,
@@ -276,7 +276,7 @@ const RISPSummary: React.FC = () => {
         String(vaccination[currentQuarter.toLowerCase()] || 0)
       ]);
       
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [['Disease', 'Vaccination Type', 'Species', 'Geographical Areas', `Animals Vaccinated (${currentQuarter})`]],
         body: vaccinationRows,
         startY: yPosition,
