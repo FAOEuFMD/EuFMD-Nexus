@@ -817,7 +817,7 @@ const RISPOutbreak: React.FC = () => {
               <button 
                 type="button" 
                 onClick={handleSubmit} 
-                className="w-1/4 nav-btn my-10"
+                className="nav-btn px-8 py-3"
                 disabled={saving}
               >
                 {saving ? 'Saving...' : 'Save & Proceed to Vaccination'}
