@@ -77,10 +77,10 @@ export const countryToRegion: { [key: string]: string } = {
 
 // Region center coordinates and zoom levels for static map view
 const regionSettings: { [key: string]: { center: [number, number], zoom: number } } = {
-  'South East European Neighbourhood (SEEN)': { center: [38.0, 50.0], zoom: 4 },
-  'Near East': { center: [32.0, 36.0], zoom: 5 },
-  'North Africa': { center: [28.0, 5.0], zoom: 4 },
-  'default': { center: [50, 20], zoom: 3 } // Fallback for unknown regions or no user
+  'South East European Neighbourhood (SEEN)': { center: [38.0, 55.0], zoom: 3 },
+  'Near East': { center: [30.0, 35.0], zoom: 3 },
+  'North Africa': { center: [30.0, 10.0], zoom: 3 },
+  'default': { center: [30, 25], zoom: 3 } // More centered view for Middle East/North Africa region
 };
 
 // Static country coordinates for major countries (same as FastReport)
@@ -125,18 +125,8 @@ const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredD
   const map = useMap();
   
   useEffect(() => {
-    if (filteredData.length > 0) {
-      const validCoords = filteredData
-        .map(item => countryCoordinates[item.Country])
-        .filter(coord => coord);
-      
-      if (validCoords.length > 0) {
-        const group = new L.FeatureGroup(validCoords.map(coord => L.marker(coord)));
-        map.fitBounds(group.getBounds().pad(0.1));
-      }
-    } else {
-      map.setView([50, 20], 3);
-    }
+    // Don't auto-zoom to data, maintain the region view
+    // This prevents the map from zooming in too much when there's limited data
   }, [map, filteredData]);
   
   return null;
@@ -543,6 +533,8 @@ const RISPLanding: React.FC = () => {
                 zoom={mapSettings.zoom}
                 scrollWheelZoom={true}
                 className="h-full w-full"
+                maxZoom={6}
+                minZoom={1}
                 style={{ 
                   position: 'relative',
                   zIndex: 1
@@ -782,6 +774,7 @@ const RISPLanding: React.FC = () => {
                 Overview
               </button>
               
+              {/* Temporarily commented out for deployment - can be re-enabled in the future
               <button 
                 onClick={() => setViewMode('outbreaks')}
                 className={`w-full font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center ${
@@ -823,6 +816,7 @@ const RISPLanding: React.FC = () => {
                 </svg>
                 Surveillance
               </button>
+              */}
             </div>
           </div>
         </div>
@@ -941,12 +935,6 @@ const RISPLanding: React.FC = () => {
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="font-semibold mb-3 text-gray-800">Summary Statistics {userRegion && `for ${userRegion}`}:</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-blue-50 rounded">
-                <div className="text-2xl font-bold text-blue-600">
-                  {filteredData.length}
-                </div>
-                <div className="text-sm text-gray-600">Total Reports</div>
-              </div>
               <div className="text-center p-3 bg-red-50 rounded">
                 <div className="text-2xl font-bold text-red-600">
                   {filteredData.reduce((sum, item) => sum + parseInt(item.Outbreaks || '0'), 0)}
@@ -955,15 +943,21 @@ const RISPLanding: React.FC = () => {
               </div>
               <div className="text-center p-3 bg-green-50 rounded">
                 <div className="text-2xl font-bold text-green-600">
-                  {Array.from(new Set(filteredData.map(item => item.Country))).length}
+                  {filteredData.filter(item => item.Vaccination === 1 || item.Vaccination === '1').length}
                 </div>
-                <div className="text-sm text-gray-600">Countries Affected</div>
+                <div className="text-sm text-gray-600">Vaccination Campaigns</div>
+              </div>
+              <div className="text-center p-3 bg-blue-50 rounded">
+                <div className="text-2xl font-bold text-blue-600">
+                  {filteredData.filter(item => item.Surveillance === 1 || item.Surveillance === '1').length}
+                </div>
+                <div className="text-sm text-gray-600">Surveillance Activities</div>
               </div>
               <div className="text-center p-3 bg-purple-50 rounded">
                 <div className="text-2xl font-bold text-purple-600">
-                  {Array.from(new Set(filteredData.map(item => item.Disease))).length}
+                  {Array.from(new Set(filteredData.map(item => item.Country))).length}
                 </div>
-                <div className="text-sm text-gray-600">Diseases Reported</div>
+                <div className="text-sm text-gray-600">Countries Affected</div>
               </div>
             </div>
           </div>
