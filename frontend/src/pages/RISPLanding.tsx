@@ -6,27 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '../stores/authStore';
 
-// Component to disable all map interactions
-const MapDisabler = () => {
-  const map = useMap();
-  
-  useEffect(() => {
-    // Disable all map interactions completely
-    map.off('click');
-    map.off('dblclick');
-    map.off('mousedown');
-    map.off('mouseup');
-    map.off('mousemove');
-    map.dragging.disable();
-    map.touchZoom.disable();
-    map.doubleClickZoom.disable();
-    map.scrollWheelZoom.disable();
-    map.boxZoom.disable();
-    map.keyboard.disable();
-  }, [map]);
-  
-  return null;
-};
+// MapDisabler removed to allow full map interaction
 
 // Import GeoJSON files - keeping for potential future use
 // import seenCountriesGeoJSON from '../data/geojson/seen-countries.json';
@@ -69,26 +49,23 @@ interface CountryCoordinates {
 type ViewModeType = 'default' | 'outbreaks' | 'vaccination' | 'surveillance';
 
 // Region mapping for countries
-const countryToRegion: { [key: string]: string } = {
+export const countryToRegion: { [key: string]: string } = {
   // South East European Neighbourhood (SEEN)
   'Armenia': 'South East European Neighbourhood (SEEN)',
   'Azerbaijan': 'South East European Neighbourhood (SEEN)',
   'Georgia': 'South East European Neighbourhood (SEEN)',
   'Iran (Islamic Republic of)': 'South East European Neighbourhood (SEEN)',
-  'Iran': 'South East European Neighbourhood (SEEN)', // Alternative name
   'Iraq': 'South East European Neighbourhood (SEEN)',
   'Pakistan': 'South East European Neighbourhood (SEEN)',
   'Türkiye': 'South East European Neighbourhood (SEEN)',
-  'Turkey': 'South East European Neighbourhood (SEEN)', // Alternative name
   
   // Near East
   'Egypt': 'Near East',
   'Jordan': 'Near East',
   'Lebanon': 'Near East',
   'Palestine, State of': 'Near East',
-  'Palestine': 'Near East', // Alternative name
   'Syrian Arab Republic': 'Near East',
-  'Syria': 'Near East', // Alternative name
+ 
   
   // North Africa
   'Algeria': 'North Africa',
@@ -100,10 +77,10 @@ const countryToRegion: { [key: string]: string } = {
 
 // Region center coordinates and zoom levels for static map view
 const regionSettings: { [key: string]: { center: [number, number], zoom: number } } = {
-  'South East European Neighbourhood (SEEN)': { center: [38.0, 50.0], zoom: 4 },
-  'Near East': { center: [32.0, 36.0], zoom: 5 },
-  'North Africa': { center: [28.0, 5.0], zoom: 4 },
-  'default': { center: [50, 20], zoom: 3 } // Fallback for unknown regions or no user
+  'South East European Neighbourhood (SEEN)': { center: [38.0, 55.0], zoom: 3 },
+  'Near East': { center: [30.0, 35.0], zoom: 3 },
+  'North Africa': { center: [30.0, 10.0], zoom: 3 },
+  'default': { center: [30, 25], zoom: 3 } // More centered view for Middle East/North Africa region
 };
 
 // Static country coordinates for major countries (same as FastReport)
@@ -148,18 +125,8 @@ const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredD
   const map = useMap();
   
   useEffect(() => {
-    if (filteredData.length > 0) {
-      const validCoords = filteredData
-        .map(item => countryCoordinates[item.Country])
-        .filter(coord => coord);
-      
-      if (validCoords.length > 0) {
-        const group = new L.FeatureGroup(validCoords.map(coord => L.marker(coord)));
-        map.fitBounds(group.getBounds().pad(0.1));
-      }
-    } else {
-      map.setView([50, 20], 3);
-    }
+    // Don't auto-zoom to data, maintain the region view
+    // This prevents the map from zooming in too much when there's limited data
   }, [map, filteredData]);
   
   return null;
@@ -221,39 +188,35 @@ const RISPLanding: React.FC = () => {
     return diseases;
   }, [data]);
 
-  // Get most recent quarter data for each country
+
+  // Find the most recent year and quarter in the data (for all visualizations)
+  const { mostRecentYear, mostRecentQuarter } = useMemo(() => {
+    if (!data.length) {
+      const now = new Date();
+      return {
+        mostRecentYear: now.getFullYear(),
+        mostRecentQuarter: Math.ceil((now.getMonth() + 1) / 3)
+      };
+    }
+    // Sort descending by year, then quarter
+    const sorted = [...data].sort((a, b) => {
+      if (a.Year !== b.Year) return b.Year - a.Year;
+      return b.Quarter - a.Quarter;
+    });
+    return {
+      mostRecentYear: sorted[0].Year,
+      mostRecentQuarter: sorted[0].Quarter
+    };
+  }, [data]);
+
+  // Only use data from the most recent quarter for all visualizations
+  const lastQuarterData = useMemo(() => {
+    return data.filter(item => item.Year === mostRecentYear && item.Quarter === mostRecentQuarter && (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country)));
+  }, [data, mostRecentYear, mostRecentQuarter, userRegionCountries]);
+
+  // Group last quarter data by country for info boxes
   const mostRecentQuarterData = useMemo(() => {
-    console.log('Total data items:', data.length);
-    console.log('Countries in data:', Array.from(new Set(data.map(item => item.Country))));
-    
-    // Find the most recent year and quarter combination
-    const sortedData = data
-      .filter(item => {
-        const isIncluded = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
-        if (!isIncluded && userRegionCountries.length > 0) {
-          console.log('Excluding country:', item.Country, 'User region countries:', userRegionCountries);
-        }
-        return isIncluded;
-      })
-      .sort((a, b) => {
-        if (a.Year !== b.Year) return (b.Year || 0) - (a.Year || 0);
-        return (b.Quarter || 0) - (a.Quarter || 0);
-      });
-    
-    console.log('Filtered data after region filter:', sortedData.length);
-    
-    const mostRecentYear = sortedData.length > 0 ? sortedData[0].Year : new Date().getFullYear();
-    const mostRecentQuarter = sortedData.length > 0 ? sortedData[0].Quarter : Math.ceil((new Date().getMonth() + 1) / 3);
-    
-    // Get all data from the most recent quarter and group by country
-    const recentData = data.filter(item => 
-      item.Year === mostRecentYear && 
-      item.Quarter === mostRecentQuarter &&
-      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
-    );
-    
-    // Group by country and aggregate the data
-    const countryDataWithReports = recentData.reduce((acc, item) => {
+    const countryDataWithReports = lastQuarterData.reduce((acc, item) => {
       const country = item.Country;
       if (!acc[country]) {
         acc[country] = {
@@ -270,32 +233,25 @@ const RISPLanding: React.FC = () => {
           lastReported: `Q${mostRecentQuarter} ${mostRecentYear}`
         };
       }
-      
       const outbreaks = parseInt(String(item.Outbreaks || 0), 10) || 0;
       if (outbreaks > 0) {
         acc[country].totalOutbreaks += outbreaks;
       }
-      
       if (item.Disease && !acc[country].diseases.includes(item.Disease)) {
         acc[country].diseases.push(item.Disease);
       }
-      
       acc[country].reports.push(item);
-      
-      // Categorize reports based on flags
       if (outbreaks > 0) {
         acc[country].outbreakReports.push(item);
       }
-      if (item.Vaccination === 1) {
+      if (item.Vaccination === 1 || item.Vaccination === '1') {
         acc[country].vaccinationReports.push(item);
       }
-      if (item.Surveillance === 1) {
+      if (item.Surveillance === 1 || item.Surveillance === '1') {
         acc[country].surveillanceReports.push(item);
       }
-      
       return acc;
     }, {} as Record<string, any>);
-    
     // Add countries with no data for the most recent quarter
     const allCountryData = userRegionCountries.map(country => {
       if (countryDataWithReports[country]) {
@@ -314,71 +270,34 @@ const RISPLanding: React.FC = () => {
         };
       }
     });
-    
     return allCountryData;
-  }, [data, userRegionCountries]);
+  }, [lastQuarterData, userRegionCountries, mostRecentYear, mostRecentQuarter]);
 
-  // Filter data based on user's region countries and selected filters
-  const filteredData = useMemo(() => {
-    return data.filter(item => {
-      // Filter by user's region countries (automatic, not visible to user)
-      const regionMatch = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
-      const yearMatch = selectedYear === 'all' || item.Year?.toString() === selectedYear;
-      const quarterMatch = selectedQuarter === 'all' || item.Quarter?.toString() === selectedQuarter;
-      const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
-      return regionMatch && yearMatch && quarterMatch && diseaseMatch;
-    });
-  }, [data, userRegionCountries, selectedYear, selectedQuarter, selectedDisease]);
+  // For all map and info visualizations, use only lastQuarterData
+
+  // Only last quarter data for all map/info visualizations
+  const filteredData = useMemo(() => lastQuarterData, [lastQuarterData]);
   
-  // Data to use for markers - only include entries with actual outbreaks
+  // Data to use for markers - only include entries with actual outbreaks (last quarter only)
   const markerData = useMemo(() => {
-    return filteredData.filter(item => {
+    return lastQuarterData.filter(item => {
       if (!item.Outbreaks) return false;
       const outbreaksStr = String(item.Outbreaks).trim();
       if (outbreaksStr === '' || outbreaksStr === '0' || outbreaksStr.toLowerCase() === 'null') return false;
       const outbreaksNum = parseInt(outbreaksStr, 10);
       return !isNaN(outbreaksNum) && outbreaksNum > 0;
     });
-  }, [filteredData]);
+  }, [lastQuarterData]);
 
-  // Filtered vaccination data by region, year, quarter, and disease (from main data where Vaccination=1)
+  // Only last quarter vaccination data
   const filteredVaccinationData = useMemo(() => {
-    const filtered = data.filter(item => {
-      const regionMatch = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
-      const yearMatch = selectedYear === 'all' || item.Year.toString() === selectedYear;
-      const quarterMatch = selectedQuarter === 'all' || item.Quarter.toString() === selectedQuarter;
-      const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
-      const hasVaccination = item.Vaccination === 1 || item.Vaccination === '1';
-      
-      return regionMatch && yearMatch && quarterMatch && diseaseMatch && hasVaccination;
-    });
-    
-    console.log("Filtered vaccination data:", filtered.length, "records");
-    if (filtered.length === 0) {
-      console.log("No vaccination data found. Checking filters:");
-      console.log("- Data with Vaccination=1:", data.filter(item => item.Vaccination === 1).length);
-      console.log("- Data with Vaccination='1':", data.filter(item => item.Vaccination === '1').length);
-      console.log("- Selected year:", selectedYear);
-      console.log("- Selected quarter:", selectedQuarter);
-      console.log("- Selected disease:", selectedDisease);
-      console.log("- User region countries:", userRegionCountries);
-    }
-    
-    return filtered;
-  }, [data, userRegionCountries, selectedYear, selectedQuarter, selectedDisease]);
+    return lastQuarterData.filter(item => (item.Vaccination === 1 || item.Vaccination === '1'));
+  }, [lastQuarterData]);
 
-  // Filtered surveillance data by region, year, quarter, and disease (from main data where Surveillance=1)
+  // Only last quarter surveillance data
   const filteredSurveillanceData = useMemo(() => {
-    return data.filter(item => {
-      const regionMatch = userRegionCountries.length === 0 || userRegionCountries.includes(item.Country);
-      const yearMatch = selectedYear === 'all' || item.Year.toString() === selectedYear;
-      const quarterMatch = selectedQuarter === 'all' || item.Quarter.toString() === selectedQuarter;
-      const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
-      const hasSurveillance = item.Surveillance === 1 || item.Surveillance === '1';
-      
-      return regionMatch && yearMatch && quarterMatch && diseaseMatch && hasSurveillance;
-    });
-  }, [data, userRegionCountries, selectedYear, selectedQuarter, selectedDisease]);
+    return lastQuarterData.filter(item => (item.Surveillance === 1 || item.Surveillance === '1'));
+  }, [lastQuarterData]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -503,7 +422,15 @@ const RISPLanding: React.FC = () => {
         </div>
         
         {/* Share Information Button - Moved to the right */}
-        <div className="flex justify-end">
+        <div className="flex justify-end space-x-2">
+          <a
+            href="/RISP_Template.xlsx"
+            download
+            className="nav-btn"
+            style={{ textDecoration: 'none', display: 'inline-block' }}
+          >
+            Download Template
+          </a>
           <Link to="/risp/outbreak">
             <button className="nav-btn">Share Information</button>
           </Link>
@@ -604,15 +531,10 @@ const RISPLanding: React.FC = () => {
               <MapContainer
                 center={mapSettings.center}
                 zoom={mapSettings.zoom}
-                scrollWheelZoom={false}
+                scrollWheelZoom={true}
                 className="h-full w-full"
-                zoomControl={false}
-                doubleClickZoom={false}
-                touchZoom={false}
-                dragging={false}
-                boxZoom={false}
-                keyboard={false}
-                bounceAtZoomLimits={false}
+                maxZoom={6}
+                minZoom={1}
                 style={{ 
                   position: 'relative',
                   zIndex: 1
@@ -624,8 +546,7 @@ const RISPLanding: React.FC = () => {
                   maxZoom={18}
                 />
                 
-                {/* Component to disable all map interactions */}
-                <MapDisabler />
+
                 
                 {/* Show different content based on view mode */}
                 {viewMode === 'outbreaks' && (
@@ -853,6 +774,7 @@ const RISPLanding: React.FC = () => {
                 Overview
               </button>
               
+              {/* Temporarily commented out for deployment - can be re-enabled in the future
               <button 
                 onClick={() => setViewMode('outbreaks')}
                 className={`w-full font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center ${
@@ -894,6 +816,7 @@ const RISPLanding: React.FC = () => {
                 </svg>
                 Surveillance
               </button>
+              */}
             </div>
           </div>
         </div>
@@ -1012,12 +935,6 @@ const RISPLanding: React.FC = () => {
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="font-semibold mb-3 text-gray-800">Summary Statistics {userRegion && `for ${userRegion}`}:</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-blue-50 rounded">
-                <div className="text-2xl font-bold text-blue-600">
-                  {filteredData.length}
-                </div>
-                <div className="text-sm text-gray-600">Total Reports</div>
-              </div>
               <div className="text-center p-3 bg-red-50 rounded">
                 <div className="text-2xl font-bold text-red-600">
                   {filteredData.reduce((sum, item) => sum + parseInt(item.Outbreaks || '0'), 0)}
@@ -1026,15 +943,21 @@ const RISPLanding: React.FC = () => {
               </div>
               <div className="text-center p-3 bg-green-50 rounded">
                 <div className="text-2xl font-bold text-green-600">
-                  {Array.from(new Set(filteredData.map(item => item.Country))).length}
+                  {filteredData.filter(item => item.Vaccination === 1 || item.Vaccination === '1').length}
                 </div>
-                <div className="text-sm text-gray-600">Countries Affected</div>
+                <div className="text-sm text-gray-600">Vaccination Campaigns</div>
+              </div>
+              <div className="text-center p-3 bg-blue-50 rounded">
+                <div className="text-2xl font-bold text-blue-600">
+                  {filteredData.filter(item => item.Surveillance === 1 || item.Surveillance === '1').length}
+                </div>
+                <div className="text-sm text-gray-600">Surveillance Activities</div>
               </div>
               <div className="text-center p-3 bg-purple-50 rounded">
                 <div className="text-2xl font-bold text-purple-600">
-                  {Array.from(new Set(filteredData.map(item => item.Disease))).length}
+                  {Array.from(new Set(filteredData.map(item => item.Country))).length}
                 </div>
-                <div className="text-sm text-gray-600">Diseases Reported</div>
+                <div className="text-sm text-gray-600">Countries Affected</div>
               </div>
             </div>
           </div>

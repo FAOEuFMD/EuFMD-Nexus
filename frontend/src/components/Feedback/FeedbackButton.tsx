@@ -61,7 +61,7 @@ const FeedbackButton: React.FC<FeedbackButtonProps> = ({ className = '' }) => {
   return (
     <>
       {/* Feedback Button */}
-      <div className={`fixed top-16 right-6 z-40 ${className}`}>
+  <div className={`absolute top-18 right-6 z-40 ${className}`} style={{ position: 'absolute', top: '4.5rem', right: '1.5rem' }}>
         <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3">
           <div className="text-sm text-gray-600 mb-2 text-center">How was your experience?</div>
           <div className="flex gap-2">

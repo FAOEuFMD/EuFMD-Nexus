@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RispNavBar from '../components/RISP/RispNavBar';
 import QuarterSelection from '../components/RISP/QuarterSelection';
@@ -13,12 +13,27 @@ import {
   locationOptions,
   rispService 
 } from '../services/risp/rispService';
+// Import countryToRegion mapping from RISPLanding
+import { countryToRegion } from './RISPLanding';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 
 const RISPOutbreak: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+
+  // Compute user's region and region countries
+  const userRegion = useMemo(() => {
+    if (!user?.country) return null;
+    return countryToRegion[user.country] || null;
+  }, [user?.country]);
+
+  const userRegionCountries = useMemo(() => {
+    if (!userRegion) return [];
+    return Object.keys(countryToRegion).filter(
+      (country) => countryToRegion[country] === userRegion
+    );
+  }, [userRegion]);
   
   // Generate years for dropdown (current year and 3 previous years)
   const currentYear = new Date().getFullYear();
@@ -52,6 +67,7 @@ const RISPOutbreak: React.FC = () => {
   const [selectedQuarter, setSelectedQuarter] = useState<string>(previousPeriod.quarter);
   const [popoverVisible, setPopoverVisible] = useState<boolean>(false);
   const [popoverIndex, setPopoverIndex] = useState<number | null>(null);
+  const popoverHideTimeout = React.useRef<NodeJS.Timeout | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
@@ -107,12 +123,21 @@ const RISPOutbreak: React.FC = () => {
   );
 
   const showPopover = (index: number) => {
+    if (popoverHideTimeout.current) {
+      clearTimeout(popoverHideTimeout.current);
+      popoverHideTimeout.current = null;
+    }
     setPopoverIndex(index);
     setPopoverVisible(true);
   };
 
   const hidePopover = () => {
-    setPopoverVisible(false);
+    if (popoverHideTimeout.current) {
+      clearTimeout(popoverHideTimeout.current);
+    }
+    popoverHideTimeout.current = setTimeout(() => {
+      setPopoverVisible(false);
+    }, 150); // 150ms delay to allow mouse to move into popover
   };
 
   const isNoOutbreaks = (data: any) => {
@@ -250,16 +275,15 @@ const RISPOutbreak: React.FC = () => {
     });
   };
 
-  // Helper function to handle bordering country input
-  const handleBorderingCountryChange = (index: number, country: string) => {
+
+  // Helper for bordering country change (now supports multiple)
+  const handleBorderingCountryChange = (index: number, countries: string[]) => {
     setDiseases(prevDiseases => {
       const newDiseases = [...prevDiseases];
       const disease = newDiseases[index];
-      
       if (disease) {
-        disease.outbreakData.borderingCountry = country;
+        disease.outbreakData.borderingCountry = countries.join(', ');
       }
-      
       return newDiseases;
     });
   };
@@ -275,7 +299,8 @@ const RISPOutbreak: React.FC = () => {
     });
   };
 
-  // Helper function to format locations for display
+
+  // Helper function to format locations for display (now supports multiple bordering countries)
   const formatLocationsForDisplay = (rawLocations: string[], borderingCountry: string): string[] => {
     return rawLocations.map(location => {
       if (location === 'Within 50km from the border' && borderingCountry && borderingCountry.trim()) {
@@ -508,7 +533,16 @@ const RISPOutbreak: React.FC = () => {
                             </button>
                           )}
                           {popoverVisible && popoverIndex === index && (
-                            <div className="absolute z-10 inline-block w-64 text-sm text-black transition-opacity duration-300 bg-white border border-gray-200 rounded-lg shadow-sm">
+                            <div
+                              className="absolute z-10 inline-block w-64 text-sm text-black transition-opacity duration-300 bg-white border border-gray-200 rounded-lg shadow-sm"
+                              onMouseEnter={() => {
+                                if (popoverHideTimeout.current) {
+                                  clearTimeout(popoverHideTimeout.current);
+                                  popoverHideTimeout.current = null;
+                                }
+                              }}
+                              onMouseLeave={hidePopover}
+                            >
                               <div className="p-3 space-y-2">
                                 <p className="text-neutral font-neutral">
                                   {tableData[index].description}
@@ -749,7 +783,9 @@ const RISPOutbreak: React.FC = () => {
                           onChange={(selected) => handleLocationChange(index, selected)}
                           country={user?.country}
                           borderingCountry={disease.outbreakData.borderingCountry}
-                          onBorderingCountryChange={(country) => handleBorderingCountryChange(index, country)}
+                          // Pass region countries for bordering country dropdown
+                          borderingCountryOptions={userRegionCountries}
+                          onBorderingCountryChange={(countries) => handleBorderingCountryChange(index, countries)}
                         />
                       </td>
 

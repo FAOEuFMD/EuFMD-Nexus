@@ -41,6 +41,7 @@ const RISPVaccination: React.FC = () => {
   const [userCountry, setUserCountry] = useState('');
   const [dropdowns, setDropdowns] = useState<Record<number, Record<string, boolean>>>({});
   const [tooltipOpen, setTooltipOpen] = useState<Record<number, boolean>>({});
+  const [coverageTooltipOpen, setCoverageTooltipOpen] = useState(false);
   const [q1TooltipOpen, setQ1TooltipOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -418,11 +419,9 @@ const RISPVaccination: React.FC = () => {
   return (
     <div>
       <RispNavBar />
-      <p className="font-bold capitalize text-2xl m-3">
-        Vaccination
-      </p>
-      <p className="text-lg m-3">
-        Please complete the table below to describe vaccination activities on going or recently performed in the country for the FAST diseases:
+      <h1 className="text-2xl font-bold text-center mb-2">Vaccination Campaigns</h1>
+      <p className="text-left text-gray-600 mb-4">
+        Hereunder you can find the information from the past vaccination campaigns. Please update the information from previous campaigns when relevant (for example, if new information are available, you can modify the data from the previous quarter to update it or add information for the current quarter for an ongoing vaccination campaign), or use the “add vaccination” button. Please note that one vaccination table should be use per vaccination strategy (e.g. if mass vaccination performed for cattle, and risk-based strategy used for small ruminants).
       </p>
 
       {/* Main Content */}
@@ -460,17 +459,17 @@ const RISPVaccination: React.FC = () => {
                             </svg>
                           </button>
                           {tooltipOpen[index] && (
-                            <div className="absolute z-50 w-64 bg-white rounded-lg shadow-lg border border-gray-200 text-left p-3 text-black right-0 top-full mt-2">
+                            <div className="absolute z-50 w-64 max-w-xs bg-white rounded-lg shadow-lg border border-gray-200 text-left p-3 text-black right-0 top-full mt-2 break-words whitespace-normal">
                               <div className="space-y-2 text-xs">
-                                <p>
+                                <p className="break-words whitespace-normal">
                                   <span className="font-medium">Mass vaccination:</span><br />
                                   <span className="text-gray-600">Vaccinations in entire country/zone (also if only one species vaccinated)</span>
                                 </p>
-                                <p>
+                                <p className="break-words whitespace-normal">
                                   <span className="font-medium">Risk-based vaccination:</span><br />
                                   <span className="text-gray-600">Only sub-populations are vaccinated, e.g. in specific area, before movement, high value populations.</span>
                                 </p>
-                                <p>
+                                <p className="break-words whitespace-normal">
                                   <span className="font-medium">Ring vaccination:</span><br />
                                   <span className="text-gray-600">Around outbreak areas</span>
                                 </p>
@@ -601,7 +600,39 @@ const RISPVaccination: React.FC = () => {
                       <th className="py-3 border border-white w-32">Q3</th>
                       <th className="py-3 border border-white w-32">Q4</th>
                       <th className="py-3 border border-white w-32">Total</th>
-                      <th className="py-3 border border-white w-32">Coverage (%)</th>
+                      <th className="py-3 border border-white w-32 relative">
+                        <div
+                          className="flex items-center justify-center gap-1"
+                          onMouseEnter={() => setCoverageTooltipOpen(true)}
+                          onMouseLeave={() => setCoverageTooltipOpen(false)}
+                        >
+                          Coverage (%)
+                          <button
+                            type="button"
+                            className="inline-flex items-center hover:opacity-80 transition-opacity"
+                            tabIndex={-1}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              height="20px"
+                              viewBox="0 -960 960 960"
+                              width="20px"
+                              fill="currentColor"
+                            >
+                              <path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"/>
+                            </svg>
+                          </button>
+                          {coverageTooltipOpen && (
+                            <div className="absolute z-50 w-64 max-w-xs bg-white rounded-lg shadow-lg border border-gray-200 text-left p-3 text-black right-0 top-full mt-2 break-words whitespace-normal">
+                              <div className="space-y-2 text-xs">
+                                <p className="break-words whitespace-normal">
+                                  Number of animals vaccinated / number of eligible animals. Estimations are possible.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </th>
                       <th className="py-3 border border-white min-w-[300px]">Vaccine Details</th>
                     </tr>
                   </thead>
@@ -704,11 +735,11 @@ const RISPVaccination: React.FC = () => {
                 </table>
 
                 {/* Save/Update Campaign Button */}
-                <div className="flex justify-end">
+                <div className="flex justify-center mt-4">
                   <button
                     type="button"
                     onClick={() => updateCampaign(index)}
-                    className="text-xs px-3 py-2 bg-green-greenMain text-white rounded hover:bg-green-greenMain2 transition-colors"
+                    className="text-xs px-6 py-2 bg-green-greenMain text-white rounded hover:bg-green-greenMain2 transition-colors"
                   >
                     {campaign.id ? 'Update Campaign' : 'Save Campaign'}
                   </button>

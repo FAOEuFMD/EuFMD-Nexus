@@ -15,14 +15,13 @@ const getDiseaseKey = (diseaseName: string): string => {
   return diseaseName.toLowerCase().replace(/[^a-z]/g, '');
 };
 
-// Helper function to get display name from disease name
+// Utility to get full display name from diseaseOptions
 const getDiseaseDisplayName = (diseaseName: string): string => {
-  if (diseaseName.includes('FMD')) return 'FMD';
-  if (diseaseName.includes('LSD')) return 'LSD';
-  if (diseaseName.includes('PPR')) return 'PPR';
-  if (diseaseName.includes('SPGP')) return 'SPGP';
-  if (diseaseName.includes('RVF')) return 'RVF';
-  return diseaseName;
+  const found = diseaseOptions.find(opt =>
+    diseaseName && (diseaseName.toLowerCase().includes(opt.name.split(' - ')[1]?.toLowerCase() || '') ||
+    opt.name.toLowerCase().includes(diseaseName.toLowerCase()))
+  );
+  return found ? found.name : diseaseName;
 };
 
 // Create initial state objects based on diseaseOptions
@@ -37,13 +36,15 @@ const createInitialPassiveState = () => {
 const createInitialActiveState = () => {
   const state: Record<string, any> = {};
   diseaseOptions.forEach(disease => {
-    state[getDiseaseKey(disease.name)] = { 
-      none: false, 
-      clinical: false, 
-      virological: false, 
+    const key = getDiseaseKey(disease.name);
+    state[key] = {
+      none: false,
+      clinical: false,
+      virological: false,
       serological: false,
       syndromic: false,
-      other: false
+      other: false,
+      entomological: false // Add entomological for all, but only show for LSD and RVF
     };
   });
   return state;
@@ -106,45 +107,30 @@ const RISPSurveillance: React.FC = () => {
     }));
   };
 
-  const handleNoneChange = (disease: string) => {
+  // Update handleOptionChange to always allow toggling any option, and untick 'none' if any other is selected
+  const handleOptionChange = (diseaseKey: string, option: string) => {
     setActiveSurveillance(prev => {
-      const newState = { ...prev };
-      const newDiseaseState = { ...newState[disease] };
-      
-      if (!newDiseaseState.none) {
-        // If checking 'none', uncheck all other options
-        newDiseaseState.none = true;
-        newDiseaseState.clinical = false;
-        newDiseaseState.virological = false;
-        newDiseaseState.serological = false;
-        newDiseaseState.syndromic = false;
-        newDiseaseState.other = false;
+      const newDiseaseState = { ...prev[diseaseKey] };
+      if (option === 'none') {
+        // If selecting 'none', untick all others
+        newDiseaseState['none'] = !newDiseaseState['none'];
+        if (newDiseaseState['none']) {
+          Object.keys(newDiseaseState).forEach(opt => {
+            if (opt !== 'none') newDiseaseState[opt] = false;
+          });
+        }
       } else {
-        // If unchecking 'none'
-        newDiseaseState.none = false;
+        // If selecting any other, untick 'none' and toggle the selected option
+        newDiseaseState[option] = !newDiseaseState[option];
+        newDiseaseState['none'] = false;
       }
-      
-      newState[disease] = newDiseaseState;
-      return newState;
+      return { ...prev, [diseaseKey]: newDiseaseState };
     });
   };
 
-  const handleOptionChange = (disease: string, option: string) => {
-    setActiveSurveillance(prev => {
-      const newState = { ...prev };
-      const newDiseaseState = { ...newState[disease] };
-      
-      // Toggle the option
-      newDiseaseState[option] = !newDiseaseState[option];
-      
-      // If any option is checked, uncheck 'none'
-      if (newDiseaseState[option]) {
-        newDiseaseState.none = false;
-      }
-      
-      newState[disease] = newDiseaseState;
-      return newState;
-    });
+  // Update handleNoneChange to use handleOptionChange for consistency
+  const handleNoneChange = (diseaseKey: string) => {
+    handleOptionChange(diseaseKey, 'none');
   };
 
   const handleDetailsChange = (disease: string, value: string) => {
@@ -336,7 +322,7 @@ const RISPSurveillance: React.FC = () => {
               {diseaseOptions.map((disease, index) => {
                 const diseaseKey = getDiseaseKey(disease.name);
                 const displayName = getDiseaseDisplayName(disease.name);
-                
+                const showEntomological = displayName.includes('Lumpy Skin Disease') || displayName.includes('Rift Valley Fever');
                 return (
                   <tr key={disease.id} className="hover:bg-gray-50">
                     <td className="p-4" style={{ width: '170px' }}>
@@ -383,7 +369,6 @@ const RISPSurveillance: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={activeSurveillance[diseaseKey]?.clinical || false}
-                            disabled={activeSurveillance[diseaseKey]?.none || false}
                             onChange={() => handleOptionChange(diseaseKey, 'clinical')}
                             className="h-4 w-4 rounded border-gray-300 green-checkbox"
                           />
@@ -393,7 +378,6 @@ const RISPSurveillance: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={activeSurveillance[diseaseKey]?.virological || false}
-                            disabled={activeSurveillance[diseaseKey]?.none || false}
                             onChange={() => handleOptionChange(diseaseKey, 'virological')}
                             className="h-4 w-4 rounded border-gray-300 green-checkbox"
                           />
@@ -403,7 +387,6 @@ const RISPSurveillance: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={activeSurveillance[diseaseKey]?.serological || false}
-                            disabled={activeSurveillance[diseaseKey]?.none || false}
                             onChange={() => handleOptionChange(diseaseKey, 'serological')}
                             className="h-4 w-4 rounded border-gray-300 green-checkbox"
                           />
@@ -413,7 +396,6 @@ const RISPSurveillance: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={activeSurveillance[diseaseKey]?.syndromic || false}
-                            disabled={activeSurveillance[diseaseKey]?.none || false}
                             onChange={() => handleOptionChange(diseaseKey, 'syndromic')}
                             className="h-4 w-4 rounded border-gray-300 green-checkbox"
                           />
@@ -423,12 +405,22 @@ const RISPSurveillance: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={activeSurveillance[diseaseKey]?.other || false}
-                            disabled={activeSurveillance[diseaseKey]?.none || false}
                             onChange={() => handleOptionChange(diseaseKey, 'other')}
                             className="h-4 w-4 rounded border-gray-300 green-checkbox"
                           />
                           <span className="ml-2">Other</span>
                         </label>
+                        {showEntomological && (
+                          <label className="inline-flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={activeSurveillance[diseaseKey]?.entomological || false}
+                              onChange={() => handleOptionChange(diseaseKey, 'entomological')}
+                              className="h-4 w-4 rounded border-gray-300 green-checkbox"
+                            />
+                            <span className="ml-2">Entomological</span>
+                          </label>
+                        )}
                       </div>
                     </td>
                     <td className="p-2">
