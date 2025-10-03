@@ -40,9 +40,8 @@ const RISPVaccination: React.FC = () => {
   const [campaigns, setCampaigns] = useState<VaccinationCampaign[]>([]);
   const [userCountry, setUserCountry] = useState('');
   const [dropdowns, setDropdowns] = useState<Record<number, Record<string, boolean>>>({});
-  const [tooltipOpen, setTooltipOpen] = useState<Record<number, boolean>>({});
-  const [coverageTooltipOpen, setCoverageTooltipOpen] = useState(false);
-  const [q1TooltipOpen, setQ1TooltipOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState<Record<string, boolean>>({});
+  // All tooltips are now managed in the tooltipOpen state
   const [loading, setLoading] = useState(false);
 
   // Location options - specific for vaccination (only National and Specify region)
@@ -440,8 +439,8 @@ const RISPVaccination: React.FC = () => {
                       <th className="py-3 border border-white min-w-[180px] relative">
                         <div 
                           className="flex items-center justify-center gap-1"
-                          onMouseEnter={() => setTooltipOpen({...tooltipOpen, [index]: true})}
-                          onMouseLeave={() => setTooltipOpen({...tooltipOpen, [index]: false})}
+                          onMouseEnter={() => setTooltipOpen(prev => ({...prev, [`strategy-${index}`]: true}))}
+                          onMouseLeave={() => setTooltipOpen(prev => ({...prev, [`strategy-${index}`]: false}))}
                         >
                           Strategy
                           <button
@@ -458,7 +457,7 @@ const RISPVaccination: React.FC = () => {
                               <path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"/>
                             </svg>
                           </button>
-                          {tooltipOpen[index] && (
+                          {tooltipOpen[`strategy-${index}`] && (
                             <div className="absolute z-50 w-64 max-w-xs bg-white rounded-lg shadow-lg border border-gray-200 text-left p-3 text-black right-0 top-full mt-2 break-words whitespace-normal">
                               <div className="space-y-2 text-xs">
                                 <p className="break-words whitespace-normal">
@@ -569,8 +568,8 @@ const RISPVaccination: React.FC = () => {
                       <th className="py-3 border border-white w-32 relative">
                         <div 
                           className="flex items-center justify-center gap-1"
-                          onMouseEnter={() => setQ1TooltipOpen(true)}
-                          onMouseLeave={() => setQ1TooltipOpen(false)}
+                          onMouseEnter={() => setTooltipOpen(prev => ({...prev, [`q1-${index}`]: true}))}
+                          onMouseLeave={() => setTooltipOpen(prev => ({...prev, [`q1-${index}`]: false}))}
                         >
                           Q1
                           <button
@@ -587,7 +586,7 @@ const RISPVaccination: React.FC = () => {
                               <path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"/>
                             </svg>
                           </button>
-                          {q1TooltipOpen && (
+                          {tooltipOpen[`q1-${index}`] && (
                             <div className="absolute z-50 w-48 bg-white rounded-lg shadow-lg border border-gray-200 text-left p-2 text-black left-1/2 transform -translate-x-1/2 top-full mt-1">
                               <p className="text-xs text-gray-700">
                                 Add number of animals<br />vaccinated in each quarter
@@ -603,8 +602,8 @@ const RISPVaccination: React.FC = () => {
                       <th className="py-3 border border-white w-32 relative">
                         <div
                           className="flex items-center justify-center gap-1"
-                          onMouseEnter={() => setCoverageTooltipOpen(true)}
-                          onMouseLeave={() => setCoverageTooltipOpen(false)}
+                          onMouseEnter={() => setTooltipOpen(prev => ({...prev, [`coverage-${index}`]: true}))}
+                          onMouseLeave={() => setTooltipOpen(prev => ({...prev, [`coverage-${index}`]: false}))}
                         >
                           Coverage (%)
                           <button
@@ -622,7 +621,7 @@ const RISPVaccination: React.FC = () => {
                               <path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Z"/>
                             </svg>
                           </button>
-                          {coverageTooltipOpen && (
+                          {tooltipOpen[`coverage-${index}`] && (
                             <div className="absolute z-50 w-64 max-w-xs bg-white rounded-lg shadow-lg border border-gray-200 text-left p-3 text-black right-0 top-full mt-2 break-words whitespace-normal">
                               <div className="space-y-2 text-xs">
                                 <p className="break-words whitespace-normal">
