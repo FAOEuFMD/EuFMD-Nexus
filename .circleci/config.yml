@@ -55,12 +55,19 @@ jobs:
             echo "Setting API URL for production build..."
             export REACT_APP_API_URL="http://nexus.eufmd-tom.com"
             npm run build
+      - run:
+          name: Verify files for deployment
+          command: |
+            echo "Verifying all files are present before persisting..."
+            ls -la deployment/
       - persist_to_workspace:
-          root: ./
+          root: .
           paths:
-            - frontend/build
-            - backend
-            - deployment
+            - frontend/build/*
+            - backend/**/*
+            - deployment/**/*
+            - deployment/eufmd-nexus-api.service
+            - deployment/nginx-eufmd-nexus.conf
 
   deploy-to-aws:
     docker:
@@ -75,6 +82,13 @@ jobs:
       - run:
           name: Install deployment dependencies
           command: pip install paramiko
+      - run:
+          name: Verify deployment files
+          command: |
+            echo "Verifying deployment files..."
+            ls -la deployment/
+            cat deployment/eufmd-nexus-api.service
+            cat deployment/nginx-eufmd-nexus.conf
       - run:
           name: Deploy to AWS EC2
           command: |
