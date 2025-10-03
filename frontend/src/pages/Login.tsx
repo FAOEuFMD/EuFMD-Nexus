@@ -31,10 +31,15 @@ const Login: React.FC = () => {
 
   useEffect(() => {
     if (user && user.role) {
-      if (user.role === 'rmt') {
-        navigate('/rmt');
-      } else {
-        navigate('/');
+      switch (user.role) {
+        case 'rmt':
+          navigate('/rmt');
+          break;
+        case 'risp':
+          navigate('/risp');
+          break;
+        default:
+          navigate('/');
       }
     }
   }, [user, navigate]);

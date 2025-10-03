@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -266,8 +267,9 @@ const RISPLanding: React.FC = () => {
           totalOutbreaks: 0,
           diseases: [],
           reports: [],
-          vaccinations: [],
-          surveillance: [],
+          outbreakReports: [],
+          vaccinationReports: [],
+          surveillanceReports: [],
           hasData: false
         };
       }
@@ -824,10 +826,15 @@ const RISPLanding: React.FC = () => {
         </div>
 
         {/* Country Information Card */}
-        {selectedCountryData ? (
+        {selectedCountryData && (
           <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-semibold mb-3 text-gray-800">{selectedCountryData.country} - Last Quarter Data</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="font-semibold mb-3 text-gray-800">
+              {selectedCountryData.country} - {selectedCountryData.hasData 
+                ? `Last Quarter Data (Q${selectedCountryData.quarter} ${selectedCountryData.year})`
+                : 'No Data Available'
+              }
+            </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Outbreak Data */}
               <div className="p-3 bg-red-50 rounded">
                 <h4 className="font-medium text-red-800 mb-2">Outbreaks</h4>
@@ -922,13 +929,11 @@ const RISPLanding: React.FC = () => {
             >
               Close Details
             </button>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-semibold mb-3 text-gray-800">Country Information</h3>
-            <p className="text-gray-600 text-center py-8">
-              Click on a country bubble above to see detailed information for the last quarter
-            </p>
+            {!selectedCountryData.hasData && (
+              <div className="text-gray-600 text-center py-4">
+                No data was reported for this country in the last quarter (Q{selectedCountryData.quarter} {selectedCountryData.year})
+              </div>
+            )}
           </div>
         )}
 

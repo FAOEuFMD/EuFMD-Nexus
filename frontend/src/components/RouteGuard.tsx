@@ -16,6 +16,11 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
   const { isAuthenticated, user } = useAuthStore();
   const location = useLocation();
 
+  // Redirect RISP users to RISP landing page if they're accessing the home page
+  if (user?.role === 'risp' && location.pathname === '/') {
+    return <Navigate to="/risp" replace />;
+  }
+
   // If route requires admin access
   if (requiresAdmin) {
     if (!isAuthenticated) {
