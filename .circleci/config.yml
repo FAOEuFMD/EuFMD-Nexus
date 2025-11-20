@@ -161,10 +161,10 @@ workflows:
       - build-and-test:
           filters:
             branches:
-              only: main
+              only: temp
       - deploy-to-aws:
           requires:
             - build-and-test
           filters:
             branches:
-              only: main
+              only: temp
