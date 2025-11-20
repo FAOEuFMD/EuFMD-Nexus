@@ -18,6 +18,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   // Check if user is RISP user (role === "risp" like in Vue app)
   const isRispUser = user?.role === 'risp';
 
+  // Don't render sidebar content if user is not logged in
+  if (!user) {
+    return (
+      <div
+        id="sidebar"
+        className={`fixed h-full z-50 top-0 left-0 bg-greens text-green-100 overflow-auto w-0`}
+      />
+    );
+  }
+
   return (
     <div
       id="sidebar"

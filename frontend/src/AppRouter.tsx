@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout, RouteGuard } from './components';
 
 // Import pages
@@ -42,6 +42,11 @@ const AppRouter: React.FC = () => {
           {/* Public Pages */}
           <Route 
             index 
+            element={<Navigate to="/rmt" replace />} 
+          />
+          
+          <Route 
+            path="home" 
             element={
               <RouteGuard requiresAuth={false}>
                 <Home />

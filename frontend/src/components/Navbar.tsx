@@ -21,15 +21,17 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   return (
     <div className="w-screen">
       <div className="text-white bg-green-greenMain flex justify-between items-center py-3 px-6 z-50">
-        {/* Hamburger menu button */}
-        <button 
-          onClick={onToggleSidebar}
-          className="cursor-pointer text-lg"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+        {/* Hamburger menu button - only show when logged in */}
+        {user && (
+          <button 
+            onClick={onToggleSidebar}
+            className="cursor-pointer text-lg"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
 
         <div className="container flex justify-between items-center">
           {/* Home Logo */}
