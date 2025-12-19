@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faFileCsv, faTools } from '@fortawesome/free-solid-svg-icons';
+import { faTimes, faFileCsv, faTools, faFlask } from '@fortawesome/free-solid-svg-icons';
 import { useAuthStore } from '../stores/authStore';
 import './Sidebar.css';
 
@@ -17,6 +17,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const isAdmin = user?.role === 'admin';
   // Check if user is RISP user (role === "risp" like in Vue app)
   const isRispUser = user?.role === 'risp';
+  // Check if user is Thrace user (role === "thrace" like in Vue app)
+  const isThraceUser = user?.role === 'thrace';
 
   return (
     <div
@@ -102,6 +104,25 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 </span>
                 <div className="flex flex-col items-start">
                   <span>RISP</span>
+                </div>
+              </Link>
+            </div>
+          )}
+          
+          {/* Thrace section */}
+          {(isAdmin || isThraceUser) && (
+            <div>
+              <Link
+                className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
+                to="/thrace"
+                onClick={onClose}
+              >
+                <FontAwesomeIcon icon={faFlask} className="text-xl" />
+                <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
+                  Thrace
+                </span>
+                <div className="flex flex-col items-start">
+                  <span>Thrace</span>
                 </div>
               </Link>
             </div>

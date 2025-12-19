@@ -23,3 +23,5 @@ export { default as EmergencyToolbox } from './EmergencyToolbox';
 export { default as Vademos } from './Vademos';
 export { default as RMTData } from './RMTData';
 export { default as ViewPastTrainingData } from './ViewPastTrainingData';
+export { default as Thrace } from './Thrace';
+export { default as ThraceDataEntry } from './ThraceDataEntry';

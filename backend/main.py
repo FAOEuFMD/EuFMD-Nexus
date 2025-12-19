@@ -18,7 +18,8 @@ from routers import (
     visits,
     stock,
     loa,
-    risp
+    risp,
+    thrace
 )
 
 # Create FastAPI application
@@ -50,6 +51,7 @@ app.include_router(visits.router)
 app.include_router(stock.router)
 app.include_router(loa.router)
 app.include_router(risp.router)
+app.include_router(thrace.router)
 
 # Root endpoint
 @app.get("/")
