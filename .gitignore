@@ -1,6 +1,7 @@
 # Project specific
 /Vue/
 ../Vue/
+/Thrace/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
