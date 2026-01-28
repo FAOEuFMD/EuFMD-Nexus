@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import ThraceDataEntry from './ThraceDataEntry';
 import { apiService } from '../services/api';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -9,10 +8,6 @@ interface Template {
   id: string;
   name: string;
   fileName: string;
-}
-
-interface ValidationError {
-  message: string;
 }
 
 interface ErrorRow {
@@ -30,7 +25,6 @@ interface CycleReportData {
 }
 
 const Thrace: React.FC = () => {
-  const [showDataEntry, setShowDataEntry] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
