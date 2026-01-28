@@ -27,6 +27,7 @@ import {
   EmergencyToolbox,
   Vademos,
   ViewPastTrainingData,
+  Thrace,
 
 } from './pages';
 
@@ -258,6 +259,16 @@ const AppRouter: React.FC = () => {
             element={
               <RouteGuard requiresAuth={true}>
                 <RISPSummary />
+              </RouteGuard>
+            } 
+          />
+          
+          {/* Authenticated Routes (Thrace) */}
+          <Route 
+            path="thrace" 
+            element={
+              <RouteGuard requiresAuth={true}>
+                <Thrace />
               </RouteGuard>
             } 
           />

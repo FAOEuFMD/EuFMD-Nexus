@@ -5,7 +5,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5800';
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000,  // 60 seconds for file uploads
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,6 +20,15 @@ api.interceptors.request.use(
       config.headers['x-access-token'] = token;  // Express backend format
       config.headers['Authorization'] = `Bearer ${token}`;  // FastAPI format
     }
+    
+    // Don't set Content-Type for FormData - let browser handle it
+    if (config.data instanceof FormData) {
+      // Remove the default application/json header
+      delete config.headers['Content-Type'];
+      // Explicitly tell axios not to set any Content-Type
+      config.headers['Content-Type'] = undefined;
+    }
+    
     return config;
   },
   (error) => {
@@ -32,10 +41,14 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear token and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('auth');
-      window.location.href = '/login';
+      // Only auto-redirect for non-upload endpoints
+      // File upload errors should be handled by the component
+      if (!error.config?.url?.includes('/upload-data')) {
+        // Clear token and redirect to login
+        localStorage.removeItem('token');
+        localStorage.removeItem('auth');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -261,6 +274,47 @@ export const apiService = {
     
     deleteRISPVaccination: (id: number) =>
       api.delete(`/api/risp/vaccinations/${id}`),
+  },
+
+  // THRACE endpoints
+  thrace: {
+    uploadData: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      console.log('uploadData FormData created:', {
+        hasFile: formData.has('file'),
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      });
+      
+      console.log('Sending POST request to /api/thrace/upload-data with FormData');
+      
+      return api.post('/api/thrace/upload-data', formData, {
+        // Explicitly tell axios not to set Content-Type so browser will use multipart boundary
+        transformRequest: [(data) => data]
+      });
+    },
+    
+    getStagingSummary: () =>
+      api.get('/api/thrace/staging-summary'),
+    
+    approveData: () =>
+      api.post('/api/thrace/approve-data', {}),
+    
+    getInspectors: () =>
+      api.get('/api/thrace/inspectors'),
+    
+    getCycleReport: (countryId: number, year: number, quarter: number) =>
+      api.get('/api/thrace/cycle-report', {
+        params: { country_id: countryId, year, quarter }
+      }),
+
+    getFreedomData: (species: string, disease: string, region: string, refreshSummary = false) =>
+      api.get('/api/thrace/freedom-data', {
+        params: { species, disease, region, refresh_summary: refreshSummary }
+      }),
   },
 };
 

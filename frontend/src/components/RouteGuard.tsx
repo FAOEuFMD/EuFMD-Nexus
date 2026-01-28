@@ -18,7 +18,12 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
 
   // Redirect RISP users to RISP landing page if they're accessing the home page
   if (user?.role === 'risp' && location.pathname === '/') {
-    return <Navigate to="/risp" replace />;
+    return <Navigate to="/risp" replace />
+  }
+
+  // Redirect Thrace users to Thrace landing page if they're accessing the home page
+  if (user?.role === 'thrace' && location.pathname === '/') {
+    return <Navigate to="/thrace" replace />
   }
 
   // If route requires admin access
