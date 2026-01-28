@@ -206,9 +206,7 @@ const Thrace: React.FC = () => {
   const handleFreedomClick = () => {
     setShowFreedomSection(true);
     setShowReportSection(false);
-    if (!freedomData) {
-      fetchFreedomData(false);
-    }
+    // Don't auto-fetch - let user set filters first
   };
 
   const fetchFreedomData = async (refreshSummary = false) => {
@@ -297,12 +295,17 @@ const Thrace: React.FC = () => {
     const layout = {
       barmode: 'stack',
       hovermode: 'closest',
-      margin: { t: 20, b: 50, l: 80, r: 120 },
+      margin: { t: 20, b: 50, l: 80, r: 180 },
+      showlegend: true,
       legend: {
-        x: 1,
-        xanchor: 'left',
+        orientation: 'v',
+        xanchor: 'right',
+        yanchor: 'top',
+        x: 1.18,
         y: 1,
-        yanchor: 'top'
+        bgcolor: 'rgba(255,255,255,0.9)',
+        bordercolor: '#ddd',
+        borderwidth: 1
       },
       xaxis: {
         title: 'Month',
@@ -698,7 +701,7 @@ const Thrace: React.FC = () => {
                 <select
                   value={freedomSpecies}
                   onChange={(e) => setFreedomSpecies(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="ALL">All species</option>
                   <option value="LR">Large ruminants</option>
@@ -715,7 +718,7 @@ const Thrace: React.FC = () => {
                 <select
                   value={freedomDisease}
                   onChange={(e) => setFreedomDisease(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="FMD">FMD</option>
                   <option value="LSD">LSD</option>
@@ -728,7 +731,7 @@ const Thrace: React.FC = () => {
                 <select
                   value={freedomRegion}
                   onChange={(e) => setFreedomRegion(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="ALL">All</option>
                   <option value="BG">Bulgaria</option>
