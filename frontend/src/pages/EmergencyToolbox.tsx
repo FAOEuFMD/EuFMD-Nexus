@@ -5,11 +5,11 @@ const EmergencyToolbox: React.FC = () => {
     <div>
       <div className="flex justify-center p-10">
         <iframe
-          src="https://trello.com/b/RNA1zSan.html"
+          src="https://padlet.com/eufmdFAST/emergency-toolbox-for-fast-diseases-lrhxjry947a6fki2"
           width="1860"
           height="898"
           frameBorder="0"
-          title="Emergency Toolbox Trello Board"
+          title="Emergency Toolbox"
         ></iframe>
       </div>
     </div>

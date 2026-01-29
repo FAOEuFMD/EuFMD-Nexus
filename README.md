@@ -106,6 +106,26 @@ The application will be available at:
 - **Emergency Response**: Emergency toolbox and fast reporting
 - **User Authentication**: JWT-based authentication system
 
+## Design System - FAO Official Colors
+
+### Main Colors
+
+| Color Name | Hex Code | RGB | Usage |
+|------------|----------|-----|-------|
+| **Gray Dark** | `#545454` | rgb(84, 84, 84) | Text, headings |
+| **Gray Medium** | `#999999` | rgb(153, 153, 153) | Secondary text |
+| **Gray Light** | `#F2F2F2` | rgb(242, 242, 242) | Backgrounds |
+| **White FAO** | `#F7F8F9` | rgb(247, 248, 249) | Main backgrounds, header, footer |
+
+### Accent Colors
+
+| Color Name | Hex Code | RGB | Usage |
+|------------|----------|-----|-------|
+| **Orange** | `#F58320` | rgb(245, 131, 32) | Highlights, CTAs |
+| **Caption** | `#1C4767` | rgb(28, 71, 103) | Titles, primary actions |
+| **Emergency** | `#980000` | rgb(152, 0, 0) | Error states, warnings |
+| **UN Blue** | `#5792c9` | rgb(87, 146, 202) | Links, interactive elements |
+
 ## Deployment
 
 For detailed deployment instructions and configuration details, please refer to the [deployment README](deployment/README.md). The deployment folder contains all necessary configuration files and documentation for deploying to AWS EC2 with CircleCI automation.

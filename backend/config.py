@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     db_pass: str
     db_name: str
     db2_name: str
+    db4_name: str | None = None
     db5_name: str  # Thrace database (renamed from db3)
     
     # Security

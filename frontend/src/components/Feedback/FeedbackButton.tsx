@@ -67,7 +67,7 @@ const FeedbackButton: React.FC<FeedbackButtonProps> = ({ className = '' }) => {
           <div className="flex gap-2">
             <button
               onClick={() => handleQuickFeedback(9)}
-              className="flex items-center justify-center w-12 h-12 bg-green-100 hover:bg-green-200 text-green-greenMain rounded-lg transition-colors"
+              className="flex items-center justify-center w-12 h-12 bg-green-100 hover:bg-green-200 text-[#75AD82] rounded-lg transition-colors"
               title="Good experience (9/10)"
             >
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">

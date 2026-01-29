@@ -1,43 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 
 const Vademos: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true);
-
-  const handleIframeLoad = () => {
-    setIsLoading(false);
-  };
+  useEffect(() => {
+    // Redirect to VADEMOS in a new tab
+    window.open('https://eufmd.shinyapps.io/VADEMOS/', '_blank');
+    // Optionally go back to previous page
+    window.history.back();
+  }, []);
 
   return (
-    <div>
-      <div
-        style={{ width: '100%', height: '550px', overflow: 'hidden', position: 'relative' }}
-      >
-        {/* Loading Spinner */}
-        {isLoading && (
-          <div 
-            className="absolute inset-0 flex items-center justify-center bg-white z-10"
-            style={{ height: '550px' }}
-          >
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-greenMain"></div>
-              <p className="mt-4 text-gray-600 font-medium">Loading VADEMOS Application...</p>
-            </div>
-          </div>
-        )}
-        
-        <iframe
-          src="https://eufmd.shinyapps.io/VADEMOS/"
-          style={{
-            width: '100%',
-            height: '900px',
-            border: 'none',
-            position: 'absolute',
-            top: '-80px',
-            left: '0',
-          }}
-          title="VADEMOS Application"
-          onLoad={handleIframeLoad}
-        ></iframe>
+    <div className="container mx-auto px-4 py-8">
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-bold mb-4">Redirecting to VADEMOS...</h2>
+        <p className="text-gray-700 mb-4">
+          The VADEMOS application is opening in a new tab. If it doesn't open automatically, 
+          please click the link below:
+        </p>
+        <a 
+          href="https://eufmd.shinyapps.io/VADEMOS/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline"
+        >
+          Open VADEMOS Application
+        </a>
       </div>
     </div>
   );
