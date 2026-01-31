@@ -21,16 +21,16 @@ const Layout: React.FC = () => {
       <Navbar onToggleSidebar={handleToggleSidebar} />
       
       {/* Menu bar with hamburger icon and MENU text */}
-      <div className="bg-[#F2F2F2] border-b border-gray-300 py-3 px-6 flex items-center gap-3">
+      <div className="bg-[#15736d] border-b border-[#0f4a46] py-3 px-6 flex items-center gap-3">
         <button 
           onClick={handleToggleSidebar}
-          className="cursor-pointer text-[#545454] hover:text-[#75AD82] transition-colors"
+          className="cursor-pointer text-white hover:text-[#F2F2F2] transition-colors"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-[#545454] font-semibold text-lg">MENU</span>
+        <span className="text-white font-semibold text-lg">MENU</span>
       </div>
       
       {/* Sidebar component is always rendered */}
@@ -38,8 +38,8 @@ const Layout: React.FC = () => {
       
       {/* Main content area */}
       <div className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
-        {/* Show breadcrumb if not on login page */}
-        {location.pathname !== '/login' && (
+        {/* Show breadcrumb if not on login page or home page */}
+        {location.pathname !== '/login' && location.pathname !== '/' && (
           <div className="w-screen bg-white py-3 text-green-primary font-marta">
             <div className="container mx-auto px-6">
               <p className="font-light">

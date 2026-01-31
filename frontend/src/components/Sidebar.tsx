@@ -39,10 +39,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   return (
     <div
       id="sidebar"
-      className={`fixed z-40 left-0 bg-[#545454] text-white overflow-auto ${
+      className={`fixed z-40 left-0 bg-[#15736d] text-white overflow-auto ${
         isOpen ? 'w-64' : 'w-0'
       }`}
-      style={{ top: '135px', height: 'calc(100vh - 135px)' }}
+      style={{ top: 'calc(3.5rem + 4rem)', height: 'calc(100vh - 3.5rem - 4rem)' }}
     >
       <div>
         <div className="px-2 py-3 mt-2">
@@ -52,7 +52,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
         
         <div className={`flex flex-col justify-center p-5 mt-20 font-martaBold ${isOpen ? '' : 'hidden'}`}>
-          <hr className="my-3 hr-text gradient" data-content="" />
+          {/* First separator - only show if there are admin sections */}
+          {isAdmin && <hr className="my-3 hr-text gradient" data-content="" />}
 
           {/* Admin-only sections */}
           {isAdmin && (
@@ -105,7 +106,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
 
 
-          <hr className="my-3 hr-text gradient" data-content="" />
+          {/* Second separator - only show if there are authenticated user sections */}
+          {(isAdmin || isRispUser || isTfpUser || isThraceUser) && <hr className="my-3 hr-text gradient" data-content="" />}
           
           {/* RISP section - moved up above Tools and Resources */}
           {(isAdmin || isRispUser) && (

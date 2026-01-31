@@ -20,19 +20,19 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
   return (
     <div className="w-screen">
-      <div className="text-white bg-[#545454] flex justify-between items-center py-3 px-6 z-50 shadow-md">
+      <div className="text-[#545454] bg-[#F7F8F9] flex justify-between items-center py-3 px-6 z-50 shadow-md">
         <div className="flex-1 flex justify-between items-center">
           {/* Home Logo */}
           <div>
             <Link to="/" className="flex items-center">
-              <img src="/EuFMD_2023_white.png" alt="EuFMD Logo" className="h-16 w-auto" />
+              <img src="/EuFMD_2023_white.png" alt="EuFMD Logo" className="h-14 w-auto" style={{ filter: 'invert(1) brightness(0)' }} />
             </Link>
           </div>
         </div>
 
         <div className="flex justify-between items-center">
           <Link
-            className="px-4 py-2 mt-2 text-md font-semibold text-white md:mt-0 md:ml-4 hover:text-[#F2F2F2] focus:text-[#F2F2F2]"
+            className="px-4 py-2 mt-2 text-md font-semibold text-[#545454] md:mt-0 md:ml-4 hover:text-[#15736d] focus:text-[#15736d]"
             to="/"
           >
             Home
@@ -41,7 +41,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           {/* Show Login button if not authenticated */}
           {!isAuthenticated ? (
             <Link
-              className="bg-[#F2F2F2] px-4 py-2 mt-2 text-md whitespace-nowrap font-semibold text-[#545454] rounded-lg md:mt-0 md:ml-4 hover:bg-white focus:bg-white focus:outline-none focus:shadow-outline"
+              className="bg-[#15736d] px-4 py-2 mt-2 text-md whitespace-nowrap font-semibold text-white rounded-lg md:mt-0 md:ml-4 hover:bg-[#438f8a] focus:bg-[#438f8a] focus:outline-none focus:shadow-outline"
               to="/login"
             >
               Log In
@@ -49,7 +49,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           ) : (
             /* Show user info and logout if authenticated */
             <button
-              className="px-4 py-2 mt-2 text-sm font-semibold text-white bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-[#F2F2F2] focus:text-[#F2F2F2] hover:bg-[#1C4767] focus:bg-[#1C4767] focus:outline-none focus:shadow-outline"
+              className="px-4 py-2 mt-2 text-sm font-semibold text-[#545454] bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-[#15736d] focus:text-[#15736d] hover:bg-[#F2F2F2] focus:bg-[#F2F2F2] focus:outline-none focus:shadow-outline"
               onClick={handleLogout}
             >
               <div className="flex flex-row items-center">
