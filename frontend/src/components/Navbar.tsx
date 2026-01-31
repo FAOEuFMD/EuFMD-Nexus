@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import NexusIcon from './NexusIcon';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
