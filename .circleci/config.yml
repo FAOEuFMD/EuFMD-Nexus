@@ -132,6 +132,7 @@ jobs:
             echo "DB_PASS=$DB_PASS" >> env_temp
             echo "DB_NAME=$DB_NAME" >> env_temp
             echo "DB2_NAME=$DB2_NAME" >> env_temp
+            echo "DB5_NAME=$DB5_NAME" >> env_temp
             echo "SECRET_KEY=$SECRET_KEY" >> env_temp
             echo "SUPER_SECRET=$SUPER_SECRET" >> env_temp
             echo "NODE_ENV=production" >> env_temp
