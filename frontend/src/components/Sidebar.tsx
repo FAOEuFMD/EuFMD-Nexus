@@ -51,10 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </p>
         </div>
         
-        <div className={`flex flex-col justify-center p-5 mt-20 font-martaBold ${isOpen ? '' : 'hidden'}`}>
-          {/* First separator - only show if there are admin sections */}
-          {isAdmin && <hr className="my-3 hr-text gradient" data-content="" />}
-
+        <div className={`flex flex-col ${isAdmin ? 'justify-center' : 'justify-start'} p-5 ${isAdmin ? 'mt-20' : 'mt-0'} font-martaBold ${isOpen ? '' : 'hidden'}`}>
           {/* Admin-only sections */}
           {isAdmin && (
             <div>
@@ -106,8 +103,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
 
 
-          {/* Second separator - only show if there are authenticated user sections */}
-          {(isAdmin || isRispUser || isTfpUser || isThraceUser) && <hr className="my-3 hr-text gradient" data-content="" />}
+          {/* Second separator - only show if there are admin items */}
+          {isAdmin && <hr className="my-3 hr-text gradient" data-content="" />}
           
           {/* RISP section - moved up above Tools and Resources */}
           {(isAdmin || isRispUser) && (

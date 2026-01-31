@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     db_pass: str
     db_name: str
     db2_name: str
-    db5_name: str  # Thrace database (renamed from db3)
+    db4_name: Optional[str] = None
+    db5_name: Optional[str] = None  # Thrace database
     
     # Security
     secret_key: str
