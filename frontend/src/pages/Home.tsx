@@ -56,10 +56,10 @@ const SearchBox: React.FC = () => {
 
 const Home: React.FC = () => {
   return (
-    <div className="py-5 text-gray-800">
+    <div className="py-5 text-gray-800 bg-[#F7F8F9]">
       {/* Header */}
       <h1 className="text-center mb-8 text-2xl font-bold">
-        Welcome to EuFMD Hub all in one Tools and Resources
+        Welcome to EuFMD Nexus for Tools and Resources
       </h1>
       
       {/* Search Box */}
@@ -70,7 +70,7 @@ const Home: React.FC = () => {
       {/* 4 sections */}
       <div className="grid md:grid-cols-2 sm:grid-cols-1 gap-4 p-5">
         {/* GET PREPARED */}
-        <div className="flex p-5 m-5 bg-gray-300 rounded-lg">
+        <div className="flex p-5 m-5 bg-[#F2F2F2] rounded-lg">
           <img
             src="/prepared.png"
             className="w-20 h-auto m-7"
@@ -79,14 +79,14 @@ const Home: React.FC = () => {
           <span className="block">
             <h2 className="text-left mt-2 text-xl font-bold">Get Prepared</h2>
             <p className="text-left">Access tools and guides to prepare for disease outbreaks.</p>
-            <button className="float-left bg-white hover:bg-gray-100 text-green-greenMain font-semibold py-2 px-4 border border-green-greenMain rounded-lg shadow mt-4">
+            <button className="float-left bg-white hover:bg-gray-100 text-[#15736d] font-semibold py-2 px-4 border border-[#15736d] rounded-lg shadow mt-4">
               <Link to="/getprepared">Learn More</Link>
             </button>
           </span>
         </div>
 
         {/* Training */}
-        <div className="flex p-5 m-5 bg-gray-300 rounded-lg">
+        <div className="flex p-5 m-5 bg-[#F2F2F2] rounded-lg">
           <img
             src="/training.png"
             className="w-20 h-auto m-7"
@@ -95,14 +95,14 @@ const Home: React.FC = () => {
           <span className="block">
             <h2 className="text-left mt-2 text-xl font-bold">Training</h2>
             <p className="text-left">Enhance your skills with our latest training programs.</p>
-            <button className="float-left bg-white hover:bg-gray-100 text-green-greenMain font-semibold py-2 px-4 border border-green-greenMain rounded-lg shadow mt-4">
+            <button className="float-left bg-white hover:bg-gray-100 text-[#15736d] font-semibold py-2 px-4 border border-[#15736d] rounded-lg shadow mt-4">
               <Link to="/training">Learn More</Link>
             </button>
           </span>
         </div>
 
         {/* Monitoring */}
-        <div className="flex p-5 m-5 bg-gray-300 rounded-lg">
+        <div className="flex p-5 m-5 bg-[#F2F2F2] rounded-lg">
           <img
             src="/monitoring.png"
             className="w-20 h-auto m-7"
@@ -111,14 +111,14 @@ const Home: React.FC = () => {
           <span className="block">
             <h2 className="text-left mt-2 text-xl font-bold">Monitoring</h2>
             <p className="text-left">Stay updated with real-time monitoring of disease spread.</p>
-            <button className="float-left bg-white hover:bg-gray-100 text-green-greenMain font-semibold py-2 px-4 border border-green-greenMain rounded-lg shadow mt-4">
+            <button className="float-left bg-white hover:bg-gray-100 text-[#15736d] font-semibold py-2 px-4 border border-[#15736d] rounded-lg shadow mt-4">
               <Link to="/monitoring">Learn More</Link>
             </button>
           </span>
         </div>
 
         {/* Emergency response */}
-        <div className="flex p-5 m-5 bg-gray-300 rounded-lg">
+        <div className="flex p-5 m-5 bg-[#F2F2F2] rounded-lg">
           <img
             src="/emergency.png"
             className="w-20 h-auto m-7"
@@ -127,7 +127,7 @@ const Home: React.FC = () => {
           <span className="block">
             <h2 className="text-left mt-2 text-xl font-bold">Emergency Response</h2>
             <p className="text-left">Coordinate quick and effective emergency responses.</p>
-            <button className="float-left bg-white hover:bg-gray-100 text-green-greenMain font-semibold py-2 px-4 border border-green-greenMain rounded-lg shadow mt-4">
+            <button className="float-left bg-white hover:bg-gray-100 text-[#15736d] font-semibold py-2 px-4 border border-[#15736d] rounded-lg shadow mt-4">
               <Link to="/emergency-response">Learn More</Link>
             </button>
           </span>

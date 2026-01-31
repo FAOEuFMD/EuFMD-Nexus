@@ -6,12 +6,14 @@ interface RouteGuardProps {
   children: React.ReactNode;
   requiresAuth?: boolean;
   requiresAdmin?: boolean;
+  allowedRoles?: string[];
 }
 
 export const RouteGuard: React.FC<RouteGuardProps> = ({
   children,
   requiresAuth = false,
   requiresAdmin = false,
+  allowedRoles,
 }) => {
   const { isAuthenticated, user } = useAuthStore();
   const location = useLocation();
@@ -24,6 +26,11 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
   // Redirect Thrace users to Thrace landing page if they're accessing the home page
   if (user?.role === 'thrace' && location.pathname === '/') {
     return <Navigate to="/thrace" replace />
+  }
+
+  // Redirect TFP users to Training Credits if they're accessing the home page
+  if (user?.role?.toLowerCase() === 'tfp' && location.pathname === '/') {
+    return <Navigate to="/training-credits" replace />
   }
 
   // If route requires admin access
@@ -42,6 +49,20 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
   else if (requiresAuth) {
     if (!isAuthenticated) {
       return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+  }
+
+  // If route requires specific roles
+  if (allowedRoles && allowedRoles.length > 0) {
+    if (!isAuthenticated) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    const normalizedRole = user?.role?.toLowerCase();
+    const normalizedAllowedRoles = allowedRoles.map((role) => role.toLowerCase());
+
+    if (!normalizedRole || !normalizedAllowedRoles.includes(normalizedRole)) {
+      throw new Error('You do not have permission to view this resource.');
     }
   }
 

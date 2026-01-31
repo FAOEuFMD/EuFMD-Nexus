@@ -1,7 +1,20 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faFileCsv, faTools, faFlask } from '@fortawesome/free-solid-svg-icons';
+import {
+  faTimes,
+  faFileCsv,
+  faFlask,
+  faTowerBroadcast,
+  faArchway,
+  faTriangleExclamation,
+  faGraduationCap,
+  faChalkboardUser,
+  faFileLines,
+  faChartLine,
+  faSyringe,
+  faMapLocationDot
+} from '@fortawesome/free-solid-svg-icons';
 import { useAuthStore } from '../stores/authStore';
 import './Sidebar.css';
 
@@ -12,20 +25,24 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user } = useAuthStore();
+  const userRole = user?.role?.toLowerCase();
   
   // Check if user is admin (role === "admin" like in Vue app)
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = userRole === 'admin';
   // Check if user is RISP user (role === "risp" like in Vue app)
-  const isRispUser = user?.role === 'risp';
+  const isRispUser = userRole === 'risp';
   // Check if user is Thrace user (role === "thrace" like in Vue app)
-  const isThraceUser = user?.role === 'thrace';
+  const isThraceUser = userRole === 'thrace';
+  // Check if user is TFP user
+  const isTfpUser = userRole === 'tfp';
 
   return (
     <div
       id="sidebar"
-      className={`fixed h-full z-50 top-0 left-0 bg-greens text-green-100 overflow-auto ${
+      className={`fixed z-40 left-0 bg-[#15736d] text-white overflow-auto ${
         isOpen ? 'w-64' : 'w-0'
       }`}
+      style={{ top: 'calc(3.5rem + 4rem)', height: 'calc(100vh - 3.5rem - 4rem)' }}
     >
       <div>
         <div className="px-2 py-3 mt-2">
@@ -35,7 +52,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
         
         <div className={`flex flex-col justify-center p-5 mt-20 font-martaBold ${isOpen ? '' : 'hidden'}`}>
-          <hr className="my-3 hr-text gradient" data-content="" />
+          {/* First separator - only show if there are admin sections */}
+          {isAdmin && <hr className="my-3 hr-text gradient" data-content="" />}
 
           {/* Admin-only sections */}
           {isAdmin && (
@@ -88,7 +106,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
 
 
-          <hr className="my-3 hr-text gradient" data-content="" />
+          {/* Second separator - only show if there are authenticated user sections */}
+          {(isAdmin || isRispUser || isTfpUser || isThraceUser) && <hr className="my-3 hr-text gradient" data-content="" />}
           
           {/* RISP section - moved up above Tools and Resources */}
           {(isAdmin || isRispUser) && (
@@ -98,12 +117,30 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 to="/risp"
                 onClick={onClose}
               >
-                <FontAwesomeIcon icon={faTools} className="text-xl" />
+                <FontAwesomeIcon icon={faTowerBroadcast} className="text-xl" />
                 <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
                   RISP
                 </span>
                 <div className="flex flex-col items-start">
                   <span>RISP</span>
+                </div>
+              </Link>
+            </div>
+          )}
+
+          {(isAdmin || isTfpUser) && (
+            <div>
+              <Link
+                className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
+                to="/training-credits"
+                onClick={onClose}
+              >
+                <FontAwesomeIcon icon={faChalkboardUser} className="text-xl" />
+                <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
+                  Training Credits
+                </span>
+                <div className="flex flex-col items-start">
+                  <span>Training Credits</span>
                 </div>
               </Link>
             </div>
@@ -137,7 +174,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/get-prepared-wall"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faArchway} className="text-xl" />
               <span className="tooltip rounded shadow-lg p-1 bg-black text-white -mt-8 text-center">
                 Get Prepared Wall
               </span>
@@ -151,7 +188,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/emergency-toolbox"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faTriangleExclamation} className="text-xl" />
               <span className="tooltip rounded shadow-lg p-1 bg-black text-white -mt-8 text-center">
                 Emergency Toolbox
               </span>
@@ -167,7 +204,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl mr-0" />
+              <FontAwesomeIcon icon={faGraduationCap} className="text-xl mr-0" />
               <span className="tooltip rounded shadow-lg p-5 bg-black text-white -mt-8 text-center">
                 TOM
               </span>
@@ -181,7 +218,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/view-past-training-impact"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faChalkboardUser} className="text-xl" />
               <span className="tooltip rounded shadow-lg bg-black text-white text-center">
                 Training HP_Training_impact
               </span>
@@ -195,7 +232,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/fast-report"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faFileLines} className="text-xl" />
               <span className="tooltip rounded shadow-lg p-1 bg-black text-white -mt-8 text-center">
                 Fast Report
               </span>
@@ -209,7 +246,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/RMT"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faChartLine} className="text-xl" />
               <span className="tooltip rounded shadow-lg p-1 bg-black text-white -mt-8 text-center">
                 RMT
               </span>
@@ -223,7 +260,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/Vademos"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faSyringe} className="text-xl" />
               <span className="tooltip rounded shadow-lg p-1 bg-black text-white -mt-8 text-center">
                 VADEMOS
               </span>
@@ -237,7 +274,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to="/PCP-fmd-map"
               onClick={onClose}
             >
-              <FontAwesomeIcon icon={faTools} className="text-xl" />
+              <FontAwesomeIcon icon={faMapLocationDot} className="text-xl" />
               <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8 text-center">
                 FMD-PCP Map
               </span>

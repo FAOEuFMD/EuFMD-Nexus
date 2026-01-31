@@ -12,6 +12,7 @@ import {
   RMTData,
   PCP,
   Training,
+  TrainingCredits,
   DiagnosticSupport,
   EmergencyResponse,
   FastReport,
@@ -64,6 +65,15 @@ const AppRouter: React.FC = () => {
             element={
               <RouteGuard requiresAuth={false}>
                 <Training />
+              </RouteGuard>
+            } 
+          />
+
+          <Route 
+            path="training-credits" 
+            element={
+              <RouteGuard requiresAuth={true} allowedRoles={["admin", "tfp"]}>
+                <TrainingCredits />
               </RouteGuard>
             } 
           />

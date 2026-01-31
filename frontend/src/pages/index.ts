@@ -5,6 +5,7 @@ export { default as RMTRiskScores } from './RMTRiskScores';
 export { default as RMTResults } from './RMTResults';
 export { default as PCP } from './PCP';
 export { default as Training } from './Training';
+export { default as TrainingCredits } from './TrainingCredits';
 export { default as DiagnosticSupport } from './DiagnosticSupport';
 export { default as EmergencyResponse } from './EmergencyResponse';
 export { default as FastReport } from './FastReport';
