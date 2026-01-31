@@ -195,7 +195,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
           <div>
             <a
-              href="https://eufmd-tom.com"
+              href="https://eufmd-tom.com:9443"
               target="_blank"
               rel="noopener noreferrer"
               className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
