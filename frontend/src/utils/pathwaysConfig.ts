@@ -8,11 +8,11 @@ export type PathwayKey = 'airborne' | 'vectorborne' | 'wildAnimals' | 'animalPro
 export const PATHWAYS_EFFECTIVENESS: {
   [key in PathwayKey]: { [key in Disease]: number };
 } = {
-  airborne: { FMD: 2, PPR: 0, LSD: 1, RVF: 1, SPGP: 2 },
+  airborne: { FMD: 2, PPR: 0, LSD: 0, RVF: 0, SPGP: 0 },
   vectorborne: { FMD: 0, PPR: 0, LSD: 3, RVF: 3, SPGP: 1 },
   wildAnimals: { FMD: 1, PPR: 2, LSD: 0, RVF: 1, SPGP: 0 },
   animalProduct: { FMD: 2, PPR: 0, LSD: 1, RVF: 2, SPGP: 1 },
-  liveAnimal: { FMD: 3, PPR: 3, LSD: 2, RVF: 3, SPGP: 3 },
+  liveAnimal: { FMD: 3, PPR: 3, LSD: 3, RVF: 3, SPGP: 3 },
   fomite: { FMD: 2, PPR: 2, LSD: 1, RVF: 0, SPGP: 2 },
 };
 
