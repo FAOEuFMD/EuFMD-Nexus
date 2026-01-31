@@ -110,12 +110,9 @@ jobs:
             scp -o StrictHostKeyChecking=no ./deployment/eufmd-nexus-api.service ubuntu@13.49.235.70:/tmp/eufmd-nexus-api.service
             scp -o StrictHostKeyChecking=no ./deployment/nginx-eufmd-nexus.conf ubuntu@13.49.235.70:/tmp/nginx-eufmd-nexus.conf
             
-            # Verify files were transferred successfully
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "ls -la /tmp/eufmd-nexus-api.service /tmp/nginx-eufmd-nexus.conf"
-
-            # Install service and Nginx config
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.service /etc/systemd/system/eufmd-nexus-api.service && sudo systemctl daemon-reload && sudo systemctl enable eufmd-nexus-api"
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus && sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/"
+            # Install service and Nginx config using sudo tee instead of mv to avoid permissions issues
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo cp /tmp/eufmd-nexus-api.service /etc/systemd/system/eufmd-nexus-api.service && sudo systemctl daemon-reload && sudo systemctl enable eufmd-nexus-api"
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo cp /tmp/nginx-eufmd-nexus.conf /etc/nginx/sites-available/eufmd-nexus && sudo ln -sf /etc/nginx/sites-available/eufmd-nexus /etc/nginx/sites-enabled/"
             
             # Skip system package management and use pip directly 
             echo "Setting up Python environment using pip directly..."
@@ -138,7 +135,7 @@ jobs:
             echo "NODE_ENV=production" >> env_temp
             echo "ALLOWED_ORIGINS=[\"http://13.49.235.70:8080\", \"https://nexus.eufmd.org\", \"https://nexus-dev.eufmd.org\"]" >> env_temp
             scp -o StrictHostKeyChecking=no env_temp ubuntu@13.49.235.70:/tmp/eufmd-nexus-api.env
-            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo mv /tmp/eufmd-nexus-api.env /etc/systemd/system/eufmd-nexus-api.env && sudo chmod 600 /etc/systemd/system/eufmd-nexus-api.env"
+            ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo cp /tmp/eufmd-nexus-api.env /etc/systemd/system/eufmd-nexus-api.env && sudo chmod 600 /etc/systemd/system/eufmd-nexus-api.env"
             
             # Update permissions
             ssh -o StrictHostKeyChecking=no ubuntu@13.49.235.70 "sudo chown -R ubuntu:ubuntu /var/www/eufmd-nexus"
