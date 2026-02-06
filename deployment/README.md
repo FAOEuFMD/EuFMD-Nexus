@@ -13,9 +13,9 @@ The application is deployed to an AWS EC2 instance which already hosts another a
 
 ## EC2 Server Environment
 
-- **Server IP**: 13.49.235.70
+- **Domain**: `nexus.eufmd-tom.com`
 - **User**: ubuntu
-- **Existing Application**: TOM app (using ports 80, 443, 5000)
+- **Existing Application**: TOM app (moved to secondary ports)
 - **Directory Structure**:
   ```
   /var/www/
@@ -29,13 +29,14 @@ The application is deployed to an AWS EC2 instance which already hosts another a
 
 ## Port Configuration
 
-To avoid conflicts with the existing TOM application, we use the following ports:
+EuFMD Nexus uses standard ports with HTTPS, while TOM app is on secondary ports:
 
-| Service           | Port | Notes                                |
-|-------------------|------|--------------------------------------|
-| Frontend (Nginx)  | 8080 | TOM app uses port 80                 |
-| Backend (FastAPI) | 5800 | TOM app uses port 5000               |
-| Database (RDS)    | 5432 | AWS RDS PostgreSQL standard port     |
+| Service                    | Port(s)      | Protocol | Notes                                |
+|----------------------------|--------------|----------|--------------------------------------|
+| **EuFMD Nexus Frontend**   | 80, 443      | HTTP/HTTPS | Primary application, TLS enabled    |
+| **EuFMD Nexus Backend**    | 5800         | HTTP     | Internal API (proxied via Nginx)    |
+| **TOM App (legacy)**       | 9000, 9443   | HTTP/HTTPS | Secondary app (moved from 80/443)   |
+| **Database (RDS)**         | 3306         | MySQL    | AWS RDS instance                    |
 
 ## Environment Variables
 
@@ -45,11 +46,13 @@ The application requires the following environment variables:
 - `DB_USER`: Database username
 - `DB_PASS`: Database password
 - `DB_NAME`: Primary database name
-- `DB2_NAME`: Secondary database name
+- `DB2_NAME`: PCP database name
+- `DB5_NAME`: THRACE database name
 - `SECRET_KEY`: Secret key for JWT tokens
 - `SUPER_SECRET`: Another secret key for enhanced security
 - `NODE_ENV`: Environment (set to "production" for deployment)
 - `ALLOWED_ORIGINS`: List of allowed CORS origins
+- `REACT_APP_API_URL`: Frontend API URL (set to `https://nexus.eufmd-tom.com` for production)
 
 These variables are:
 1. Set in CircleCI environment variables
@@ -85,21 +88,38 @@ WantedBy=multi-user.target
 
 ### `nginx-eufmd-nexus.conf`
 
-Nginx configuration to serve the React frontend and proxy API requests to the backend.
+Nginx configuration to serve the React frontend with HTTPS and proxy API requests to the backend.
 
 ```nginx
+# HTTP to HTTPS redirect
 server {
-    listen 8080;  # Use port 8080 instead of 80
-    server_name 13.49.235.70;  # EC2 IP address
+    listen 80;
+    server_name nexus.eufmd-tom.com;
     
+    # Redirect all HTTP traffic to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS server configuration
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name nexus.eufmd-tom.com;
+
+    # SSL certificate configuration (managed by Let's Encrypt)
+    ssl_certificate /etc/letsencrypt/live/nexus.eufmd-tom.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/nexus.eufmd-tom.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
     root /var/www/eufmd-nexus/frontend;
     index index.html;
-    
+
     # Frontend (React build)
     location / {
         try_files $uri $uri/ /index.html;
     }
-    
+
     # Backend API
     location /api {
         proxy_pass http://127.0.0.1:5800;  # Forward to FastAPI backend
@@ -112,7 +132,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
     }
-    
+
     # Static files
     location /static {
         alias /var/www/eufmd-nexus/frontend/static;
@@ -162,14 +182,15 @@ Key environment variables are stored securely in CircleCI project settings:
 
 The following environment variables must be set in the CircleCI project settings:
 
-- `DB_HOST` - Database host URL
+- `DB_HOST` - Database host URL (AWS RDS endpoint)
 - `DB_USER` - Database username  
 - `DB_PASS` - Database password
 - `DB_NAME` - Primary database name
-- `DB2_NAME` - Secondary database name
+- `DB2_NAME` - PCP database name
+- `DB5_NAME` - THRACE database name
 - `SECRET_KEY` - Secret key for JWT tokens
 - `SUPER_SECRET` - Another secret key for enhanced security
-- `REACT_APP_API_URL` - Backend API URL for the React frontend (e.g., http://13.49.235.70:5800)
+- `REACT_APP_API_URL` - Backend API URL for the React frontend (should be `https://nexus.eufmd-tom.com` for production)
 
 These environment variables are used during the deployment process and transferred to the server's systemd environment file. They are never committed to the git repository for security reasons.
 
@@ -239,18 +260,58 @@ To set these environment variables in CircleCI:
 
 ### Automated Deployment (CircleCI)
 
-1. Push changes to GitHub main branch
-2. CircleCI automatically deploys to EC2
-3. Access the application at http://13.49.235.70:8080 (direct IP access using the EC2 instance's public IP address)
+1. Push changes to GitHub main branch (or staging)
+2. CircleCI automatically builds, tests, and deploys to EC2
+3. Access the application at `https://nexus.eufmd-tom.com`
 
-**Note:** The URL http://13.49.235.70:8080 uses the EC2 instance's direct public IP address. This works because:
-- EC2 instances with public networking get assigned public IP addresses
-- Your Nginx is configured to listen on port 8080 
-- The security group for this EC2 instance allows inbound traffic on port 8080
+**Note:** All traffic is automatically secured:
+- HTTP requests to port 80 are redirected to HTTPS on port 443
+- SSL certificate is automatically renewed by Let's Encrypt (before expiration)
+- Users can access the site regardless of whether they type `http://`, `https://`, or just the domain name
 
-For a more professional setup, consider implementing the domain name and HTTPS from the "Future Improvements" section.
+## SSL/HTTPS Configuration
 
-## Troubleshooting
+### Certificate Setup
+
+The application uses Let's Encrypt SSL certificates managed by Certbot:
+
+```bash
+# Install Certbot (one time)
+sudo apt-get install certbot python3-certbot-nginx
+
+# Obtain and auto-configure certificate
+sudo certbot certonly --standalone -d nexus.eufmd-tom.com
+
+# The certificate files are stored at:
+# /etc/letsencrypt/live/nexus.eufmd-tom.com/fullchain.pem
+# /etc/letsencrypt/live/nexus.eufmd-tom.com/privkey.pem
+```
+
+### Certificate Auto-Renewal
+
+Let's Encrypt certificates expire after 90 days. Certbot automatically renews them:
+
+```bash
+# Check renewal status
+sudo certbot renew --dry-run
+
+# Manual renewal if needed
+sudo certbot renew
+```
+
+### Verifying Certificate
+
+To check certificate details:
+
+```bash
+# Check certificate subject and issuer
+sudo openssl x509 -in /etc/letsencrypt/live/nexus.eufmd-tom.com/fullchain.pem -text -noout | grep -A 2 "Subject:"
+
+# Check certificate expiration dates
+sudo openssl x509 -in /etc/letsencrypt/live/nexus.eufmd-tom.com/fullchain.pem -noout -dates
+```
+
+
 
 ### Check service status:
 ```bash
@@ -300,27 +361,8 @@ If you see CORS errors in the browser console, ensure:
 
 ## Future Improvements
 
-- **Set up HTTPS with Let's Encrypt**: Secure your application with SSL/TLS encryption
-- **Configure domain name**: Replace the IP address access (13.49.235.70:8080) with a proper domain like nexus.eufmd.org
-  - Register domain (if not already done)
-  - Configure DNS records to point to your EC2 instance
-  - Update Nginx configuration to use the domain name
 - **Implement automated database migrations**: Ensure database schema changes are applied automatically during deployment
 - **Add monitoring and alerting**: Set up services like AWS CloudWatch to monitor application health
 - **Set up load balancing for higher availability**: Use AWS Elastic Load Balancer to distribute traffic and improve reliability
-
-### Moving from Direct IP to Domain Name
-
-When you're ready to switch from IP-based access to a domain name:
-
-1. Register a domain (or use subdomain of existing domain)
-2. Create DNS A record pointing to your EC2 IP address (13.49.235.70)
-3. Update the Nginx configuration to use your domain name:
-   ```nginx
-   server {
-       listen 8080;
-       server_name nexus.eufmd.org;  # Replace with your domain
-       # Rest of config remains the same
-   }
-   ```
-4. Consider moving to standard ports (80/443) instead of 8080 once you have a separate domain
+- **Implement database backup automation**: Automated backups to S3 for disaster recovery
+- **Add rate limiting**: Implement API rate limiting to protect against abuse
