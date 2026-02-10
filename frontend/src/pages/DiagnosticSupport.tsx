@@ -75,30 +75,53 @@ const DiagnosticSupport: React.FC = () => {
 
   const getCountries = async () => {
     try {
-      const response = await fetch('/api/diagnostic-support/countries', {
+      const token = localStorage.getItem('token') || '';
+      const response = await fetch('/api/diagnostic-support/countries/', {
         headers: {
-          'x-access-token': localStorage.getItem('token') || '',
+          'x-access-token': token,
+          'Authorization': `Bearer ${token}`,
         },
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
+      
+      // Validate data is an array
+      if (!Array.isArray(data)) {
+        console.error('Countries API returned non-array data:', data);
+        setCountries([]);
+        return;
+      }
+      
       setCountries(data.map((country: any) => ({
-        name: country.name_un,
+        name_un: country.name_un,
         id: country.id,
         lat: country.lat,
         lon: country.lon,
       })));
     } catch (error) {
       console.error('Error fetching countries:', error);
+      setCountries([]);
     }
   };
 
   const getProcurements = async () => {
     try {
-      const response = await fetch('/api/diagnostic-support', {
+      const token = localStorage.getItem('token') || '';
+      const response = await fetch('/api/diagnostic-support/', {
         headers: {
-          'x-access-token': localStorage.getItem('token') || '',
+          'x-access-token': token,
+          'Authorization': `Bearer ${token}`,
         },
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       
       // Ensure data is an array
@@ -112,6 +135,7 @@ const DiagnosticSupport: React.FC = () => {
     } catch (error) {
       console.error('Error fetching procurement data:', error);
       setProcurements([]); // Set empty array on error
+      setPos([]);
     }
   };
 
@@ -155,12 +179,14 @@ const DiagnosticSupport: React.FC = () => {
 
     try {
       const deletedProcurement = procurements.find(proc => proc.id === entryToDelete);
+      const token = localStorage.getItem('token') || '';
       
       const response = await fetch(`/api/diagnostic-support/${entryToDelete}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'x-access-token': localStorage.getItem('token') || '',
+          'x-access-token': token,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
@@ -173,7 +199,8 @@ const DiagnosticSupport: React.FC = () => {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              'x-access-token': localStorage.getItem('token') || '',
+              'x-access-token': token,
+              'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({ quantity: quantityToUpdate }),
           });

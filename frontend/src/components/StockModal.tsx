@@ -345,11 +345,13 @@ const StockModal: React.FC<StockModalProps> = ({ isVisible, countries, onClose }
         expiry_date: selectedStock.expiry_date,
       };
 
+      const token = localStorage.getItem('token') || '';
       const response = await fetch('/api/diagnostic-support/add', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-access-token': localStorage.getItem('token') || '',
+          'x-access-token': token,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(procurementData),
       });
@@ -360,7 +362,8 @@ const StockModal: React.FC<StockModalProps> = ({ isVisible, countries, onClose }
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'x-access-token': localStorage.getItem('token') || '',
+            'x-access-token': token,
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({ quantity: -newProcurement.quantity }),
         });
