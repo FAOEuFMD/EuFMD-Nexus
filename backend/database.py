@@ -10,6 +10,7 @@ import asyncio
 MAIN_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db_name}"
 PCP_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db2_name}"
 THRACE_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db5_name}"
+TRAINING_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db4_name if settings.db4_name else 'db_training'}"
 
 # Debug: Print database names on startup
 print("Database configuration:")
@@ -22,11 +23,13 @@ print(f"  THRACE URL: {THRACE_DATABASE_URL.replace(settings.db_pass, '****')}")
 main_engine = create_engine(MAIN_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 pcp_engine = create_engine(PCP_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 thrace_engine = create_engine(THRACE_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
+training_engine = create_engine(TRAINING_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 
 # Create session makers
 MainSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=main_engine)
 PCPSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=pcp_engine)
 ThraceSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=thrace_engine)
+TrainingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=training_engine)
 
 Base = declarative_base()
 
