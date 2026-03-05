@@ -899,3 +899,91 @@ async def get_freedom_analysis(
         print(f"Error in freedom analysis: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error calculating freedom data: {str(e)}")
+
+
+@router.post("/calculate-freedom")
+async def calculate_and_save_freedom(
+    species: str = "ALL",
+    disease: str = "FMD",
+    region: str = "ALL",
+    year: int = None,
+    save_results: bool = True,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Calculate freedom-from-disease analysis and optionally save to audit table.
+    
+    R24: Saves calculation results to thrace.thrace_calculation_results for audit trail.
+    
+    Parameters:
+    - species: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
+    - disease: FMD, LSD, SGP, PPR
+    - region: ALL, GR, BG, TK
+    - year: Calculation year (defaults to current year)
+    - save_results: Whether to save results to permanent table (default: True)
+    
+    Returns:
+    - success: Boolean indicating if calculation succeeded
+    - data: Calculation results (same format as GET endpoint)
+    - saved: Boolean indicating if results were saved
+    - saved_count: Number of monthly records saved
+    """
+    try:
+        # Default to current year if not specified
+        if year is None:
+            year = datetime.now().year
+        
+        # Initialize calculator with thrace database engine
+        calculator = ThraceCalculator(thrace_engine)
+        
+        # Calculate system sensitivity and probability of freedom
+        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
+        
+        results = calculator.calculate_system_sensitivity(
+            species_filter=species,
+            disease=disease,
+            region_filter=region,
+            year=year
+        )
+        
+        # R24: Save to permanent table for audit trail
+        saved = False
+        saved_count = 0
+        if save_results:
+            try:
+                calculator.save_calculation_results(
+                    results=results,
+                    species_filter=species,
+                    disease=disease,
+                    region_filter=region,
+                    user_id=current_user.get('id')
+                )
+                saved = True
+                saved_count = len(results.get('labels', []))
+                print(f"Saved {saved_count} monthly results to thrace_calculation_results table")
+            except Exception as save_error:
+                print(f"Warning: Failed to save results: {str(save_error)}")
+                # Continue even if save fails - calculation is still valid
+        
+        return {
+            "success": True,
+            "species": species,
+            "disease": disease,
+            "region": region,
+            "year": year,
+            "data": results,
+            "saved": saved,
+            "saved_count": saved_count,
+            "calculated_by": current_user.get('id'),
+            "metadata": {
+                "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
+                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14", "R24"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error in freedom analysis: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error calculating freedom data: {str(e)}")

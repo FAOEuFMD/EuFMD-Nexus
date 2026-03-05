@@ -107,7 +107,9 @@ class ThraceCalculator:
         # Protocol Exceptions (Corrections Doc Section 1 table)
         if disease == 'PPR':
             if country == 'GRC':
-                if visit_date < datetime(2024, 7, 1):
+                # Convert visit_date to date if it's datetime, for comparison
+                visit_date_obj = visit_date.date() if isinstance(visit_date, datetime) else visit_date
+                if visit_date_obj < datetime(2024, 7, 1).date():
                     # Greece PPR before July 2024: 1/4 tested
                     effective_tested = int(exam_count * 0.25) if exam_count else 0
                 # else: all tested (default)
@@ -514,6 +516,70 @@ class ThraceCalculator:
     # =========================================================================
     # UTILITY METHODS
     # =========================================================================
+    
+    def save_calculation_results(
+        self, 
+        results: Dict, 
+        species_filter: str, 
+        disease: str, 
+        region_filter: str, 
+        user_id: int = None
+    ):
+        """
+        R24: Save calculation results to permanent table for audit trail
+        
+        Args:
+            results: Output from calculate_system_sensitivity()
+            species_filter: Species filter used (BOV, SR, ALL, etc.)
+            disease: Disease type (FMD, PPR, LSD, SGP)
+            region_filter: Region filter (GR, BG, TK, ALL)
+            user_id: ID of user who ran calculation
+        """
+        with self.db.begin() as conn:
+            # Extract arrays from results
+            labels = results.get('labels', [])
+            pfree = results.get('pfree', [])
+            sens = results.get('sens', [])
+            pintro = results.get('pintro', [])
+            animals = results.get('animals', [])
+            herds = results.get('herds', [])
+            sero = results.get('sero', [])
+            clin = results.get('clin', [])
+            
+            # Insert each month's results
+            for i in range(len(labels)):
+                # Parse year and month from label (format: YYYY-MM-01)
+                label_parts = labels[i].split('-')
+                result_year = int(label_parts[0])
+                result_month = int(label_parts[1])
+                
+                conn.execute(text("""
+                    INSERT INTO thrace.thrace_calculation_results (
+                        species_filter, disease, region_filter,
+                        result_year, result_month, sse, pintro, pfreedom,
+                        animals, herds, sero_samples, clin_examined,
+                        calculated_by, calculation_version, calculated_at
+                    ) VALUES (
+                        :species_filter, :disease, :region_filter,
+                        :result_year, :result_month, :sse, :pintro, :pfreedom,
+                        :animals, :herds, :sero, :clin, :user_id, :version, NOW()
+                    )
+                """), {
+                    "species_filter": species_filter,
+                    "disease": disease,
+                    "region_filter": region_filter,
+                    "result_year": result_year,
+                    "result_month": result_month,
+                    "sse": float(sens[i]) if sens[i] else 0.0,
+                    "pintro": float(pintro[i]) if pintro[i] else 0.0,
+                    "pfreedom": float(pfree[i]) if pfree[i] else 0.0,
+                    "animals": animals[i] if i < len(animals) else 0,
+                    "herds": herds[i] if i < len(herds) else 0,
+                    "sero": sero[i] if i < len(sero) else 0,
+                    "clin": clin[i] if i < len(clin) else 0,
+                    "user_id": user_id,
+                    "version": "v2.0_python"
+                })
     
     def validate_calculation(
         self, 
