@@ -1,0 +1,689 @@
+-- -------------------------
+-- Create the params table
+-- -------------------------
+
+DROP TABLE IF EXISTS thrace.params;
+
+CREATE TABLE IF NOT EXISTS thrace.params (
+  `id` mediumint(9) NOT NULL AUTO_INCREMENT,
+  `disease` varchar(5) DEFAULT NULL,
+  `param` varchar(256) DEFAULT NULL,
+  `value` double DEFAULT NULL,
+  `region` varchar(15) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+);
+
+INSERT INTO thrace.params (`disease`, `param`, `value`, `region`) VALUES
+
+('FMD','PstarH',0.02,'GRC,BGR,TUR'),
+('FMD','PstarA',0.2,'GRC,BGR,TUR'),
+('FMD','PIntro',0.2,'GRC,BGR,TUR'),
+('FMD','USe_1',0.92,'GRC,BGR,TUR'),
+('FMD','USe_2',0.2,'GRC,BGR,TUR'),
+('FMD','USe_3',0.3,'GRC,BGR,TUR'),
+('FMD','RR_high',3,'GRC,BGR,TUR'),
+('FMD','RR_low',1,'GRC,BGR,TUR'),
+('FMD','PrP_high',0.2,'GRC,BGR,TUR'),
+('FMD','PrP_low',0.8,'GRC,BGR,TUR'),
+('LSD','PstarH',0.02,'GRC,BGR,TUR'),
+('LSD','PstarA',0.2,'GRC,BGR,TUR'),
+('LSD','PIntro',0.5,'GRC,BGR,TUR'),
+('LSD','USe_1',0,'GRC,BGR,TUR'),
+('LSD','USe_2',0.8,'GRC,BGR,TUR'),
+('LSD','USe_3',0,'GRC,BGR,TUR'),
+('LSD','RR_high',3,'GRC,BGR,TUR'),
+('LSD','RR_low',1,'GRC,BGR,TUR'),
+('LSD','PrP_high',0.2,'GRC,BGR,TUR'),
+('LSD','PrP_low',0.8,'GRC,BGR,TUR'),
+('SGP','PstarH',0.02,'GRC,BGR,TUR'),
+('SGP','PstarA',0.2,'GRC,BGR,TUR'),
+('SGP','PIntro',0.5,'GRC,BGR,TUR'),
+('SGP','USe_1',0,'GRC,BGR,TUR'),
+('SGP','USe_2',0.8,'GRC,BGR,TUR'),
+('SGP','USe_3',0,'GRC,BGR,TUR'),
+('SGP','RR_high',3,'GRC,BGR,TUR'),
+('SGP','RR_low',1,'GRC,BGR,TUR'),
+('SGP','PrP_high',0.2,'GRC,BGR,TUR'),
+('SGP','PrP_low',0.8,'GRC,BGR,TUR'),
+('PPR','PstarH',0.02,'GRC,BGR,TUR'),
+('PPR','PstarA',0.2,'GRC,BGR,TUR'),
+('PPR','PIntro',0.5,'GRC,BGR,TUR'),
+('PPR','USe_1',0.945,'GRC,BGR,TUR'),
+('PPR','USe_2',0.2,'GRC,BGR,TUR'),
+('PPR','USe_3',0,'GRC,BGR,TUR'),
+('PPR','RR_high',3,'GRC,BGR,TUR'),
+('PPR','RR_low',1,'GRC,BGR,TUR'),
+('PPR','PrP_high',0.2,'GRC,BGR,TUR'),
+('PPR','PrP_low',0.8,'GRC,BGR,TUR'),
+
+
+('FMD','PstarH',0.02,'GRC'),
+('FMD','PstarA',0.2,'GRC'),
+('FMD','PIntro',0.2,'GRC'),
+('FMD','USe_1',0.92,'GRC'),
+('FMD','USe_2',0.2,'GRC'),
+('FMD','USe_3',0.3,'GRC'),
+('FMD','RR_high',3,'GRC'),
+('FMD','RR_low',1,'GRC'),
+('FMD','PrP_high',0.2,'GRC'),
+('FMD','PrP_low',0.8,'GRC'),
+('LSD','PstarH',0.02,'GRC'),
+('LSD','PstarA',0.2,'GRC'),
+('LSD','PIntro',0.5,'GRC'),
+('LSD','USe_1',0,'GRC'),
+('LSD','USe_2',0.8,'GRC'),
+('LSD','USe_3',0,'GRC'),
+('LSD','RR_high',3,'GRC'),
+('LSD','RR_low',1,'GRC'),
+('LSD','PrP_high',0.2,'GRC'),
+('LSD','PrP_low',0.8,'GRC'),
+('SGP','PstarH',0.02,'GRC'),
+('SGP','PstarA',0.2,'GRC'),
+('SGP','PIntro',0.5,'GRC'),
+('SGP','USe_1',0,'GRC'),
+('SGP','USe_2',0.8,'GRC'),
+('SGP','USe_3',0,'GRC'),
+('SGP','RR_high',3,'GRC'),
+('SGP','RR_low',1,'GRC'),
+('SGP','PrP_high',0.2,'GRC'),
+('SGP','PrP_low',0.8,'GRC'),
+('PPR','PstarH',0.02,'GRC'),
+('PPR','PstarA',0.2,'GRC'),
+('PPR','PIntro',0.5,'GRC'),
+('PPR','USe_1',0.945,'GRC'),
+('PPR','USe_2',0.2,'GRC'),
+('PPR','USe_3',0,'GRC'),
+('PPR','RR_high',3,'GRC'),
+('PPR','RR_low',1,'GRC'),
+('PPR','PrP_high',0.2,'GRC'),
+('PPR','PrP_low',0.8,'GRC'),
+('FMD','PstarH',0.02,'BGR'),
+('FMD','PstarA',0.2,'BGR'),
+('FMD','PIntro',0.2,'BGR'),
+('FMD','USe_1',0.92,'BGR'),
+('FMD','USe_2',0.2,'BGR'),
+('FMD','USe_3',0.3,'BGR'),
+('FMD','RR_high',3,'BGR'),
+('FMD','RR_low',1,'BGR'),
+('FMD','PrP_high',0.2,'BGR'),
+('FMD','PrP_low',0.8,'BGR'),
+('LSD','PstarH',0.02,'BGR'),
+('LSD','PstarA',0.2,'BGR'),
+('LSD','PIntro',0.5,'BGR'),
+('LSD','USe_1',0,'BGR'),
+('LSD','USe_2',0.8,'BGR'),
+('LSD','USe_3',0,'BGR'),
+('LSD','RR_high',3,'BGR'),
+('LSD','RR_low',1,'BGR'),
+('LSD','PrP_high',0.2,'BGR'),
+('LSD','PrP_low',0.8,'BGR'),
+('SGP','PstarH',0.02,'BGR'),
+('SGP','PstarA',0.2,'BGR'),
+('SGP','PIntro',0.5,'BGR'),
+('SGP','USe_1',0,'BGR'),
+('SGP','USe_2',0.8,'BGR'),
+('SGP','USe_3',0,'BGR'),
+('SGP','RR_high',3,'BGR'),
+('SGP','RR_low',1,'BGR'),
+('SGP','PrP_high',0.2,'BGR'),
+('SGP','PrP_low',0.8,'BGR'),
+('PPR','PstarH',0.02,'BGR'),
+('PPR','PstarA',0.2,'BGR'),
+('PPR','PIntro',0.5,'BGR'),
+('PPR','USe_1',0.945,'BGR'),
+('PPR','USe_2',0.2,'BGR'),
+('PPR','USe_3',0,'BGR'),
+('PPR','RR_high',3,'BGR'),
+('PPR','RR_low',1,'BGR'),
+('PPR','PrP_high',0.2,'BGR'),
+('PPR','PrP_low',0.8,'BGR'),
+('FMD','PstarH',0.02,'TUR'),
+('FMD','PstarA',0.2,'TUR'),
+('FMD','PIntro',0.2,'TUR'),
+('FMD','USe_1',0.92,'TUR'),
+('FMD','USe_2',0.2,'TUR'),
+('FMD','USe_3',0.3,'TUR'),
+('FMD','RR_high',3,'TUR'),
+('FMD','RR_low',1,'TUR'),
+('FMD','PrP_high',0.2,'TUR'),
+('FMD','PrP_low',0.8,'TUR'),
+('LSD','PstarH',0.02,'TUR'),
+('LSD','PstarA',0.2,'TUR'),
+('LSD','PIntro',0.5,'TUR'),
+('LSD','USe_1',0,'TUR'),
+('LSD','USe_2',0.8,'TUR'),
+('LSD','USe_3',0,'TUR'),
+('LSD','RR_high',3,'TUR'),
+('LSD','RR_low',1,'TUR'),
+('LSD','PrP_high',0.2,'TUR'),
+('LSD','PrP_low',0.8,'TUR'),
+('SGP','PstarH',0.02,'TUR'),
+('SGP','PstarA',0.2,'TUR'),
+('SGP','PIntro',0.5,'TUR'),
+('SGP','USe_1',0,'TUR'),
+('SGP','USe_2',0.8,'TUR'),
+('SGP','USe_3',0,'TUR'),
+('SGP','RR_high',3,'TUR'),
+('SGP','RR_low',1,'TUR'),
+('SGP','PrP_high',0.2,'TUR'),
+('SGP','PrP_low',0.8,'TUR'),
+('PPR','PstarH',0.02,'TUR'),
+('PPR','PstarA',0.2,'TUR'),
+('PPR','PIntro',0.5,'TUR'),
+('PPR','USe_1',0,'TUR'),
+('PPR','USe_2',0.2,'TUR'),
+('PPR','USe_3',0,'TUR'),
+('PPR','RR_high',3,'TUR'),
+('PPR','RR_low',1,'TUR'),
+('PPR','PrP_high',0.2,'TUR'),
+('PPR','PrP_low',0.8,'TUR')
+;
+/*
+	('FMD', 'PstarH', 0.02),
+	('FMD', 'PstarA', 0.2),
+	('FMD', 'PIntro', 0.2),
+	('FMD', 'USe_1', 0.92),
+	('FMD', 'USe_2', 0.2),
+	('FMD', 'USe_3', 0.3),
+	('FMD', 'RR_high', 3),
+	('FMD', 'RR_low', 1),
+	('FMD', 'PrP_high', 0.2),
+	('FMD', 'PrP_low', 0.8),
+
+	('LSD', 'PstarH', 0.02),
+	('LSD', 'PstarA', 0.2),
+	('LSD', 'PIntro', 0.2),
+	('LSD', 'USe_1', 0.92),
+	('LSD', 'USe_2', 0.2),
+	('LSD', 'USe_3', 0.3),
+	('LSD', 'RR_high', 3),
+	('LSD', 'RR_low', 1),
+	('LSD', 'PrP_high', 0.2),
+	('LSD', 'PrP_low', 0.8),
+
+	('SGP', 'PstarH', 0.02),
+	('SGP', 'PstarA', 0.2),
+	('SGP', 'PIntro', 0.2),
+	('SGP', 'USe_1', 0.92),
+	('SGP', 'USe_2', 0.2),
+	('SGP', 'USe_3', 0.3),
+	('SGP', 'RR_high', 3),
+	('SGP', 'RR_low', 1),
+	('SGP', 'PrP_high', 0.2),
+	('SGP', 'PrP_low', 0.8),
+
+	('PPR', 'PstarH', 0.02),
+	('PPR', 'PstarA', 0.2),
+	('PPR', 'PIntro', 0.2),
+	('PPR', 'USe_1', 0.92),
+	('PPR', 'USe_2', 0.2),
+	('PPR', 'USe_3', 0.3),
+	('PPR', 'RR_high', 3),
+	('PPR', 'RR_low', 1),
+	('PPR', 'PrP_high', 0.2),
+	('PPR', 'PrP_low', 0.8)
+;
+*/
+-- -------------------------
+-- Create the monthly_pintro table
+-- -------------------------
+
+DROP TABLE IF EXISTS thrace.monthly_pintro;
+
+CREATE TABLE IF NOT EXISTS thrace.monthly_pintro (
+  `id` mediumint(9) NOT NULL AUTO_INCREMENT,
+  `year` int(4) DEFAULT NULL,
+  `month` int(2) DEFAULT NULL,
+  `pintro` double DEFAULT NULL,
+  PRIMARY KEY (`id`)
+);
+
+INSERT INTO thrace.monthly_pintro (`year`, `month`, `pintro`) VALUES
+	(null, 1, 0.0061792613312131),
+	(null, 2, 0.0061792613312131),
+	(null, 3, 0.0184234701262483),
+	(null, 4, 0.0184234701262483),
+	(null, 5, 0.0184234701262483),
+	(null, 6, 0.0184234701262483),
+	(null, 7, 0.0244888880209235),
+	(null, 8, 0.036507516001004),
+	(null, 9, 0.0305168261133445),
+	(null, 10, 0.0184234701262483),
+	(null, 11, 0.0184234701262483),
+	(null, 12, 0.0061792613312131),
+
+	(2017, 1, 0.0061792613312131),
+	(2017, 2, 0.0061792613312131),
+	(2017, 3, 0.0184234701262483),
+	(2017, 4, 0.0184234701262483),
+	(2017, 5, 0.0184234701262483),
+	(2017, 6, 0.0184234701262483),
+	(2017, 7, 0.0244888880209235),
+	(2017, 8, 0.036507516001004),
+	(2017, 9, 0.0305168261133445),
+	(2017, 10, 0.0184234701262483),
+	(2017, 11, 0.0184234701262483),
+	(2017, 12, 0.0061792613312131),
+
+	(2018, 1, 0.0061792613312131),
+	(2018, 2, 0.0061792613312131),
+	(2018, 3, 0.0184234701262483),
+	(2018, 4, 0.0184234701262483),
+	(2018, 5, 0.0184234701262483),
+	(2018, 6, 0.0184234701262483),
+	(2018, 7, 0.0244888880209235),
+	(2018, 8, 0.036507516001004),
+	(2018, 9, 0.0305168261133445),
+	(2018, 10, 0.0184234701262483),
+	(2018, 11, 0.0184234701262483),
+	(2018, 12, 0.0061792613312131),
+
+	(2019, 1, 0.0061792613312131),
+	(2019, 2, 0.0061792613312131),
+	(2019, 3, 0.0184234701262483),
+	(2019, 4, 0.0184234701262483),
+	(2019, 5, 0.0184234701262483),
+	(2019, 6, 0.0184234701262483),
+	(2019, 7, 0.0244888880209235),
+	(2019, 8, 0.036507516001004),
+	(2019, 9, 0.0305168261133445),
+	(2019, 10, 0.0184234701262483),
+	(2019, 11, 0.0184234701262483),
+	(2019, 12, 0.0061792613312131),
+
+	(2020, 1, 0.0061792613312131),
+	(2020, 2, 0.0061792613312131),
+	(2020, 3, 0.0184234701262483),
+	(2020, 4, 0.0184234701262483),
+	(2020, 5, 0.0184234701262483),
+	(2020, 6, 0.0184234701262483),
+	(2020, 7, 0.0244888880209235),
+	(2020, 8, 0.036507516001004),
+	(2020, 9, 0.0305168261133445),
+	(2020, 10, 0.0184234701262483),
+	(2020, 11, 0.0184234701262483),
+	(2020, 12, 0.0061792613312131),
+
+	(2021, 1, 0.0061792613312131),
+	(2021, 2, 0.0061792613312131),
+	(2021, 3, 0.0184234701262483),
+	(2021, 4, 0.0184234701262483),
+	(2021, 5, 0.0184234701262483),
+	(2021, 6, 0.0184234701262483),
+	(2021, 7, 0.0244888880209235),
+	(2021, 8, 0.036507516001004),
+	(2021, 9, 0.0305168261133445),
+	(2021, 10, 0.0184234701262483),
+	(2021, 11, 0.0184234701262483),
+	(2021, 12, 0.0061792613312131),
+
+	(2022, 1, 0.0061792613312131),
+	(2022, 2, 0.0061792613312131),
+	(2022, 3, 0.0184234701262483),
+	(2022, 4, 0.0184234701262483),
+	(2022, 5, 0.0184234701262483),
+	(2022, 6, 0.0184234701262483),
+	(2022, 7, 0.0244888880209235),
+	(2022, 8, 0.036507516001004),
+	(2022, 9, 0.0305168261133445),
+	(2022, 10, 0.0184234701262483),
+	(2022, 11, 0.0184234701262483),
+	(2022, 12, 0.0061792613312131),
+
+	(2023, 1, 0.0061792613312131),
+	(2023, 2, 0.0061792613312131),
+	(2023, 3, 0.0184234701262483),
+	(2023, 4, 0.0184234701262483),
+	(2023, 5, 0.0184234701262483),
+	(2023, 6, 0.0184234701262483),
+	(2023, 7, 0.0244888880209235),
+	(2023, 8, 0.036507516001004),
+	(2023, 9, 0.0305168261133445),
+	(2023, 10, 0.0184234701262483),
+	(2023, 11, 0.0184234701262483),
+	(2023, 12, 0.0061792613312131);
+-- -------------------------
+-- set log_bin_trust_function_creators variable
+-- This allows new procedures and functions to be created
+-- which modify the data (required for the anlaysis)
+-- -------------------------
+
+SET GLOBAL log_bin_trust_function_creators = 1;
+
+-- -------------------------
+-- Create the create_data_summary procedure
+-- -------------------------
+
+-- Thrace Freedom Model
+-- Angus Cameron, Ausvet Europe
+-- April 2021
+
+-- Create function to organise the data into a combined data table
+-- Note - cannot use a temporary table as it needs to be accessed over multiple sessions
+
+drop procedure if exists thrace.create_data_summary;
+
+delimiter //
+create procedure thrace.create_data_summary ()
+BEGIN
+
+	DROP TABLE IF EXISTS all_data;
+
+	CREATE TABLE all_data as (
+	# get all the data
+	select * from (
+	select
+		 species, 
+		 disease,
+		three_letter_code as country,
+		year(dt_insp) as year,
+		month(dt_insp) as month,
+		factivities.epiunitid,
+		case species 
+		   when 'cattle' then coalesce(cattle,0) 
+			when 'sheep' then coalesce(sheep,0)
+			when 'goat' then coalesce(goat,0)
+			when 'buffalo' then coalesce(buffalo,0)
+			when 'pigs' then coalesce(pig,0)
+		 end as size,
+		'high' as risk,
+		case species
+		   when 'cattle' then coalesce(cattleexam,0) 
+			when 'sheep' then coalesce(sheepexam,0)
+			when 'goat' then coalesce(goatsexam,0)
+			when 'buffalo' then coalesce(buffaloesexam,0)
+			when 'pigs' then 0
+		 end as clin,
+		case species
+		   when 'cattle' then coalesce(cattlesample,0) 
+			when 'sheep' then coalesce(sheepsample,0)
+			when 'goat' then coalesce(goatsample,0)
+			when 'buffalo' then coalesce(buffaloessample,0)
+			when 'pigs' then coalesce(pigssample,0)
+		 end as sero, 
+		 case disease 
+		   when 'FMD' then
+			 case species
+					when 'cattle' then coalesce(cattlecliposFMD, 0)
+					when 'buffalo' then coalesce(buffaloesposFMD, 0)
+					when 'sheep' then coalesce(sheepposFMD, 0)
+					when 'goat' then coalesce(goatsposFMD, 0)
+					when 'pigs' then 0
+			  end
+		   when 'LSD' then
+			 case species
+					when 'cattle' then coalesce(cattlecliposLSD, 0)
+					when 'buffalo' then coalesce(buffaloesposLSD, 0)
+			  end
+		   when 'SGP' then
+			 case species
+					when 'sheep' then coalesce(sheepposSGP, 0)
+					when 'goat' then coalesce(goatsposSGP, 0)
+			  end
+		   when 'PPR' then
+			 case species
+					when 'sheep' then coalesce(sheepposPPR, 0)
+					when 'goat' then coalesce(goatsposPPR, 0)
+			  end
+		   end
+		   as clinpos,
+		 case disease 
+		   when 'FMD' then
+			 case species
+					when 'cattle' then coalesce(cattleseroposFMD, 0)
+					when 'buffalo' then coalesce(buffaloesseroposFMD, 0)
+					when 'sheep' then coalesce(sheepseroposFMD, 0)
+					when 'goat' then coalesce(goatsseroposFMD, 0)
+					when 'pigs' then 0
+			  end
+		   when 'LSD' then
+			 case species
+					when 'cattle' then coalesce(cattleseroposLSD, 0)
+					when 'buffalo' then coalesce(buffaloesseroposLSD, 0)
+			  end
+		   when 'SGP' then
+			 case species
+					when 'sheep' then coalesce(sheepseroposSGP, 0)
+					when 'goat' then coalesce(goatsseroposSGP, 0)
+			  end
+		   when 'PPR' then
+			 case species
+					when 'sheep' then coalesce(sheepseroposPPR, 0)
+					when 'goat' then coalesce(goatsseroposPPR, 0)
+			  end
+		   end
+		   as seropos
+		   
+		   
+	  from thrace.factivities,
+	   (SELECT t.cattle as species
+		FROM (VALUES ('cattle'), ('buffalo'),('pigs'),('sheep'), ('goat')) as t
+		) as sp,
+		(SELECT d.`FMD` as disease
+		FROM (VALUES ('FMD'), ('LSD'),('SGP'),('PPR')) as d
+		) as dx,
+	  thrace.epiunits, 
+	  tcc.districts,
+	  tcc.provinces,
+	  tcc.nations
+	  where thrace.factivities.epiunitID = epiunits.epiunitID
+	  and epiunits.districtID = tcc.districts.districtID
+	  and tcc.districts.provinceid = tcc.provinces.provinceID
+	  and tcc.nations.nationID = tcc.provinces.nationID
+	  and  year(dt_insp) > 2015 and year(dt_insp) < 2050
+	) foo
+	where size > 0 and not 
+	  (
+		((species='cattle' or species='buffalo') and (disease = 'SGP' or disease='PPR')) or 
+		((species='sheep' or species='goat') and (disease = 'LSD')) or 
+		((species='pigs') and (disease = 'LSD' or disease = 'SGP' or disease = 'PPR')) 
+	  )
+	);
+
+	alter table thrace.all_data
+	  CONVERT TO 
+		CHARACTER SET utf8mb4 
+		COLLATE utf8mb4_general_ci;
+# Inserita il 02/04/2023 per modifica richiesta da SPRINGER
+        delete from thrace.all_data 
+        where (COUNTRY = 'TUR' AND DISEASE = 'LSD' AND YEAR <= 2016) OR
+        (COUNTRY = 'TUR' AND DISEASE = 'SGP' AND YEAR <= 2017) OR
+
+        (COUNTRY = 'BGR' AND DISEASE = 'LSD' AND YEAR <= 2016) OR
+        (COUNTRY = 'BGR' AND DISEASE = 'PPR' AND YEAR <= 2018) OR
+        
+        (COUNTRY = 'GRC' AND DISEASE = 'LSD' AND YEAR <= 2017) OR
+        (COUNTRY = 'GRC' AND DISEASE = 'SGP' AND YEAR <= 2018);
+
+UPDATE thrace.all_data SET sero = FLOOR(coalesce(sero * 0.25,0)) 
+WHERE COUNTRY = 'GRC' AND DISEASE = 'PPR' AND (SPECIES = 'sheep' OR SPECIES = 'goat'); 
+
+
+# Fine modifica
+
+END; 
+//
+delimiter ;
+
+  
+-- -------------------------
+-- Create the get_param function
+-- -------------------------
+
+drop function if exists thrace.get_param;
+
+delimiter //
+create function thrace.get_param(dname varchar(3), pname text, rname varchar(15)) returns float
+READS SQL DATA
+BEGIN
+declare p float;
+select value 
+   into p
+	from thrace.params 
+	where params.param = pname and params.disease = dname and  params.region = rname;
+return p;
+END;
+//
+delimiter ;
+
+-- -------------------------
+-- Create the json_arrayagg function that is missing from version 10.3.28
+-- -------------------------
+
+DELIMITER //
+
+DROP FUNCTION IF EXISTS JSON_ARRAYAGG//
+
+CREATE AGGREGATE FUNCTION IF NOT EXISTS JSON_ARRAYAGG(next_value TEXT) RETURNS TEXT
+BEGIN  
+
+ DECLARE json TEXT DEFAULT '[""]';
+ DECLARE CONTINUE HANDLER FOR NOT FOUND RETURN json_remove(json, '$[0]');
+      LOOP  
+          FETCH GROUP NEXT ROW;
+          SET json = json_array_append(json, '$', next_value);
+      END LOOP;  
+
+END //
+DELIMITER ;
+
+# ---------------------------
+# -- Create the get_freedom_data function
+# ---------------------------
+
+
+drop function if exists thrace.get_freedom_data;
+
+
+delimiter //
+create function thrace.get_freedom_data(sp VARCHAR(4), dz VARCHAR(4), reg VARCHAR(4))
+returns longtext
+READS SQL DATA
+BEGIN
+
+declare rslt longtext;
+
+case sp
+  when 'ALL' then set @sp = 'cattle,buffalo,sheep,goat,pig' COLLATE utf8mb4_general_ci;
+  when 'LR' then set @sp = 'cattle,buffalo' COLLATE utf8mb4_general_ci;
+  when 'BOV' then set @sp = 'cattle' COLLATE utf8mb4_general_ci;
+  when 'BUF' then set @sp = 'buffalo' COLLATE utf8mb4_general_ci;
+  when 'SR' then set @sp = 'sheep,goat' COLLATE utf8mb4_general_ci;
+  when 'OVI' then set @sp = 'sheep' COLLATE utf8mb4_general_ci;
+  when 'CAP' then set @sp = 'goat' COLLATE utf8mb4_general_ci;
+  when 'POR' then set @sp = 'pig' COLLATE utf8mb4_general_ci;
+  else set @sp = 'cattle,buffalo,sheep,goat,pig' COLLATE utf8mb4_general_ci;
+end case;
+
+case reg
+	when 'ALL' then set @reg = 'GRC,BGR,TUR' COLLATE utf8mb4_general_ci;
+	when 'BG' then set @reg = 'BGR' COLLATE utf8mb4_general_ci;
+	when 'TK' then set @reg = 'TUR' COLLATE utf8mb4_general_ci;
+	when 'GR' then set @reg = 'GRC' COLLATE utf8mb4_general_ci;
+	else set @reg = 'GRC,BGR,TUR' COLLATE utf8mb4_general_ci;
+end case;
+
+with
+  # calculate the adjusted risks
+  ar as (
+  	 select 
+		get_param(dz,'RR_high',@reg) / ((get_param(dz,'RR_high',@reg) * get_param(dz,'PrP_high',@reg)) + (get_param(dz,'RR_low',@reg) *  (1-get_param(dz,'PrP_high',@reg)))) as high,
+		get_param(dz,'RR_low',@reg)  / ((get_param(dz,'RR_high',@reg) * get_param(dz,'PrP_high',@reg)) + (get_param(dz,'RR_low',@reg) *  (1-get_param(dz,'PrP_high',@reg)))) as low
+    ),
+
+  # filter the data
+   mydata as (
+   select * from all_data
+   where 
+	  disease = dz
+	  and find_in_set(species COLLATE utf8mb4_general_ci, @sp)
+	  and find_in_set(country COLLATE utf8mb4_general_ci, @reg)
+   
+   ),
+
+  # Calculate the combined herd-level sensitivity
+  hse as (select
+	  year, month, risk, size, sero, clin,
+	  1-(pow((1-(get_param(dz,'USe_1',@reg) * sero/size)), ceiling(size * get_param(dz,'PstarA',@reg))) *
+		 pow((1-(get_param(dz,'USe_2',@reg) * clin/size)), ceiling(size * get_param(dz,'PstarA',@reg))) ) as hsec
+	from mydata),
+
+  # calculate the system sensitivity
+  sse as (select 
+    year, hse.month, 
+      1- exp(sum(ln(1 - (ar.high * get_param(dz,'PstarH',@reg) * (
+		  case when lower(risk) = 'high' then hse.hsec else 0 end ))))) *
+      exp(sum(ln(1 - (ar.low * get_param(dz,'PstarH',@reg) * (
+		  case when lower(risk) <> 'high' then hse.hsec else 0 end )))))  as sse,
+		sum(size) as animals,
+		sum(sero) as sero,
+		sum(clin) as clin,
+		# sum(abattoir) as abattoir,
+		count(size) as herds 
+  from hse, ar
+  group by year, hse.month
+  order by year asc, hse.month asc),
+
+  # add in PIntro
+  ssem as ( SELECT sse.year, sse.month, sse, coalesce(piy.pintro, pi.pintro) as pintro, animals, herds, sero, clin 
+	  FROM sse
+  join monthly_pintro pi on sse.month = pi.month and pi.year is null
+  left outer join monthly_pintro piy on sse.month = piy.month and sse.year = piy.year
+  order by sse.year, sse.month),
+    
+  # run the final Basyesian update over time using a varialble (@pfree) to accumulate the result
+  model as (SELECT t.id,
+       /*concat_ws('-',lpad(month,2,'0'), year) as mth,*/
+       concat_ws('-',year,lpad(month,2,'0'),'01') as mth,
+       sse, pintro, animals, herds, sero, clin,
+       /*@pfree as prior, */
+	    @pfree:= (((1-pintro) * @pfree) / (1 - sse + (@pfree * sse))) as posterior
+	FROM
+	( SELECT 
+			row_number() over (order by year, month) as id, 
+			year, month, sse, pintro,
+			animals, herds, sero, clin #, abattoir
+	  FROM ssem) t
+	JOIN (SELECT @pfree:=0.5) r
+	ORDER BY t.id)
+   
+/*
+# version for 10.5 - with properly working JSON functions
+# create the result as a JSON object
+	select
+	  json_object(
+	    'labels',json_arrayagg(mth),
+	    'pfree', json_arrayagg(format(posterior, 4)),
+ 	    'sens',json_arrayagg(format(sse,4)),
+	    'pintro', json_arrayagg(format(pintro,4)),
+	    'animals', json_arrayagg(animals),
+	    'herds', json_arrayagg(herds),
+	    'sero', json_arrayagg(sero),
+	    'clin', json_arrayagg(clin)) as result
+	 into rslt
+	 from model;
+*/
+# version for 10.3.28 - without properly working JSON functions
+# Manually construct the JSON result as a text object
+	select
+	  concat('{'
+	    '"labels": ',json_arrayagg(mth), ',',
+	    '"pfree": ', json_arrayagg(format(posterior, 4)), ',',
+ 	    '"sens": ',json_arrayagg(format(sse,4)), ',',
+	    '"pintro": ', json_arrayagg(format(pintro,4)), ',',
+	    '"animals": ', json_arrayagg(animals), ',',
+	    '"herds": ', json_arrayagg(herds), ',',
+	    '"sero": ', json_arrayagg(sero), ',',
+	    '"clin": ', json_arrayagg(clin),
+		'}'
+		) as result
+	 into rslt
+	 from model;
+
+	 return rslt;
+	 
+END;
+//
+delimiter ;
+	    
+

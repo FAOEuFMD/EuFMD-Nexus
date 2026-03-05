@@ -49,6 +49,13 @@ const Thrace: React.FC = () => {
   const [freedomRegion, setFreedomRegion] = useState('ALL');
   const freedomChartRef = useRef<HTMLDivElement | null>(null);
 
+  // Auto-adjust region when disease changes to PPR (PPR not available in ALL regions)
+  useEffect(() => {
+    if (freedomDisease === 'PPR' && freedomRegion === 'ALL') {
+      setFreedomRegion('GR'); // Default to Greece when switching to PPR
+    }
+  }, [freedomDisease]);
+
   const templates: Template[] = [
     { id: 'bulgaria', name: 'Bulgaria', fileName: 'ThraceActivitiesBulgaria' },
     { id: 'greece', name: 'Greece', fileName: 'ThraceActivitiesGreece' },
@@ -727,7 +734,9 @@ const Thrace: React.FC = () => {
                   onChange={(e) => setFreedomRegion(e.target.value)}
                   className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="ALL">All</option>
+                  <option value="ALL" disabled={freedomDisease === 'PPR'}>
+                    All {freedomDisease === 'PPR' ? '(Not available for PPR)' : ''}
+                  </option>
                   <option value="BG">Bulgaria</option>
                   <option value="GR">Greece</option>
                   <option value="TK">Türkiye</option>
