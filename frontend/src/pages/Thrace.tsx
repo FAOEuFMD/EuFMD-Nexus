@@ -54,7 +54,7 @@ const Thrace: React.FC = () => {
     if (freedomDisease === 'PPR' && freedomRegion === 'ALL') {
       setFreedomRegion('GR'); // Default to Greece when switching to PPR
     }
-  }, [freedomDisease]);
+  }, [freedomDisease, freedomRegion]);
 
   const templates: Template[] = [
     { id: 'bulgaria', name: 'Bulgaria', fileName: 'ThraceActivitiesBulgaria' },
