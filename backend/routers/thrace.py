@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import List, Dict, Any
-from database import DatabaseHelper
+from database import DatabaseHelper, thrace_engine
 from auth import get_current_user
 from datetime import datetime
 import openpyxl
 from io import BytesIO
 import json
+from .thrace_calculator import ThraceCalculator
 
 router = APIRouter(prefix="/api/thrace", tags=["thrace"])
 
@@ -102,14 +103,69 @@ async def upload_thrace_data(
         workbook = openpyxl.load_workbook(BytesIO(contents), data_only=True)
         worksheet = workbook.active
         
-        # 45-column structure: indices 0-44
-        # Columns: epiunitID, villagename, epiunitcountrycode, inspectorID, dt_insp, 
-        #          cattle, cattleexam, cattleclinposFMD, cattleclinposLSD,
-        #          sheep, sheepexam, sheepposFMD, sheepposSGP, sheepposPPR,
-        #          goat, goatexam, goatposFMD, goatposSGP, goatposPPR,
-        #          buffalo, buffaloesexam, buffaloesposFMD, buffaloesposLSD,
-        #          pig, pigssample, pigsserosposFMD,
-        #          wildsample, wildserosposFMD (+ additional columns)
+        # Read header row (row 1) to map Excel columns to database fields
+        header_row = worksheet[1]
+        column_map = {}
+        
+        # Map Excel column headers to database field names
+        header_to_field = {
+            'InspectorID': 'inspectorID',
+            'Village/Epiunit code': 'epiunitcountrycode',
+            'Year': 'year',
+            'Month': 'month',
+            'Day': 'day',
+            'Cattle': 'cattle',
+            'Sheep': 'sheep',
+            'Goats': 'goat',
+            'Pigs': 'pig',
+            'W Buffalo': 'buffalo',
+            'Cattle clin exam': 'cattleexam',
+            'Cattle tested': 'cattletested',
+            'Cattle clin pos FMD': 'cattlecliposFMD',
+            'Cattle clin pos LSD': 'cattlecliposLSD',
+            'Sheep clin exam': 'sheepexam',
+            'Sheep clin pos FMD': 'sheepposFMD',
+            'Sheep clin pos SGP': 'sheepposSGP',
+            'Sheep clin pos PPR': 'sheepposPPR',
+            'Goats clin exam': 'goatsexam',
+            'Goats clin pos FMD': 'goatsposFMD',
+            'Goats clin pos SGP': 'goatsposSGP',
+            'Goats clin pos PPR': 'goatsposPPR',
+            'Buffalo clin exam': 'buffaloesexam',
+            'Buffalo clin pos FMD': 'buffaloesposFMD',
+            'Buffalo clin pos LSD': 'buffaloesposLSD',
+            'Cattle smpl': 'cattlesample',
+            'Cattle sero pos FMD': 'cattleseroposFMD',
+            'Cattle pos LSD': 'cattleseroposLSD',
+            'Sheep tested': 'sheeptested',
+            'Sheep smpl': 'sheepsample',
+            'Sheep sero pos FMD': 'sheepseroposFMD',
+            'Sheep test pos SGP': 'sheepseroposSGP',
+            'Sheep sero pos PPR': 'sheepseroposPPR',
+            'Goats tested': 'goattested',
+            'Goats smpl': 'goatsample',
+            'Goats sero pos FMD': 'goatsseroposFMD',
+            'Goats test pos SGP': 'goatsseroposSGP',
+            'Goat sero pos PPR': 'goatsseroposPPR',
+            'Pigs tested': 'pigtested',
+            'Pigs smpl': 'pigssample',
+            'Pigs sero pos FMD': 'pigsserosposFMD',
+            'Buffalo tested': 'buffalotested',
+            'Buffalo smpl': 'buffaloessample',
+            'Buffalo sero pos FMD': 'buffaloesseroposFMD',
+            'Buffalo test pos LSD': 'buffaloesseroposLSD',
+            'Wild tested': 'wildtested',
+            'Wild smpl': 'wildsample',
+            'Wild sero pos FMD': 'wildserosposFMD'
+        }
+        
+        # Build column index map
+        for col_idx, cell in enumerate(header_row):
+            header_value = str(cell.value).strip() if cell.value else None
+            if header_value and header_value in header_to_field:
+                column_map[header_to_field[header_value]] = col_idx
+        
+        print(f"Mapped {len(column_map)} columns from Excel header")
         
         user_id = current_user.get('user_id')
         
@@ -133,41 +189,32 @@ async def upload_thrace_data(
         for row_idx in range(2, min(402, worksheet.max_row + 1)):
             row = worksheet[row_idx]
             
-            # Extract 45 columns (indices 0-44)
-            data = [row[col_idx].value for col_idx in range(45)]
+            # Helper function to get cell value by field name
+            def get_value(field_name):
+                if field_name in column_map:
+                    return row[column_map[field_name]].value
+                return None
             
-            # Skip completely empty rows
-            if all(v is None for v in data):
+            # Check if row is completely empty
+            if all(cell.value is None for cell in row):
                 continue
             
-            # Debug: print first 3 rows with all data
-            if row_idx <= 4:
-                print(f"\nRow {row_idx} - ALL DATA (45 columns):")
-                for i, val in enumerate(data):
-                    if val is not None:
-                        print(f"  data[{i}] = {val}")
-            
-            # PHP code checks if data[5] (year) is empty to stop processing
-            if data[5] is None or str(data[5]).strip() == '':
+            # PHP code checks if year is empty to stop processing
+            year_value = get_value('year')
+            if year_value is None or str(year_value).strip() == '':
                 if row_idx <= 10:
-                    print(f"Row {row_idx} skipped: data[5] (Year) is empty or None")
+                    print(f"Row {row_idx} skipped: Year is empty or None")
                 continue
             
             total_rows += 1
             if row_idx <= 6:
                 print(f"Row {row_idx} ACCEPTED: total_rows={total_rows}")
             
-            # Extract core data - correct Excel column mapping:
-            # data[0] = Farm ID (not used)
-            # data[1] = Name/villagename
-            # data[2] = InspectorID
-            # data[3] = Village/Epiunit code (epiunitcountrycode) - used to look up epiunitID
-            # data[4] = Entered by (not used)
-            # data[5,6,7] = year, month, day
+            # Extract core data using column mapping
             try:
-                villagename = str(data[1]).strip() if data[1] else ""
-                inspectorID = int(float(data[2])) if is_numeric(data[2]) else 0
-                epiunitcountrycode_from_excel = str(data[3]).strip().upper() if data[3] else ""
+                villagename = str(row[1].value).strip() if row[1].value else ""  # Column 1 is always Name/villagename
+                inspectorID = int(float(get_value('inspectorID'))) if is_numeric(get_value('inspectorID')) else 0
+                epiunitcountrycode_from_excel = str(get_value('epiunitcountrycode')).strip().upper() if get_value('epiunitcountrycode') else ""
                 
                 # Look up epiunitID from the epiunitcountrycode
                 epiunitID = epiunits_map.get(epiunitcountrycode_from_excel)
@@ -175,9 +222,9 @@ async def upload_thrace_data(
                     epiunitID = 0
                 
                 # Build date from year/month/day columns
-                year = int(float(data[5])) if is_numeric(data[5]) else None
-                month = int(float(data[6])) if is_numeric(data[6]) else None
-                day = int(float(data[7])) if is_numeric(data[7]) else None
+                year = int(float(get_value('year'))) if is_numeric(get_value('year')) else None
+                month = int(float(get_value('month'))) if is_numeric(get_value('month')) else None
+                day = int(float(get_value('day'))) if is_numeric(get_value('day')) else None
                 
                 dt_insp = None
                 if year and month and day:
@@ -212,23 +259,25 @@ async def upload_thrace_data(
                         return num if num >= 1 else 0
                     return 0
                 
-                # Species-specific validation - PHP uses verificaLR(), verificaSR(), verificaPig(), verificaWA()
-                # Cattle clinical: col 8-12 (cattle, cattleexam, cattlecliposFMD, cattlecliposLSD)
-                cattle = to_int(data[8])
-                cattleexam = to_int(data[13])
-                cattlecliposFMD = to_int(data[14])
-                cattlecliposLSD = to_int(data[15])
+                # Species-specific validation using column mapping
+                # Cattle clinical and serology
+                cattle = to_int(get_value('cattle'))
+                cattleexam = to_int(get_value('cattleexam'))
+                cattletested = to_int(get_value('cattletested'))
+                cattlecliposFMD = to_int(get_value('cattlecliposFMD'))
+                cattlecliposLSD = to_int(get_value('cattlecliposLSD'))
                 if cattlecliposFMD > cattleexam:
                     error_msg = (error_msg or "") + f"Cattle clin. FMD ({cattlecliposFMD}) > exams ({cattleexam}); "
                 if cattlecliposLSD > cattleexam:
                     error_msg = (error_msg or "") + f"Cattle clin. LSD ({cattlecliposLSD}) > exams ({cattleexam}); "
                 
-                # Sheep clinical: col 9, 16-19 (sheep, sheepexam, sheepposFMD, sheepposSGP, sheepposPPR)
-                sheep = to_int(data[9])
-                sheepexam = to_int(data[16])
-                sheepposFMD = to_int(data[17])
-                sheepposSGP = to_int(data[18])
-                sheepposPPR = to_int(data[19])
+                # Sheep clinical and serology
+                sheep = to_int(get_value('sheep'))
+                sheepexam = to_int(get_value('sheepexam'))
+                sheeptested = to_int(get_value('sheeptested'))
+                sheepposFMD = to_int(get_value('sheepposFMD'))
+                sheepposSGP = to_int(get_value('sheepposSGP'))
+                sheepposPPR = to_int(get_value('sheepposPPR'))
                 if sheepposFMD > sheepexam:
                     error_msg = (error_msg or "") + f"Sheep clin. FMD ({sheepposFMD}) > exams ({sheepexam}); "
                 if sheepposSGP > sheepexam:
@@ -236,12 +285,13 @@ async def upload_thrace_data(
                 if sheepposPPR > sheepexam:
                     error_msg = (error_msg or "") + f"Sheep clin. PPR ({sheepposPPR}) > exams ({sheepexam}); "
                 
-                # Goat clinical: col 10, 20-23 (goat, goatsexam, goatsposFMD, goatsposSGP, goatsposPPR)
-                goat = to_int(data[10])
-                goatsexam = to_int(data[20])
-                goatsposFMD = to_int(data[21])
-                goatsposSGP = to_int(data[22])
-                goatsposPPR = to_int(data[23])
+                # Goat clinical and serology
+                goat = to_int(get_value('goat'))
+                goatsexam = to_int(get_value('goatsexam'))
+                goattested = to_int(get_value('goattested'))
+                goatsposFMD = to_int(get_value('goatsposFMD'))
+                goatsposSGP = to_int(get_value('goatsposSGP'))
+                goatsposPPR = to_int(get_value('goatsposPPR'))
                 if goatsposFMD > goatsexam:
                     error_msg = (error_msg or "") + f"Goat clin. FMD ({goatsposFMD}) > exams ({goatsexam}); "
                 if goatsposSGP > goatsexam:
@@ -249,30 +299,31 @@ async def upload_thrace_data(
                 if goatsposPPR > goatsexam:
                     error_msg = (error_msg or "") + f"Goat clin. PPR ({goatsposPPR}) > exams ({goatsexam}); "
                 
-                # Buffalo clinical: col 12, 24-26 (buffalo, buffaloesexam, buffaloesposFMD, buffaloesposLSD)
-                buffalo = to_int(data[12])
-                buffaloesexam = to_int(data[24])
-                buffaloesposFMD = to_int(data[25])
-                buffaloesposLSD = to_int(data[26])
+                # Buffalo clinical and serology
+                buffalo = to_int(get_value('buffalo'))
+                buffaloesexam = to_int(get_value('buffaloesexam'))
+                buffalotested = to_int(get_value('buffalotested'))
+                buffaloesposFMD = to_int(get_value('buffaloesposFMD'))
+                buffaloesposLSD = to_int(get_value('buffaloesposLSD'))
                 if buffaloesposFMD > buffaloesexam:
                     error_msg = (error_msg or "") + f"Buffalo clin. FMD ({buffaloesposFMD}) > exams ({buffaloesexam}); "
                 if buffaloesposLSD > buffaloesexam:
                     error_msg = (error_msg or "") + f"Buffalo clin. LSD ({buffaloesposLSD}) > exams ({buffaloesexam}); "
                 
-                # Cattle serology: col 27-29 (cattlesample, cattleseroposFMD, cattleseroposLSD)
-                cattlesample = to_int(data[27])
-                cattleseroposFMD = to_int(data[28])
-                cattleseroposLSD = to_int(data[29])
+                # Cattle serology
+                cattlesample = to_int(get_value('cattlesample'))
+                cattleseroposFMD = to_int(get_value('cattleseroposFMD'))
+                cattleseroposLSD = to_int(get_value('cattleseroposLSD'))
                 if cattleseroposFMD > cattlesample:
                     error_msg = (error_msg or "") + f"Cattle sero. FMD ({cattleseroposFMD}) > samples ({cattlesample}); "
                 if cattleseroposLSD > cattlesample:
                     error_msg = (error_msg or "") + f"Cattle sero. LSD ({cattleseroposLSD}) > samples ({cattlesample}); "
                 
-                # Sheep serology: col 30-33 (sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR)
-                sheepsample = to_int(data[30])
-                sheepseroposFMD = to_int(data[31])
-                sheepseroposSGP = to_int(data[32])
-                sheepseroposPPR = to_int(data[33])
+                # Sheep serology
+                sheepsample = to_int(get_value('sheepsample'))
+                sheepseroposFMD = to_int(get_value('sheepseroposFMD'))
+                sheepseroposSGP = to_int(get_value('sheepseroposSGP'))
+                sheepseroposPPR = to_int(get_value('sheepseroposPPR'))
                 if sheepseroposFMD > sheepsample:
                     error_msg = (error_msg or "") + f"Sheep sero. FMD ({sheepseroposFMD}) > samples ({sheepsample}); "
                 if sheepseroposSGP > sheepsample:
@@ -280,11 +331,11 @@ async def upload_thrace_data(
                 if sheepseroposPPR > sheepsample:
                     error_msg = (error_msg or "") + f"Sheep sero. PPR ({sheepseroposPPR}) > samples ({sheepsample}); "
                 
-                # Goat serology: col 34-37 (goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR)
-                goatsample = to_int(data[34])
-                goatsseroposFMD = to_int(data[35])
-                goatsseroposSGP = to_int(data[36])
-                goatsseroposPPR = to_int(data[37])
+                # Goat serology
+                goatsample = to_int(get_value('goatsample'))
+                goatsseroposFMD = to_int(get_value('goatsseroposFMD'))
+                goatsseroposSGP = to_int(get_value('goatsseroposSGP'))
+                goatsseroposPPR = to_int(get_value('goatsseroposPPR'))
                 if goatsseroposFMD > goatsample:
                     error_msg = (error_msg or "") + f"Goat sero. FMD ({goatsseroposFMD}) > samples ({goatsample}); "
                 if goatsseroposSGP > goatsample:
@@ -292,32 +343,34 @@ async def upload_thrace_data(
                 if goatsseroposPPR > goatsample:
                     error_msg = (error_msg or "") + f"Goat sero. PPR ({goatsseroposPPR}) > samples ({goatsample}); "
                 
-                # Pig: col 11, 38-39 (pig, pigssample, pigsserosposFMD)
-                pig = to_int(data[11])
-                pigssample = to_int(data[38])
-                pigsserosposFMD = to_int(data[39])
+                # Pig
+                pig = to_int(get_value('pig'))
+                pigtested = to_int(get_value('pigtested'))
+                pigssample = to_int(get_value('pigssample'))
+                pigsserosposFMD = to_int(get_value('pigsserosposFMD'))
                 if pigsserosposFMD > pigssample:
                     error_msg = (error_msg or "") + f"Pig sero. FMD ({pigsserosposFMD}) > samples ({pigssample}); "
                 
-                # Buffalo serology: col 40-42 (buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD)
-                buffaloessample = to_int(data[40])
-                buffaloesseroposFMD = to_int(data[41])
-                buffaloesseroposLSD = to_int(data[42])
+                # Buffalo serology
+                buffaloessample = to_int(get_value('buffaloessample'))
+                buffaloesseroposFMD = to_int(get_value('buffaloesseroposFMD'))
+                buffaloesseroposLSD = to_int(get_value('buffaloesseroposLSD'))
                 if buffaloesseroposFMD > buffaloessample:
                     error_msg = (error_msg or "") + f"Buffalo sero. FMD ({buffaloesseroposFMD}) > samples ({buffaloessample}); "
                 if buffaloesseroposLSD > buffaloessample:
                     error_msg = (error_msg or "") + f"Buffalo sero. LSD ({buffaloesseroposLSD}) > samples ({buffaloessample}); "
                 
-                # Wild: col 43-44 (wildsample, wildserosposFMD)
-                wildsample = to_int(data[43])
-                wildserosposFMD = to_int(data[44])
+                # Wild
+                wildtested = to_int(get_value('wildtested'))
+                wildsample = to_int(get_value('wildsample'))
+                wildserosposFMD = to_int(get_value('wildserosposFMD'))
                 if wildserosposFMD > wildsample:
                     error_msg = (error_msg or "") + f"Wild sero. FMD ({wildserosposFMD}) > samples ({wildsample}); "
                 
                 # Skip duplicate check during upload - will be checked during approval
                 # This avoids 400+ separate database queries which cause timeout
                 
-                # Prepare row data for insertion matching SQL table structure
+                # Prepare row data for insertion matching SQL table structure (now with 6 new 'tested' fields)
                 row_data = (
                     epiunitID,              # int
                     inspectorID,            # int
@@ -359,6 +412,12 @@ async def upload_thrace_data(
                     buffaloesseroposLSD or None,# int DEFAULT NULL
                     wildsample or None,     # int DEFAULT NULL
                     wildserosposFMD or None,# int DEFAULT NULL
+                    cattletested or None,   # int DEFAULT NULL - NEW
+                    sheeptested or None,    # int DEFAULT NULL - NEW
+                    goattested or None,     # int DEFAULT NULL - NEW
+                    buffalotested or None,  # int DEFAULT NULL - NEW
+                    pigtested or None,      # int DEFAULT NULL - NEW
+                    wildtested or None,     # int DEFAULT NULL - NEW
                     error_msg,              # varchar(255) DEFAULT NULL
                     datetime.now().date(),  # dt_inival date NOT NULL
                     user_id,                # userID int NOT NULL
@@ -383,7 +442,7 @@ async def upload_thrace_data(
             try:
                 print(f"Starting bulk insert of {len(inserted_data)} rows...")
                 
-                # Insert all rows using parameterized query
+                # Insert all rows using parameterized query (now includes 6 new 'tested' columns)
                 insert_query = """
                     INSERT INTO factivities_tmp (
                         epiunitID, inspectorID, dt_insp, cattle, sheep, goat, pig, buffalo,
@@ -397,6 +456,7 @@ async def upload_thrace_data(
                         pigssample, pigsserosposFMD,
                         buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD,
                         wildsample, wildserosposFMD,
+                        cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
                         errore, dt_inival, userID, epiunitcountrycode, villagename
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s,
@@ -410,6 +470,7 @@ async def upload_thrace_data(
                         %s, %s,
                         %s, %s, %s,
                         %s, %s,
+                        %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s
                     )
                 """
@@ -551,7 +612,9 @@ async def approve_staging_data(current_user: dict = Depends(get_current_user)):
                 goatsexam, goatsposFMD, goatsposSGP, goatsposPPR, buffaloesexam, buffaloesposFMD, buffaloesposLSD,
                 cattlesample, cattleseroposFMD, cattleseroposLSD, sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR,
                 goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR, pigssample, pigsserosposFMD,
-                buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD, wildsample, wildserosposFMD, dt_inival, userID
+                buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD, wildsample, wildserosposFMD,
+                cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
+                dt_inival, userID
             )
             SELECT 
                 inspectorID, epiunitID, dt_insp, cattle, sheep, goat, pig, buffalo,
@@ -559,7 +622,9 @@ async def approve_staging_data(current_user: dict = Depends(get_current_user)):
                 goatsexam, goatsposFMD, goatsposSGP, goatsposPPR, buffaloesexam, buffaloesposFMD, buffaloesposLSD,
                 cattlesample, cattleseroposFMD, cattleseroposLSD, sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR,
                 goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR, pigssample, pigsserosposFMD,
-                buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD, wildsample, wildserosposFMD, dt_inival, userID
+                buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD, wildsample, wildserosposFMD,
+                cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
+                dt_inival, userID
             FROM thrace.factivities_tmp
             WHERE userID = %s AND errore IS NULL
         """
@@ -777,40 +842,148 @@ async def get_freedom_analysis(
     species: str = "ALL",
     disease: str = "FMD",
     region: str = "ALL",
-    refresh_summary: bool = False,
+    year: int = None,
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Return freedom-from-disease analysis by delegating to the legacy SQL routines.
-    - Optionally refresh the precomputed summary table via create_data_summary().
-    - Then call get_freedom_data(species, disease, region) which returns JSON.
+    Calculate freedom-from-disease analysis using Python ThraceCalculator.
+    Replaces old SQL function: thrace.get_freedom_data()
+    
+    Corrections Implemented:
+    - R1: Combined herd sensitivity with overlap correction (Cameron et al. FAO 2014)
+    - R2: Uses *_tested columns from Excel uploads (protocol-based)
+    - R4: Uses risklevel from epiunits table
+    - R11-R12: Year-specific monthly P(intro) with fallback
+    - R14: Greece RR=1 (risk-based not applicable)
+    
+    Parameters:
+    - species: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
+    - disease: FMD, LSD, SGP, PPR
+    - region: ALL, GR, BG, TK
+    - year: Calculation year (defaults to current year)
     """
     try:
-        if refresh_summary:
-            refresh = await DatabaseHelper.execute_thrace_query("CALL thrace.create_data_summary()")
-            if refresh.get("error"):
-                raise HTTPException(status_code=500, detail=f"Summary refresh failed: {refresh['error']}")
-        result = await DatabaseHelper.execute_thrace_query(
-            "SELECT thrace.get_freedom_data(%s, %s, %s) AS result",
-            (species, disease, region)
+        # Default to current year if not specified
+        if year is None:
+            year = datetime.now().year
+        
+        # Initialize calculator with thrace database engine
+        calculator = ThraceCalculator(thrace_engine)
+        
+        # Calculate system sensitivity and probability of freedom
+        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
+        
+        results = calculator.calculate_system_sensitivity(
+            species_filter=species,
+            disease=disease,
+            region_filter=region,
+            year=year
         )
-        if result.get("error"):
-            raise HTTPException(status_code=500, detail=f"Freedom data query failed: {result['error']}")
-        rows = result.get("data", [])
-        if not rows or "result" not in rows[0] or rows[0]["result"] is None:
-            raise HTTPException(status_code=404, detail="Freedom data not found")
-        try:
-            payload = json.loads(rows[0]["result"])
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail="Freedom data returned invalid JSON")
+        
         return {
             "success": True,
             "species": species,
             "disease": disease,
             "region": region,
-            "data": payload,
+            "year": year,
+            "data": results,
+            "metadata": {
+                "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
+                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14"]
+            }
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving freedom data: {str(e)}")
+        import traceback
+        print(f"Error in freedom analysis: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error calculating freedom data: {str(e)}")
+
+
+@router.post("/calculate-freedom")
+async def calculate_and_save_freedom(
+    species: str = "ALL",
+    disease: str = "FMD",
+    region: str = "ALL",
+    year: int = None,
+    save_results: bool = True,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Calculate freedom-from-disease analysis and optionally save to audit table.
+    
+    R24: Saves calculation results to thrace.thrace_calculation_results for audit trail.
+    
+    Parameters:
+    - species: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
+    - disease: FMD, LSD, SGP, PPR
+    - region: ALL, GR, BG, TK
+    - year: Calculation year (defaults to current year)
+    - save_results: Whether to save results to permanent table (default: True)
+    
+    Returns:
+    - success: Boolean indicating if calculation succeeded
+    - data: Calculation results (same format as GET endpoint)
+    - saved: Boolean indicating if results were saved
+    - saved_count: Number of monthly records saved
+    """
+    try:
+        # Default to current year if not specified
+        if year is None:
+            year = datetime.now().year
+        
+        # Initialize calculator with thrace database engine
+        calculator = ThraceCalculator(thrace_engine)
+        
+        # Calculate system sensitivity and probability of freedom
+        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
+        
+        results = calculator.calculate_system_sensitivity(
+            species_filter=species,
+            disease=disease,
+            region_filter=region,
+            year=year
+        )
+        
+        # R24: Save to permanent table for audit trail
+        saved = False
+        saved_count = 0
+        if save_results:
+            try:
+                calculator.save_calculation_results(
+                    results=results,
+                    species_filter=species,
+                    disease=disease,
+                    region_filter=region,
+                    user_id=current_user.get('id')
+                )
+                saved = True
+                saved_count = len(results.get('labels', []))
+                print(f"Saved {saved_count} monthly results to thrace_calculation_results table")
+            except Exception as save_error:
+                print(f"Warning: Failed to save results: {str(save_error)}")
+                # Continue even if save fails - calculation is still valid
+        
+        return {
+            "success": True,
+            "species": species,
+            "disease": disease,
+            "region": region,
+            "year": year,
+            "data": results,
+            "saved": saved,
+            "saved_count": saved_count,
+            "calculated_by": current_user.get('id'),
+            "metadata": {
+                "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
+                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14", "R24"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error in freedom analysis: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error calculating freedom data: {str(e)}")

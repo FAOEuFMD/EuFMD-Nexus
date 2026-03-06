@@ -139,9 +139,88 @@ Key deployment files:
 
 The FastAPI backend provides automatic API documentation available at `/docs` when running the server.
 
+## Guide: How to Locate & Update the Daily Summary Script (Thrace Production)
 
+### 1. Connect to the EC2 instance
 
-### Branching Strategy
+1. Open AWS Console
+2. Go to EC2 → Instances
+3. Select `thrace_production`
+4. Click **Connect** → **EC2 Instance Connect**
+
+### 2. Identify which user runs the app
+
+```bash
+ps aux | grep php-fpm
+```
+
+→ The app runs as user `webapp`.
+
+### 3. Check system cron jobs
+
+```bash
+ls -l /etc/cron.d/
+```
+
+Find this entry: `thrace-cache`
+
+Inspect it:
+```bash
+sudo cat /etc/cron.d/thrace-cache
+```
+
+It runs daily:
+```
+0 0 * * * root /usr/local/bin/run-summary.sh
+```
+
+### 4. Inspect the main cron script
+
+```bash
+sudo cat /usr/local/bin/run-summary.sh
+```
+
+This script executes:
+```
+/var/app/current/.platform/scripts/run_summary.php
+```
+
+### 5. Open the PHP job script
+
+```bash
+sudo nano /var/app/current/.platform/scripts/run_summary.php
+```
+
+Inside it you will see:
+- `CALL thrace.create_data_summary()`
+- A loop calling `thrace.get_freedom_data()`
+- Species / diseases / regions arrays
+- JSON output paths
+
+### 6. How to update the script
+
+**Always make a backup first:**
+```bash
+sudo cp /var/app/current/.platform/scripts/run_summary.php \
+       /var/app/current/.platform/scripts/run_summary.php.bak.$(date +%F-%H%M%S)
+```
+
+**Then edit:**
+```bash
+sudo nano /var/app/current/.platform/scripts/run_summary.php
+```
+
+**Save, exit, and test manually:**
+```bash
+sudo -u webapp php /var/app/current/.platform/scripts/run_summary.php
+```
+
+**Logs are stored in:**
+```
+/var/log/thrace/run-summary.log
+```
+
+## Branching Strategy
 
 The reference branch is `staging`. Always pull from and merge changes into the `staging` branch.
 

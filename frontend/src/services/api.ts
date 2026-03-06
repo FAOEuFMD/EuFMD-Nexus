@@ -139,6 +139,9 @@ export const apiService = {
     getCourses: () =>
       api.get('/api/training/courses'),
     
+    getSummary: (queryString?: string) =>
+      api.get(`/api/training-credits/summary${queryString ? `?${queryString}` : ''}`),
+    
     getUserProgress: (userId: number) =>
       api.get(`/api/training/user-progress/${userId}`),
     

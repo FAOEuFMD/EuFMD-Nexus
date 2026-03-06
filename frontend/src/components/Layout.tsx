@@ -17,7 +17,7 @@ const Layout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 scrollbar scrollbar-thumb-gray-500 scrollbar-track-gray-200 scrollbar-thin content-wrap">
+    <div className="min-h-screen bg-gray-50 scrollbar scrollbar-thumb-gray-500 scrollbar-track-gray-200 scrollbar-thin flex flex-col">
       <Navbar onToggleSidebar={handleToggleSidebar} />
       
       {/* Menu bar with hamburger icon and MENU text */}
@@ -37,7 +37,7 @@ const Layout: React.FC = () => {
       <Sidebar isOpen={sidebarOpen} onClose={handleCloseSidebar} />
       
       {/* Main content area */}
-      <div className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
+      <div className={`transition-all duration-300 flex-grow ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
         {/* Show breadcrumb if not on login page or home page */}
         {location.pathname !== '/login' && location.pathname !== '/' && (
           <div className="w-screen bg-white py-3 text-green-primary font-marta">
@@ -64,7 +64,7 @@ const Layout: React.FC = () => {
       </div>
       
       {/* Footer */}
-      <footer className="bg-[#F7F8F9] text-[#545454] py-6 mt-8 border-t border-gray-300">
+      <footer className="bg-[#F7F8F9] text-[#545454] py-6 border-t border-gray-300 mt-auto">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center mb-4">
             <div className="mb-4 md:mb-0">

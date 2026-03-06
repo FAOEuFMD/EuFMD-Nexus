@@ -200,6 +200,24 @@ class NonMoodleEnrollmentCreate(BaseModel):
 class CourseShortname(BaseModel):
     shortname: str
 
+# Training Calendar Models
+class TrainingCalendarEvent(BaseModel):
+    id: Optional[int] = None
+    course_name: str
+    start_date: str
+    end_date: str
+    description: Optional[str] = None
+    location: Optional[str] = None
+    is_active: Optional[bool] = True
+
+class TrainingCalendarEventCreate(BaseModel):
+    course_name: str
+    start_date: str
+    end_date: str
+    description: Optional[str] = None
+    location: Optional[str] = None
+    is_active: Optional[bool] = True
+
 # Fast Report Models
 class FastReportEntry(BaseModel):
     id: Optional[int] = None

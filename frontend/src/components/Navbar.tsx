@@ -24,7 +24,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           {/* Home Logo */}
           <div>
             <Link to="/" className="flex items-center">
-              <img src="/EuFMD_2023_white.png" alt="EuFMD Logo" className="h-14 w-auto" style={{ filter: 'invert(1) brightness(0)' }} />
+              <img src="/EuFMD_2023_white.png" alt="EuFMD Logo" className="h-20 w-auto" style={{ filter: 'invert(1) brightness(0)' }} />
             </Link>
           </div>
         </div>

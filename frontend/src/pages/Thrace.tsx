@@ -49,6 +49,13 @@ const Thrace: React.FC = () => {
   const [freedomRegion, setFreedomRegion] = useState('ALL');
   const freedomChartRef = useRef<HTMLDivElement | null>(null);
 
+  // Auto-adjust region when disease changes to PPR (PPR not available in ALL regions)
+  useEffect(() => {
+    if (freedomDisease === 'PPR' && freedomRegion === 'ALL') {
+      setFreedomRegion('GR'); // Default to Greece when switching to PPR
+    }
+  }, [freedomDisease]);
+
   const templates: Template[] = [
     { id: 'bulgaria', name: 'Bulgaria', fileName: 'ThraceActivitiesBulgaria' },
     { id: 'greece', name: 'Greece', fileName: 'ThraceActivitiesGreece' },
@@ -339,8 +346,77 @@ const Thrace: React.FC = () => {
     if (!reportData) return;
 
     const wb = XLSX.utils.book_new();
+    const ws: any = {};
+    
+    let currentRow = 0;
 
-    // Sheet 1: Animal Population
+    // Helper to add colored section
+    const addSection = (title: string, data: any[], headerColor: string, numericFields: string[]) => {
+      // Calculate totals
+      const totals: any = { 'Province/District': 'TOT' };
+      numericFields.forEach(field => {
+        totals[field] = data.reduce((sum, row) => sum + (parseFloat(row[field]) || 0), 0);
+      });
+      data.push(totals);
+
+      // Convert to array of arrays
+      const headers = Object.keys(data[0]);
+      const rows = data.map(row => headers.map(h => row[h] ?? ''));
+      
+      // Add header cells
+      for (let C = 0; C < headers.length; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: currentRow, c: C });
+        ws[cellAddress] = {
+          t: 's',
+          v: headers[C],
+          s: {
+            fill: { fgColor: { rgb: headerColor } },
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            border: {
+              top: { style: "medium", color: { rgb: "000000" } },
+              bottom: { style: "medium", color: { rgb: "000000" } },
+              left: { style: "medium", color: { rgb: "000000" } },
+              right: { style: "medium", color: { rgb: "000000" } }
+            }
+          }
+        };
+      }
+
+      // Add data rows
+      for (let R = 0; R < rows.length; ++R) {
+        const actualRow = currentRow + 1 + R;
+        const isTotal = R === rows.length - 1; // Last row is totals
+        
+        for (let C = 0; C < headers.length; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: actualRow, c: C });
+          const cellValue = rows[R][C];
+          
+          ws[cellAddress] = {
+            t: typeof cellValue === 'number' ? 'n' : 's',
+            v: cellValue,
+            s: {
+              fill: isTotal ? { fgColor: { rgb: "FFFF00" } } : undefined,
+              font: isTotal ? { bold: true, sz: 10 } : { sz: 10 },
+              alignment: { 
+                horizontal: C > 3 ? "right" : "left", 
+                vertical: "center" 
+              },
+              border: {
+                top: { style: "thin", color: { rgb: "CCCCCC" } },
+                bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+                left: { style: "thin", color: { rgb: "CCCCCC" } },
+                right: { style: "thin", color: { rgb: "CCCCCC" } }
+              }
+            }
+          };
+        }
+      }
+
+      currentRow += rows.length + 3; // Add spacing between sections
+    };
+
+    // Section 1: Animal Population (Blue)
     const popData = reportData.population.map(row => ({
       'Country': row.country,
       'Province/District': row.district_province,
@@ -351,25 +427,28 @@ const Thrace: React.FC = () => {
       'Goats Pop.': row.goat_pop || 0,
       'Buffaloes Pop.': row.buffalo_pop || 0,
       'Pigs Pop.': row.pig_pop || 0,
-      'Distinct Epiunits': row.distinct_epiunits,
-      'N. of visits': row.total_visits,
-      'N. Cattle': parseFloat(row.avg_cattle || 0).toFixed(2),
-      'N. Sheep': parseFloat(row.avg_sheep || 0).toFixed(2),
-      'N. Goats': parseFloat(row.avg_goat || 0).toFixed(2),
-      'N. Pigs': parseFloat(row.avg_pig || 0).toFixed(2),
-      'N. Buffaloes': parseFloat(row.avg_buffalo || 0).toFixed(2),
+      'Distinct Epiunits': row.distinct_epiunits || 0,
+      'N. of visits': row.total_visits || 0,
+      'N. Cattle': Math.round(parseFloat(row.avg_cattle || 0)),
+      'N. Sheep': Math.round(parseFloat(row.avg_sheep || 0)),
+      'N. Goats': Math.round(parseFloat(row.avg_goat || 0)),
+      'N. Pigs': Math.round(parseFloat(row.avg_pig || 0)),
+      'N. Buffaloes': Math.round(parseFloat(row.avg_buffalo || 0)),
     }));
-    const ws1 = XLSX.utils.json_to_sheet(popData);
-    XLSX.utils.book_append_sheet(wb, ws1, 'Animal Population');
+    
+    addSection('Animal Population', popData, 'ADD8E6', [
+      'Cattle Pop.', 'Sheep Pop.', 'Goats Pop.', 'Buffaloes Pop.', 'Pigs Pop.',
+      'Distinct Epiunits', 'N. of visits', 'N. Cattle', 'N. Sheep', 'N. Goats', 'N. Pigs', 'N. Buffaloes'
+    ]);
 
-    // Sheet 2: Clinical Examination
+    // Section 2: Clinical Examination (Pink)
     const clinicalData = reportData.clinical.map(row => ({
       'Country': row.country,
       'Province/District': row.district_province,
       'Quarter': row.quarter,
       'Year': row.year,
-      'Distinct Epiunits': row.distinct_epiunits,
-      'N. of visits': row.total_visits,
+      'Distinct Epiunits': row.distinct_epiunits || 0,
+      'N. of visits': row.total_visits || 0,
       'N. Cattle exam.': row.cattle_exam || 0,
       'N. Cattle Pos. FMD': row.cattle_pos_fmd || 0,
       'N. Cattle Pos. LSD': row.cattle_pos_lsd || 0,
@@ -384,19 +463,26 @@ const Thrace: React.FC = () => {
       'N. Buffaloes exam.': row.buffalo_exam || 0,
       'N. Buffaloes Pos. FMD': row.buffalo_pos_fmd || 0,
       'N. Buffaloes Pos. LSD': row.buffalo_pos_lsd || 0,
-      'Target': row.target || 0,
+      'TOTAL examined': (row.cattle_exam || 0) + (row.sheep_exam || 0) + (row.goat_exam || 0) + (row.buffalo_exam || 0),
     }));
-    const ws2 = XLSX.utils.json_to_sheet(clinicalData);
-    XLSX.utils.book_append_sheet(wb, ws2, 'Clinical Examination');
+    
+    addSection('Clinical Examination', clinicalData, 'FFB6C1', [
+      'Distinct Epiunits', 'N. of visits',
+      'N. Cattle exam.', 'N. Cattle Pos. FMD', 'N. Cattle Pos. LSD',
+      'N. Sheep exam.', 'N. Sheep Pos. FMD', 'N. Sheep Pos. SGP', 'N. Sheep Pos. PPR',
+      'N. Goats exam.', 'N. Goats Pos. FMD', 'N. Goats Pos. SGP', 'N. Goats Pos. PPR',
+      'N. Buffaloes exam.', 'N. Buffaloes Pos. FMD', 'N. Buffaloes Pos. LSD',
+      'TOTAL examined'
+    ]);
 
-    // Sheet 3: Serological Examination
+    // Section 3: Serological Examination (Green)
     const serologyData = reportData.serology.map(row => ({
       'Country': row.country,
-      'Province/District': row.district_province,
+      'District': row.district_province,
       'Quarter': row.quarter,
       'Year': row.year,
-      'Distinct Epiunits': row.distinct_epiunits,
-      'N. of visits': row.total_visits,
+      'Distinct Epiunits': row.distinct_epiunits || 0,
+      'N. of visits': row.total_visits || 0,
       'N. Cattle sampled': row.cattle_sample || 0,
       'N. Cattle Sero. Pos. FMD': row.cattle_sero_fmd || 0,
       'N. Cattle Sero. Pos. LSD': row.cattle_sero_lsd || 0,
@@ -413,12 +499,29 @@ const Thrace: React.FC = () => {
       'N. Buffaloes sampled': row.buffalo_sample || 0,
       'N. Buffaloes Sero. Pos. FMD': row.buffalo_sero_fmd || 0,
       'N. Buffaloes Sero. Pos. LSD': row.buffalo_sero_lsd || 0,
-      'N. Wild sampled': row.wild_sample || 0,
-      'N. Wild Sero. Pos. FMD': row.wild_sero_fmd || 0,
-      'Target': row.target || 0,
     }));
-    const ws3 = XLSX.utils.json_to_sheet(serologyData);
-    XLSX.utils.book_append_sheet(wb, ws3, 'Serological Examination');
+    
+    addSection('Serological Examination', serologyData, '90EE90', [
+      'Distinct Epiunits', 'N. of visits',
+      'N. Cattle sampled', 'N. Cattle Sero. Pos. FMD', 'N. Cattle Sero. Pos. LSD',
+      'N. Sheep sampled', 'N. Sheep Sero. Pos. FMD', 'N. Sheep Sero. Pos. SGP', 'N. Sheep Sero. Pos. PPR',
+      'N. Goats sampled', 'N. Goats Sero. Pos. FMD', 'N. Goats Sero. Pos. SGP', 'N. Goats Sero. Pos. PPR',
+      'N. Pigs sampled', 'N. Pigs Sero. Pos. FMD',
+      'N. Buffaloes sampled', 'N. Buffaloes Sero. Pos. FMD', 'N. Buffaloes Sero. Pos. LSD'
+    ]);
+
+    // Set sheet range
+    const maxCols = 22; // Maximum columns across all sections
+    ws['!ref'] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: currentRow - 1, c: maxCols - 1 }
+    });
+
+    // Set column widths
+    ws['!cols'] = Array(maxCols).fill({ wch: 15 });
+
+    // Add to workbook
+    XLSX.utils.book_append_sheet(wb, ws, `Cycle Report Q${selectedQuarter}`);
 
     // Generate Excel file
     XLSX.writeFile(wb, `CycleReport_Q${selectedQuarter}_${selectedYear}.xlsx`);
@@ -727,7 +830,9 @@ const Thrace: React.FC = () => {
                   onChange={(e) => setFreedomRegion(e.target.value)}
                   className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="ALL">All</option>
+                  <option value="ALL" disabled={freedomDisease === 'PPR'}>
+                    All {freedomDisease === 'PPR' ? '(Not available for PPR)' : ''}
+                  </option>
                   <option value="BG">Bulgaria</option>
                   <option value="GR">Greece</option>
                   <option value="TK">Türkiye</option>

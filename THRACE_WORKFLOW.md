@@ -11,21 +11,30 @@ The THRACE module manages veterinary field activity surveillance data for FMD, P
 - **`epiunits_view`**: Master list of epidemiological units with country/province/district hierarchy
 - **`inventory`**: Animal population targets per region and year
 
-### Column Structure (45 columns)
-The Excel upload format matches the old PHP app:
+### Column Structure (51 columns + header-based mapping)
+**Updated 2026**: Excel upload now uses dynamic header mapping instead of hardcoded indices.
 
-| Index | Column Name | Description |
-|-------|-------------|-------------|
-| 0 | Farm ID | (Not imported - for reference only) |
-| 1 | Name/villagename | Village name |
-| 2 | InspectorID | Inspector performing visit |
-| 3 | Village/Epiunit Code | Lookup key to get epiunitID |
-| 4 | Entered by | (Not imported) |
-| 5-7 | Year, Month, Day | Visit date components |
-| 8-12 | Cattle | cattle, sheep, goat, pig, buffalo counts |
-| 13-26 | Clinical Exams | Clinical examination counts and positive cases for all species |
-| 27-42 | Serology | Serological sample counts and positive cases for all species |
-| 43-44 | Wild | Wild animal serology |
+#### Key Columns:
+| Column Header | Database Field | Description |
+|---------------|----------------|-------------|
+| Name/villagename | villagename | Village name (column 1, always by position) |
+| InspectorID | inspectorID | Inspector performing visit |
+| Village/Epiunit code | epiunitcountrycode | Lookup key to get epiunitID |
+| Year, Month, Day | dt_insp | Visit date components |
+| Cattle, Sheep, Goats, Pigs, W Buffalo | cattle, sheep, goat, pig, buffalo | Animal population counts |
+| **Cattle tested** | **cattletested** | **NEW: Animals tested (not just examined)** |
+| **Sheep tested** | **sheeptested** | **NEW: Animals tested (not just examined)** |
+| **Goats tested** | **goattested** | **NEW: Animals tested (not just examined)** |
+| **Buffalo tested** | **buffalotested** | **NEW: Animals tested (not just examined)** |
+| **Pigs tested** | **pigtested** | **NEW: Animals tested (not just examined)** |
+| **Wild tested** | **wildtested** | **NEW: Animals tested (not just examined)** |
+| Cattle/Sheep/Goats clin exam | cattleexam, sheepexam, goatsexam | Clinical examination counts |
+| Cattle/Sheep/Goats clin pos FMD/LSD/SGP/PPR | cattlecliposFMD, etc. | Clinical positive cases |
+| Cattle/Sheep/Goats smpl | cattlesample, sheepsample, goatsample | Serological sample counts |
+| Cattle/Sheep/Goats sero pos FMD/LSD/SGP/PPR | cattleseroposFMD, etc. | Serological positive cases |
+| Wild smpl | wildsample | Wild animal serology |
+
+**Header Mapping**: The code reads Excel column headers (row 1) and maps them to database field names dynamically. This makes the system robust to column reordering and easier to maintain.
 
 ## Complete Workflow
 
@@ -34,9 +43,11 @@ The Excel upload format matches the old PHP app:
 **Process:**
 1. User uploads Excel file (.xlsx only)
 2. Backend reads Excel with `openpyxl` (data_only=True to read formula results)
-3. For each row (2-401, row 1 is header):
-   - Extract all 45 columns
-   - Validate epiunitcountrycode (column 3) exists in epiunits cache
+3. **Header Mapping** (NEW): Read row 1 headers and build column index map
+4. For each row (2-401, row 1 is header):
+   - Extract data using `get_value(field_name)` instead of hardcoded indices
+   - Extract all 51 columns including **6 new "tested" columns** (cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested)
+   - Validate epiunitcountrycode exists in epiunits cache
    - Look up epiunitID from epiunitcountrycode
    - Validate date format (year/month/day)
    - Validate positives ≤ exams for all species
@@ -47,6 +58,14 @@ The Excel upload format matches the old PHP app:
 - Global cache (`_epiunits_cache`): Loads 2188 epiunit mappings once at startup
 - Eliminates 2188 database queries per upload
 - Cache persists across all uploads until server restart
+
+**Column Mapping Strategy (2026 Update):**
+- **Old approach**: Hardcoded column indices (data[0], data[1], ... data[44])
+- **New approach**: Dynamic header mapping - reads Excel headers and maps to database fields
+- **Benefits**: 
+  - Robust to column reordering in templates
+  - Easy to add new columns (just add to header_to_field dictionary)
+  - Self-documenting (field names visible in code)
 
 **Validation Rules:**
 - **Required fields**: epiunitID, villagename, inspectorID, date
@@ -229,16 +248,132 @@ ORDER BY e.district_name
    - Call `GET /api/thrace/cycle-report`
    - Display tables or generate Excel download
 
-## Key Differences from Old PHP App
+5. **Freedom Analysis Tab** (NEW):
+   - Select species filter (ALL, LR, BOV, BUF, SR, OVI, CAP, POR)
+   - Select disease (FMD, LSD, SGP, PPR)
+   - Select region (ALL, GR, BG, TK)
+   - Click "Load analysis" button
+   - Call `GET /api/thrace/freedom-data`
+   - Display interactive chart with P(free), Sensitivity, P(intro) over time
+
+---
+
+### 5. Freedom from Disease Analysis (`GET /api/thrace/freedom-data`)
+
+**Purpose:** Calculate probability of freedom from disease using surveillance data
+
+**Architecture Change (2026):**
+
+| Aspect | Old System (SQL-based) | New System (Python-based) |
+|--------|------------------------|---------------------------|
+| **Data Source** | `all_data` summary table | `factivities` production table |
+| **Calculation** | SQL stored procedure `get_freedom_data()` | Python class `ThraceCalculator` |
+| **Update Frequency** | Daily AWS cron job | On-demand when user clicks button |
+| **Methodology** | Custom SQL logic | Cameron et al. (FAO 2014) |
+| **Tested Columns** | Not used (examined only) | Uses new `*_tested` columns |
+| **Maintainability** | Complex nested SQL | Clean Python code with comments |
+
+**Parameters:**
+- `species`: ALL, LR (Large Ruminants), BOV (Cattle), BUF (Buffalo), SR (Small Ruminants), OVI (Sheep), CAP (Goat), POR (Pig)
+- `disease`: FMD, LSD, SGP, PPR
+- `region`: ALL, GR (Greece), BG (Bulgaria), TK (Turkey)
+- `year`: Calculation year (defaults to current year)
+
+**Data Flow:**
+```
+User clicks "Load analysis" button
+  ↓
+Frontend: GET /api/thrace/freedom-data?species=ALL&disease=FMD&region=ALL&year=2024
+  ↓
+Backend: ThraceCalculator.calculate_system_sensitivity()
+  ↓
+1. Get disease/region parameters from params table
+2. Retrieve factivities data with epiunits risk levels
+3. Group activities by month
+4. For each month:
+   - Extract clinical examined/tested counts per species
+   - Extract serological sample counts per species
+   - Apply protocol rules (R2) to determine effective tested count
+   - Calculate combined herd sensitivity (R1) with overlap correction
+   - Aggregate to system sensitivity
+   - Get monthly P(introduction) from monthly_pintro table
+   - Update P(free) using Bayesian formula
+  ↓
+5. Return JSON arrays: labels, pfree, sens, pintro, sero, clin
+  ↓
+Frontend: Render interactive Plotly chart with 3 subplots
+```
+
+**Scientific Corrections Implemented:**
+
+- **R1 - Combined Herd Sensitivity**: Uses Cameron et al. (FAO 2014) p.147 sequential component approach to account for overlap between clinical and serological testing
+- **R2 - Protocol-Based Testing**: Uses `*_tested` columns from Excel uploads; applies protocol rules (e.g., Greece PPR: 1/4 tested before July 2024, all tested after)
+- **R4 - Risk Levels**: Uses actual `risklevel` field from epiunits table instead of hardcoded 'high'
+- **R7 - Double Precision**: All calculations use Python float (double precision) instead of SQL DECIMAL
+- **R11-R12 - Monthly P(intro)**: Tries year-specific monthly values first, falls back to generic monthly values
+- **R14 - Greece Special Case**: Sets RR_high=1.0 and RR_low=1.0 for Greece (risk-based sampling not applicable)
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "species": "ALL",
+  "disease": "FMD",
+  "region": "ALL",
+  "year": 2024,
+  "data": {
+    "labels": ["2024-01-01", "2024-02-01", "2024-03-01", ...],
+    "pfree": ["0.5234", "0.6123", "0.7001", ...],
+    "sens": ["0.0234", "0.0189", "0.0256", ...],
+    "pintro": ["0.0167", "0.0167", "0.0167", ...],
+    "sero": [145, 203, 189, ...],
+    "clin": [567, 612, 590, ...]
+  },
+  "metadata": {
+    "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
+    "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14"]
+  }
+}
+```
+
+**Frontend Visualization:**
+- **Top subplot**: P(free) and Sensitivity lines over time
+- **Middle subplot**: P(introduction) line over time  
+- **Bottom subplot**: Stacked bars showing serology + clinical testing counts
+
+**Key Algorithm (R1 - Combined Sensitivity):**
+```python
+# Component 1: Clinical sensitivity
+se_h_clin = 1 - (1 - use_clin * clin_tested/population)^(population * pstar_a)
+
+# Posterior probability after clinical testing
+p_infected_post_1 = (p_prior * (1-se_h_clin)) / (1 - p_prior*se_h_clin)
+
+# Component 2: Serological sensitivity with updated prior
+se_h_sero = 1 - (1 - use_sero * sero_sampled/population)^(population * pstar_a)
+
+# Combined system sensitivity accounting for overlap
+se_system = 1 - (1 - se_h_clin*p_prior) * (1 - se_h_sero*p_infected_post_1)
+
+# Monthly Bayesian update
+p_free_new = ((1-pintro) * p_free) / (1 - se_system + p_free*se_system)
+```
+
+---## Key Differences from Old PHP App
 
 | Feature | Old PHP App | New FastAPI App |
 |---------|-------------|-----------------|
 | Excel Reading | PHPSpreadsheet | openpyxl (Python) |
+| Column Extraction | Hardcoded indices (0-44) | Header mapping (dynamic) |
 | Performance | Query epiunits per row | Global cache (load once) |
 | Error Handling | Silent failures possible | Explicit error messages |
 | API Format | Page-based navigation | RESTful JSON endpoints |
 | Duplicate Check | Per-row during upload | Skipped during upload (too slow) |
 | Report Output | Direct Excel download | JSON data (frontend can generate Excel) |
+| Freedom Analysis | SQL stored procedure + AWS cron | Python calculator on-demand |
+| Data Source | `all_data` summary table | `factivities` production table |
+| Tested Columns | Not used (examined only) | Uses new `*_tested` columns (R2) |
+| Scientific Model | Custom SQL logic | Cameron et al. (FAO 2014) with corrections |
 
 ## Database Schema Reference
 
@@ -286,6 +421,14 @@ CREATE TABLE factivities (
     buffaloesseroposLSD int DEFAULT NULL,
     wildsample int DEFAULT NULL,
     wildserosposFMD int DEFAULT NULL,
+    -- NEW COLUMNS (2026): Animals tested (not just examined)
+    cattletested int DEFAULT NULL,
+    sheeptested int DEFAULT NULL,
+    goattested int DEFAULT NULL,
+    buffalotested int DEFAULT NULL,
+    pigtested int DEFAULT NULL,
+    wildtested int DEFAULT NULL,
+    -- Metadata columns
     errore varchar(255) DEFAULT NULL,  -- factivities_tmp only
     dt_inival date NOT NULL,
     userID int NOT NULL,
@@ -293,6 +436,14 @@ CREATE TABLE factivities (
     villagename varchar(50) NOT NULL  -- factivities_tmp only
 );
 ```
+
+**Important Schema Note (2026 Update):**
+The 6 new `*_tested` columns distinguish between:
+- **`*exam` fields**: Animals clinically examined (visual inspection)
+- **`*tested` fields**: Animals actually tested (sample collected/processed)
+- **`*sample` fields**: Serological samples submitted to lab
+
+This distinction is critical for R2 (protocol-based testing) in the freedom analysis calculations.
 
 ## Next Steps for Frontend Development
 
@@ -833,12 +984,17 @@ Returns template & variables
    │   ↓
    └─→ View Map → Load JSON → Visualize epiunits & results
 
-3. BACKGROUND PROCESSING
+3. BACKGROUND PROCESSING (OLD SYSTEM - DEPRECATED 2026)
    ├─→ Data approval → Aggregate to all_data
    ├─→ Calculate statistics & POF
    └─→ Update JSON visualization files
 
-4. ROLE-BASED ACCESS
+4. NEW SYSTEM (2026): ON-DEMAND PYTHON CALCULATOR
+   ├─→ Data approval → factivities (production)
+   ├─→ User clicks "Load analysis" → ThraceCalculator reads factivities
+   └─→ Calculate P(free) in real-time → Return JSON → Display chart
+
+5. ROLE-BASED ACCESS
    ├─→ CVO (1): See own country only
    ├─→ WG (4): See all countries, approve data
    └─→ ADMIN (6): Full system control
@@ -846,14 +1002,62 @@ Returns template & variables
 
 ---
 
+## Complete Data Flow (2026 Architecture)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    EXCEL UPLOAD TO FREEDOM ANALYSIS                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+STEP 1: Download Template (51 columns with header mapping)
+  ↓
+STEP 2: Fill Excel with surveillance data (NEW: tested columns)
+  ↓
+STEP 3: Upload → POST /api/thrace/upload-data
+  ↓ (Header mapping extracts 51 columns dynamically)
+  ↓
+STEP 4: Validation → factivities_tmp (staging with errors)
+  ↓
+STEP 5: Review → GET /api/thrace/staging-summary
+  ↓
+STEP 6: Approve → POST /api/thrace/approve-data
+  ↓ (Clean data only: factivities_tmp → factivities)
+  ↓
+STEP 7: Freedom Analysis → GET /api/thrace/freedom-data
+  ↓ (ThraceCalculator reads factivities + epiunits)
+  ↓ (Applies R1-R14 corrections, uses tested columns)
+  ↓
+STEP 8: Display P(free), Sensitivity, P(intro) charts
+
+KEY CHANGES FROM OLD SYSTEM:
+✅ No AWS daily cron job needed
+✅ No all_data summary table dependency  
+✅ Real-time calculations from production data
+✅ Uses new tested columns for accurate sensitivity
+✅ Scientific model (Cameron et al. FAO 2014)
+✅ Python code (easier to maintain than SQL)
+```
+
+---
+
 ## Conclusion
 
-The THRACE old app is a **structured surveillance data management system** with:
-- ✅ Clear data flow (download → enter → upload → validate → report)
+The THRACE module in EuFMD Nexus (2026) is a **modern surveillance data management system** with:
+- ✅ Clear data flow (download → enter → upload → validate → approve → analyze)
 - ✅ Role-based access control
-- ✅ Multi-step approval process
-- ✅ Comprehensive reporting & visualization
+- ✅ Multi-step approval process with error tracking
+- ✅ Header-based Excel mapping (robust to column changes)
+- ✅ 6 new "tested" columns for accurate clinical testing metrics
+- ✅ Python-based freedom calculator with scientific corrections (R1-R14)
+- ✅ On-demand calculations using latest production data
+- ✅ No dependency on external batch jobs or summary tables
+- ✅ Comprehensive reporting & visualization (cycle reports + freedom analysis)
 - ✅ Geographic hierarchy management
 - ✅ Multiple surveillance metrics (FMD, PPR, LSD, SGP)
 
-**Next Step**: Implement these features in the React-based EuFMD Nexus application while maintaining the same data integrity and business logic.
+**Implementation Status**: 
+- ✅ Upload/Approval endpoints complete
+- ✅ Freedom analysis calculator integrated
+- ✅ Excel templates updated with tested columns
+- ⏳ Frontend Thrace page in progress
+- ⏳ Cycle report Excel generation pending
