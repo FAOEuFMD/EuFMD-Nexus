@@ -296,13 +296,13 @@ const Thrace: React.FC = () => {
     const layout = {
       barmode: 'stack',
       hovermode: 'closest',
-      margin: { t: 20, b: 50, l: 80, r: 180 },
+      margin: { t: 20, b: 50, l: 80, r: 200 },
       showlegend: true,
       legend: {
         orientation: 'v',
-        xanchor: 'right',
+        xanchor: 'left',
         yanchor: 'top',
-        x: 1.18,
+        x: 1.02,
         y: 1,
         bgcolor: 'rgba(255,255,255,0.9)',
         bordercolor: '#ddd',
@@ -315,23 +315,39 @@ const Thrace: React.FC = () => {
       },
       yaxis: {
         domain: [0, 0.24],
-        title: 'Animals<br>tested',
+        title: {
+          text: 'Animals<br>tested',
+          standoff: 10
+        },
+        side: 'right',
         zeroline: false,
         autorange: true
       },
       yaxis2: {
         domain: [0.26, 0.48],
-        title: 'Probability<br>of introduction',
+        title: {
+          text: 'Probability<br>of introduction',
+          standoff: 10
+        },
+        side: 'right',
         zeroline: false
       },
       yaxis3: {
         domain: [0.52, 0.74],
-        title: 'Surveillance<br>sensitivity',
+        title: {
+          text: 'Surveillance<br>sensitivity',
+          standoff: 10
+        },
+        side: 'right',
         zeroline: false
       },
       yaxis4: {
         domain: [0.76, 1],
-        title: 'Probability<br>of freedom',
+        title: {
+          text: 'Probability<br>of freedom',
+          standoff: 10
+        },
+        side: 'right',
         zeroline: false,
         range: [0.9, 1]
       }

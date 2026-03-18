@@ -871,13 +871,15 @@ async def get_freedom_analysis(
         calculator = ThraceCalculator(thrace_engine)
         
         # Calculate system sensitivity and probability of freedom
+        # Show data from 2015 onwards (when surveillance activities started)
         print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
         
         results = calculator.calculate_system_sensitivity(
             species_filter=species,
             disease=disease,
             region_filter=region,
-            year=year
+            year=year,
+            min_year=2015  # Start graph from 2015
         )
         
         return {
@@ -937,13 +939,15 @@ async def calculate_and_save_freedom(
         calculator = ThraceCalculator(thrace_engine)
         
         # Calculate system sensitivity and probability of freedom
+        # Show data from 2015 onwards (when surveillance activities started)
         print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
         
         results = calculator.calculate_system_sensitivity(
             species_filter=species,
             disease=disease,
             region_filter=region,
-            year=year
+            year=year,
+            min_year=2015  # Start graph from 2015
         )
         
         # R24: Save to permanent table for audit trail

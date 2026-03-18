@@ -107,12 +107,25 @@ class ThraceCalculator:
         # Protocol Exceptions (Corrections Doc Section 1 table)
         if disease == 'PPR':
             if country == 'GRC':
-                # Convert visit_date to date if it's datetime, for comparison
-                visit_date_obj = visit_date.date() if isinstance(visit_date, datetime) else visit_date
-                if visit_date_obj < datetime(2024, 7, 1).date():
-                    # Greece PPR before July 2024: 1/4 tested
-                    effective_tested = int(exam_count * 0.25) if exam_count else 0
-                # else: all tested (default)
+                try:
+                    # Ensure visit_date is a datetime object for comparison
+                    if isinstance(visit_date, str):
+                        # Check for invalid dates (day 00 or month 00)
+                        if '-00' in visit_date or visit_date.endswith('-00'):
+                            print(f"Warning: Invalid visit_date {visit_date}, using default protocol")
+                            return effective_tested
+                        
+                        visit_date = datetime.strptime(visit_date, '%Y-%m-%d') if ' ' not in visit_date else datetime.strptime(visit_date, '%Y-%m-%d %H:%M:%S')
+                    
+                    # Compare with July 1, 2024
+                    cutoff_date = datetime(2024, 7, 1)
+                    if visit_date < cutoff_date:
+                        # Greece PPR before July 2024: 1/4 tested
+                        effective_tested = int(exam_count * 0.25) if exam_count else 0
+                    # else: all tested (default)
+                except (ValueError, AttributeError) as e:
+                    print(f"Warning: Error parsing visit_date for PPR protocol: {str(e)}, using default")
+                    
             elif country == 'TUR':
                 # Türkiye PPR: Not tested
                 effective_tested = 0
@@ -239,19 +252,27 @@ class ThraceCalculator:
         self,
         countries: List[str],
         disease: str,
-        species_list: List[str]
+        species_list: List[str],
+        min_year: int = None
     ) -> List[Dict]:
         """
         Retrieve factivities data joined with epiunits and geographic info.
         Uses TCC schema for geographic hierarchy.
-        Processes ALL years to match SQL function behavior.
+        Optimized: Filters by year at database level for faster queries.
         """
         with self.db.connect() as conn:
             # Build species filter for SQL
             species_filter = ','.join(f"'{s}'" for s in species_list)
             countries_filter = ','.join(f"'{c}'" for c in countries)
             
-            query = text("""
+            # Build year filter if specified
+            year_condition = ""
+            query_params = {"countries": tuple(countries)}
+            if min_year:
+                year_condition = "AND YEAR(fa.dt_insp) >= :min_year"
+                query_params["min_year"] = min_year
+            
+            query = text(f"""
                 SELECT 
                     fa.factivityID,
                     fa.epiunitID,
@@ -270,11 +291,10 @@ class ThraceCalculator:
                 JOIN TCC.nations n ON p.nationID = n.nationID
                 WHERE n.three_letter_code IN :countries
                 AND fa.dt_insp IS NOT NULL
+                {year_condition}
             """)
             
-            result = conn.execute(query, {
-                "countries": tuple(countries)
-            })
+            result = conn.execute(query, query_params)
             
             activities = []
             for row in result:
@@ -338,6 +358,46 @@ class ThraceCalculator:
             
             return float(result.pintro) if result and result.pintro else 0.0167  # 1/12 default
     
+    def get_all_monthly_pintro(self, year_month_pairs: List[Tuple[int, int]], disease: str, country: str) -> Dict[Tuple[int, int], float]:
+        """
+        Batch load all monthly pintro values at once to avoid N+1 queries.
+        Returns dict mapping (year, month) -> pintro value.
+        """
+        if not year_month_pairs:
+            return {}
+        
+        pintro_map = {}
+        
+        with self.db.connect() as conn:
+            # Get all year-specific values
+            years = list(set(y for y, m in year_month_pairs))
+            months = list(set(m for y, m in year_month_pairs))
+            
+            result = conn.execute(text("""
+                SELECT year, month, pintro 
+                FROM thrace.monthly_pintro 
+                WHERE year IN :years AND month IN :months
+            """), {"years": tuple(years), "months": tuple(months)})
+            
+            for row in result:
+                pintro_map[(row.year, row.month)] = float(row.pintro)
+            
+            # Get generic monthly values for fallback
+            result = conn.execute(text("""
+                SELECT month, pintro 
+                FROM thrace.monthly_pintro 
+                WHERE year IS NULL AND month IN :months
+            """), {"months": tuple(months)})
+            
+            generic_pintro = {row.month: float(row.pintro) for row in result}
+            
+            # Fill in missing values with generic or default
+            for year, month in year_month_pairs:
+                if (year, month) not in pintro_map:
+                    pintro_map[(year, month)] = generic_pintro.get(month, 0.0167)
+        
+        return pintro_map
+    
     # =========================================================================
     # MAIN CALCULATION
     # =========================================================================
@@ -347,7 +407,8 @@ class ThraceCalculator:
         species_filter: str,
         disease: str,
         region_filter: str,
-        year: int = None  # Not used for filtering - kept for API compatibility
+        year: int = None,  # Used to filter activities to specific year or later
+        min_year: int = None  # Minimum year to include in results
     ) -> Dict:
         """
         Main calculation function - replicates get_freedom_data in Python.
@@ -356,7 +417,8 @@ class ThraceCalculator:
         - species_filter: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
         - disease: FMD, LSD, SGP, PPR
         - region_filter: ALL, GR, BG, TK
-        - year: Calculation year
+        - year: Not used for filtering (kept for API compatibility)
+        - min_year: Minimum year to include in output (filters old data)
         
         Returns:
         - JSON structure matching old get_freedom_data output
@@ -392,16 +454,48 @@ class ThraceCalculator:
             params['RR_high'] = 1.0
             params['RR_low'] = 1.0
         
-        # Get activities data (all years)
-        activities = self.get_factivities_data(countries, disease, species_list)
+        # OPTIMIZATION: Pass min_year to database query to filter at source
+        # Get activities data (filtered by year at database level)
+        activities = self.get_factivities_data(countries, disease, species_list, min_year=min_year)
         
         # Group by month
         monthly_data = {}
+        skipped_invalid_dates = 0
         for act in activities:
-            month_key = (act['dt_insp'].year, act['dt_insp'].month)
-            if month_key not in monthly_data:
-                monthly_data[month_key] = []
-            monthly_data[month_key].append(act)
+            # Ensure dt_insp is a datetime object, not a string
+            dt_insp = act['dt_insp']
+            
+            try:
+                if isinstance(dt_insp, str):
+                    # Check for invalid dates (day 00 or month 00)
+                    if '-00' in dt_insp or dt_insp.endswith('-00'):
+                        print(f"Warning: Skipping record with invalid date: {dt_insp} (factivityID: {act.get('factivityID')})")
+                        skipped_invalid_dates += 1
+                        continue
+                    
+                    dt_insp = datetime.strptime(dt_insp, '%Y-%m-%d') if ' ' not in dt_insp else datetime.strptime(dt_insp, '%Y-%m-%d %H:%M:%S')
+                elif not isinstance(dt_insp, datetime):
+                    # If it's a date object, convert to datetime
+                    dt_insp = datetime.combine(dt_insp, datetime.min.time())
+                
+                month_key = (dt_insp.year, dt_insp.month)
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = []
+                # Update the dt_insp in the activity dict for later use
+                act['dt_insp'] = dt_insp
+                monthly_data[month_key].append(act)
+                
+            except (ValueError, AttributeError) as e:
+                print(f"Warning: Skipping record with invalid date: {dt_insp} (factivityID: {act.get('factivityID')}) - Error: {str(e)}")
+                skipped_invalid_dates += 1
+                continue
+        
+        if skipped_invalid_dates > 0:
+            print(f"Skipped {skipped_invalid_dates} records with invalid dates")
+        
+        # OPTIMIZATION: Batch load all monthly pintro values at once
+        year_month_pairs = list(monthly_data.keys())
+        pintro_cache = self.get_all_monthly_pintro(year_month_pairs, disease, region_filter)
         
         # Calculate monthly sensitivity
         results = []
@@ -476,8 +570,8 @@ class ThraceCalculator:
             else:
                 sse = 0.0
             
-            # Get monthly PIntro (R11-R12)
-            pintro = self.get_monthly_pintro(year, month, disease, region_filter)
+            # OPTIMIZATION: Get monthly PIntro from cache (R11-R12)
+            pintro = pintro_cache.get((year, month), 0.0167)
             
             # Bayesian update for P(Free)
             # P(Free|neg) = ((1-PIntro) * P(Free)) / (1 - SSe + (P(Free) * SSe))
