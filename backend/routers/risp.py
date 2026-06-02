@@ -479,3 +479,161 @@ async def delete_vaccination_campaign(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting vaccination campaign: {str(e)}")
+
+
+@router.get("/dashboard")
+async def get_risp_dashboard():
+    """Get RISP dashboard data from all three tables (outbreaks, surveillance, vaccination)"""
+    try:
+        # Disease name normalization function
+        def normalize_disease_name(disease_name):
+            """Normalize disease names to a common short format"""
+            if not disease_name:
+                return None
+            
+            disease_upper = disease_name.upper()
+            
+            # Map to short codes
+            if 'FOOT' in disease_upper or 'FMD' in disease_upper:
+                return 'FMD'
+            elif 'LUMPY' in disease_upper or 'LSD' in disease_upper:
+                return 'LSD'
+            elif 'PPR' in disease_upper or 'PESTE' in disease_upper:
+                return 'PPR'
+            elif 'RIFT' in disease_upper or 'RVF' in disease_upper:
+                return 'RVF'
+            elif 'SHEEP' in disease_upper and 'POX' in disease_upper or 'SPGP' in disease_upper or 'SGP' in disease_upper:
+                return 'SPGP'
+            
+            return disease_name  # Return original if no match
+        
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        # Fetch all outbreak data
+        outbreaks_query = """
+        SELECT id, user_id, country, year, quarter, disease_name as Disease, 
+               number_outbreaks as Outbreaks, locations, status, serotype, species, 
+               control_measures, additional_info, created_at 
+        FROM risp_outbreaks 
+        ORDER BY year DESC, quarter DESC
+        """
+        cursor.execute(outbreaks_query)
+        outbreaks = cursor.fetchall()
+        
+        # Process outbreak data - convert quarter format from 'Q1' to just '1' for consistency
+        processed_data = []
+        for outbreak in outbreaks:
+            # Extract quarter number from 'Q1' format
+            quarter_str = outbreak.get('quarter', 'Q1')
+            quarter_num = int(quarter_str.replace('Q', '')) if quarter_str and 'Q' in quarter_str else 1
+            
+            processed_row = {
+                'id': outbreak.get('id'),
+                'Year': int(outbreak.get('year')) if outbreak.get('year') else None,
+                'Quarter': quarter_num,
+                'Country': outbreak.get('country'),
+                'Disease': outbreak.get('Disease'),
+                'Outbreaks': outbreak.get('Outbreaks', 0),
+                'Region': '',  # Will be determined from country mapping
+                'Surveillance': 0,  # Will be updated from surveillance table
+                'Vaccination': 0,  # Will be updated from vaccination table
+                'locations': outbreak.get('locations'),
+                'status': outbreak.get('status'),
+                'serotype': outbreak.get('serotype'),
+                'species': outbreak.get('species'),
+                'control_measures': outbreak.get('control_measures'),
+                'Outbreak_Description': outbreak.get('additional_info', ''),
+                'Cases': '',
+                'Epidemiological_information': '',
+                'Vaccination_doses': 0,
+                'Vaccination_Description': '',
+                'Source': 'RISP'
+            }
+            processed_data.append(processed_row)
+        
+        # Fetch surveillance data
+        surveillance_query = """
+        SELECT country, year, quarter, disease_name 
+        FROM risp_surveillance 
+        WHERE passive_surveillance IS NOT NULL OR active_surveillance IS NOT NULL
+        """
+        cursor.execute(surveillance_query)
+        surveillances = cursor.fetchall()
+        
+        # Create surveillance lookup: {country-year-quarter-disease: True}
+        surveillance_lookup = {}
+        for surv in surveillances:
+            quarter_str = surv.get('quarter', 'Q1')
+            quarter_num = int(quarter_str.replace('Q', '')) if quarter_str and 'Q' in quarter_str else 1
+            year_num = int(surv.get('year')) if surv.get('year') else None
+            disease_normalized = normalize_disease_name(surv.get('disease_name'))
+            key = f"{surv.get('country')}-{year_num}-{quarter_num}-{disease_normalized}"
+            surveillance_lookup[key] = True
+        
+        print(f"DEBUG: Surveillance lookup keys (normalized): {list(surveillance_lookup.keys())[:10]}")  # Show first 10
+        
+        # Fetch vaccination data - get ALL records, not just Active
+        vaccination_query = """
+        SELECT country, year, disease_name, q1, q2, q3, q4, status
+        FROM risp_vaccination
+        """
+        cursor.execute(vaccination_query)
+        vaccinations = cursor.fetchall()
+        
+        # Create vaccination lookup: {country-year-quarter-disease: doses}
+        vaccination_lookup = {}
+        for vacc in vaccinations:
+            year_num = int(vacc.get('year')) if vacc.get('year') else None
+            country = vacc.get('country')
+            disease_normalized = normalize_disease_name(vacc.get('disease_name'))
+            
+            # Check each quarter
+            for q in [1, 2, 3, 4]:
+                doses = vacc.get(f'q{q}', 0)
+                if doses and doses > 0:
+                    key = f"{country}-{year_num}-{q}-{disease_normalized}"
+                    vaccination_lookup[key] = doses
+        
+        print(f"DEBUG: Vaccination lookup keys (normalized): {list(vaccination_lookup.keys())[:10]}")  # Show first 10
+        
+        # Update processed data with surveillance and vaccination flags
+        matched_vaccination = 0
+        matched_surveillance = 0
+        
+        for row in processed_data:
+            disease_normalized = normalize_disease_name(row['Disease'])
+            key = f"{row['Country']}-{row['Year']}-{row['Quarter']}-{disease_normalized}"
+            
+            # Check if surveillance exists
+            if key in surveillance_lookup:
+                row['Surveillance'] = 1
+                matched_surveillance += 1
+                if matched_surveillance <= 3:
+                    print(f"DEBUG: MATCHED surveillance for: {key}")
+            
+            # Check if vaccination exists
+            if key in vaccination_lookup:
+                row['Vaccination'] = 1
+                row['Vaccination_doses'] = vaccination_lookup[key]
+                matched_vaccination += 1
+                if matched_vaccination <= 3:
+                    print(f"DEBUG: MATCHED vaccination for: {key}")
+        
+        print(f"DEBUG: Total vaccination matches: {matched_vaccination}, Total surveillance matches: {matched_surveillance}")
+        
+        cursor.close()
+        connection.close()
+        
+        # Return data with separate counts for surveillance and vaccination
+        return {
+            "data": processed_data,
+            "countryGeojson": {},
+            "surveillance_summary": surveillance_lookup,  # Pass the lookup for frontend to count
+            "vaccination_summary": vaccination_lookup     # Pass the lookup for frontend to count
+        }
+        
+    except Exception as e:
+        print(f"Error fetching RISP dashboard data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching RISP dashboard data: {str(e)}")
+

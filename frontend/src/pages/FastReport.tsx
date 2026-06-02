@@ -48,6 +48,7 @@ const countryCoordinates: CountryCoordinates = {
   'Syria': [34.8021, 38.9968],
   'Syrian Arab Republic': [34.8021, 38.9968],
   'Turkey': [38.9637, 35.2433],
+  'Türkiye': [38.9637, 35.2433],
   'Egypt': [26.8206, 30.8025],
   'Libya': [26.3351, 17.2283],
   'Morocco': [31.7917, -7.0926],
@@ -81,6 +82,7 @@ const FastReport: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FastReportData[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [selectedDisease, setSelectedDisease] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
 
@@ -104,11 +106,12 @@ const FastReport: React.FC = () => {
   const filteredData = useMemo(() => {
     return data.filter(item => {
       const yearMatch = selectedYear === 'all' || item.Year?.toString() === selectedYear;
+      const quarterMatch = selectedQuarter === 'all' || item.Quarter?.toString() === selectedQuarter;
       const diseaseMatch = selectedDisease === 'all' || item.Disease === selectedDisease;
       const regionMatch = selectedRegion === 'all' || item.Region === selectedRegion;
-      return yearMatch && diseaseMatch && regionMatch;
+      return yearMatch && quarterMatch && diseaseMatch && regionMatch;
     });
-  }, [data, selectedYear, selectedDisease, selectedRegion]);
+  }, [data, selectedYear, selectedQuarter, selectedDisease, selectedRegion]);
   
   // Data to use for markers - only include entries with actual outbreaks
   const markerData = useMemo(() => {
@@ -162,9 +165,13 @@ const FastReport: React.FC = () => {
 
   const getMarkerColor = (disease: string): string => {
     const colors: { [key: string]: string } = {
-      'FMD': '#ff4444',
+      'FMD': '#006400',      // dark green
+      'LSD': '#90EE90',      // light green
+      'PPR': '#9370DB',      // purple
+      'RVF': '#DC143C',      // red
+      'SPGP': '#4169E1',     // blue
+      'BEF': '#888888',      // grey
       'ASF': '#4444ff', 
-      'PPR': '#44ff44',
       'LUMPY': '#ffff44',
       'Avian Influenza': '#ff8844',
       'Newcastle Disease': '#8844ff',
@@ -242,66 +249,11 @@ const FastReport: React.FC = () => {
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Year:
-            </label>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="all">All Years</option>
-              {availableYears.map(year => (
-                <option key={year} value={year.toString()}>{year}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Disease:
-            </label>
-            <select
-              value={selectedDisease}
-              onChange={(e) => setSelectedDisease(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="all">All Diseases</option>
-              {availableDiseases.map(disease => (
-                <option key={disease} value={disease}>{disease}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Region:
-            </label>
-            <select
-              value={selectedRegion}
-              onChange={(e) => setSelectedRegion(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="all">All Regions</option>
-              {availableRegions.map(region => (
-                <option key={region} value={region}>{region}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="text-sm text-gray-600 bg-gray-50 rounded p-2">
-            Showing <span className="font-bold">{filteredData.length}</span> report{filteredData.length !== 1 ? 's' : ''}
-          </div>
-        </div>
-      </div>
-
-      {/* Map */}
+      {/* Map and Filters Side-by-Side */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="h-96 w-full">
+        <div className="flex flex-col lg:flex-row gap-0">
+          {/* Map - Takes up most of the space */}
+          <div className="flex-1 h-96 lg:h-[600px]">
           <MapContainer
             center={[50, 20]}
             zoom={3}
@@ -357,6 +309,83 @@ const FastReport: React.FC = () => {
             
             <MapController filteredData={markerData} />
           </MapContainer>
+          </div>
+
+          {/* Filters Column - Vertical on the right */}
+          <div className="w-full lg:w-80 bg-gray-50 p-4 border-t lg:border-t-0 lg:border-l border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Filters</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Year:
+                </label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="all">All Years</option>
+                  {availableYears.map(year => (
+                    <option key={year} value={year.toString()}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quarter:
+                </label>
+                <select
+                  value={selectedQuarter}
+                  onChange={(e) => setSelectedQuarter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="all">All</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Disease:
+                </label>
+                <select
+                  value={selectedDisease}
+                  onChange={(e) => setSelectedDisease(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="all">All Diseases</option>
+                  {availableDiseases.map(disease => (
+                    <option key={disease} value={disease}>{disease}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Region:
+                </label>
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="all">All Regions</option>
+                  {availableRegions.map(region => (
+                    <option key={region} value={region}>{region}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="text-sm text-gray-600 bg-white rounded p-3 border border-gray-200 mt-6">
+                <div className="font-medium text-gray-800 mb-1">Results:</div>
+                Showing <span className="font-bold text-green-600">{filteredData.length}</span> report{filteredData.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
