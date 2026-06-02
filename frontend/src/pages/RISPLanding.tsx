@@ -946,6 +946,18 @@ const RISPLanding: React.FC = () => {
           </div>
         )}
 
+        {/* Map Disclaimer */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+            <p className="text-sm text-gray-700 italic">
+              The boundaries and names shown and the designations used on this map do not imply the 
+              expression of any opinion whatsoever on the part of FAO concerning the legal status of any country, 
+              territory, city or area or of its authorities, or concerning the delimitation of its frontiers and 
+              boundaries.
+            </p>
+          </div>
+        </div>
+
         {/* Summary Statistics */}
         {filteredData.length > 0 && (
           <div className="bg-white rounded-lg shadow p-4">
