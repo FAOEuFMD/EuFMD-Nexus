@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -62,9 +62,13 @@ const FastReport: React.FC = () => {
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   
-  // Disease layer selections: { disease: { outbreaks: bool, vaccination: bool, status: bool } }
+  // PCP-FMD data and geojson
+  const [pcpData, setPcpData] = useState<{ Country: string; PCP_Stage: string }[]>([]);
+  const [geoJsonData, setGeoJsonData] = useState<any>(null);
+  
+  // Disease layer selections: { disease: { outbreaks: bool, vaccination: bool, status: bool, pcpFmd: bool } }
   const [diseaseLayers, setDiseaseLayers] = useState<{
-    [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean };
+    [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean; pcpFmd: boolean };
   }>({});
   const [expandedDiseases, setExpandedDiseases] = useState<Set<string>>(new Set());
 
@@ -112,13 +116,14 @@ const FastReport: React.FC = () => {
   };
 
   // Toggle disease layer
-  const toggleLayer = (disease: string, layer: 'outbreaks' | 'vaccination' | 'status') => {
+  const toggleLayer = (disease: string, layer: 'outbreaks' | 'vaccination' | 'status' | 'pcpFmd') => {
     setDiseaseLayers(prev => ({
       ...prev,
       [disease]: {
         outbreaks: layer === 'outbreaks' ? !prev[disease]?.outbreaks : prev[disease]?.outbreaks || false,
         vaccination: layer === 'vaccination' ? !prev[disease]?.vaccination : prev[disease]?.vaccination || false,
         status: layer === 'status' ? !prev[disease]?.status : prev[disease]?.status || false,
+        pcpFmd: layer === 'pcpFmd' ? !prev[disease]?.pcpFmd : prev[disease]?.pcpFmd || false,
       }
     }));
   };
@@ -214,17 +219,57 @@ const FastReport: React.FC = () => {
   // Initialize disease layers when diseases are available
   useEffect(() => {
     if (availableDiseases.length > 0 && Object.keys(diseaseLayers).length === 0) {
-      const initialLayers: { [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean } } = {};
+      const initialLayers: { [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean; pcpFmd: boolean } } = {};
       availableDiseases.forEach(disease => {
         initialLayers[disease] = {
           outbreaks: true,  // Default: show outbreaks
           vaccination: false,
-          status: false
+          status: false,
+          pcpFmd: false
         };
       });
       setDiseaseLayers(initialLayers);
     }
   }, [availableDiseases, diseaseLayers]);
+
+  // Load PCP data and GeoJSON when PCP-FMD is enabled
+  useEffect(() => {
+    const loadPcpData = async () => {
+      if (diseaseLayers['FMD']?.pcpFmd) {
+        try {
+          // Load GeoJSON if not already loaded
+          if (!geoJsonData) {
+            const geoResponse = await fetch('/gadm.geojson');
+            const geoData = await geoResponse.json();
+            setGeoJsonData(geoData);
+          }
+          
+          // Load PCP data for 2026
+          const pcpResponse = await fetch('/api/pcp/pcp-fmd-2026');
+          const pcpResult = await pcpResponse.json();
+          setPcpData(pcpResult.data || []);
+        } catch (error) {
+          console.error('Error loading PCP data:', error);
+        }
+      }
+    };
+    
+    loadPcpData();
+  }, [diseaseLayers]);
+
+  const getPcpStageColor = (stage: string): string => {
+    const colors: { [key: string]: string } = {
+      'PCP-0': '#E41A1C',
+      'PCP-1-Provisional': '#F4C7A1',
+      'PCP-1': '#F39C34',
+      'PCP-2-Provisional': '#F7E08C',
+      'PCP-2': '#F1C40F',
+      'PCP-3-Provisional': '#A9D18E',
+      'PCP-3': '#4CAF50',
+      'PCP-4': '#2E7D32'
+    };
+    return colors[stage] || '#CCCCCC';
+  };
 
   const getMarkerColor = (disease: string): string => {
     const colors: { [key: string]: string } = {
@@ -380,6 +425,37 @@ const FastReport: React.FC = () => {
               maxZoom={18}
             />
             
+            {/* PCP-FMD GeoJSON Layer */}
+            {diseaseLayers['FMD']?.pcpFmd && geoJsonData && (
+              <GeoJSON
+                data={geoJsonData}
+                style={(feature) => {
+                  const countryName = feature?.properties?.COUNTRY || feature?.properties?.NAME_0;
+                  const pcpEntry = pcpData.find(entry => entry.Country === countryName);
+                  const pcpStage = pcpEntry?.PCP_Stage || '';
+                  
+                  return {
+                    fillColor: getPcpStageColor(pcpStage),
+                    fillOpacity: 0.6,
+                    color: '#ffffff',
+                    weight: 1
+                  };
+                }}
+                onEachFeature={(feature, layer) => {
+                  const countryName = feature?.properties?.COUNTRY || feature?.properties?.NAME_0;
+                  const pcpEntry = pcpData.find(entry => entry.Country === countryName);
+                  const pcpStage = pcpEntry?.PCP_Stage || 'No data';
+                  
+                  layer.bindPopup(`
+                    <div style="padding: 8px;">
+                      <h3 style="font-weight: bold; margin-bottom: 4px;">${countryName}</h3>
+                      <p><strong>PCP Stage:</strong> ${pcpStage}</p>
+                    </div>
+                  `);
+                }}
+              />
+            )}
+            
             {markerData.map((report) => {
               const coords = countryCoordinates[report.Country];
               if (!coords) return null;
@@ -522,20 +598,64 @@ const FastReport: React.FC = () => {
                   Showing <span className="font-bold text-green-600">{filteredData.length}</span> report{filteredData.length !== 1 ? 's' : ''}
                 </div>
                 
-                {/* Compact Legend */}
-                <div className="bg-white rounded p-3 border border-gray-200">
-                  <div className="font-medium text-gray-800 mb-2 text-sm">Disease Colors:</div>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {availableDiseases.map(disease => (
-                      <div key={disease} className="flex items-center">
-                        <div 
-                          className="w-3 h-3 rounded-full border border-white mr-2 shadow-sm flex-shrink-0"
-                          style={{ backgroundColor: getMarkerColor(disease) }}
-                        ></div>
-                        <span className="text-xs text-gray-700">{disease}</span>
-                      </div>
-                    ))}
+                {/* Legends container - side by side when PCP is active */}
+                <div className={`grid ${diseaseLayers['FMD']?.pcpFmd ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                  {/* Disease Colors Legend */}
+                  <div className="bg-white rounded p-3 border border-gray-200">
+                    <div className="font-medium text-gray-800 mb-2 text-xs">Disease Colors:</div>
+                    <div className="grid grid-cols-1 gap-1">
+                      {availableDiseases.map(disease => (
+                        <div key={disease} className="flex items-center">
+                          <div 
+                            className="w-2.5 h-2.5 rounded-full border border-white mr-1.5 shadow-sm flex-shrink-0"
+                            style={{ backgroundColor: getMarkerColor(disease) }}
+                          ></div>
+                          <span className="text-xs text-gray-700">{disease}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                  
+                  {/* PCP-FMD Legend - only show when PCP-FMD is active */}
+                  {diseaseLayers['FMD']?.pcpFmd && (
+                    <div className="bg-white rounded p-3 border border-gray-200">
+                      <div className="font-medium text-gray-800 mb-2 text-xs">PCP Stages:</div>
+                      <div className="grid grid-cols-1 gap-1">
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#E41A1C' }}></div>
+                          <span className="text-xs text-gray-700">PCP-0</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F4C7A1' }}></div>
+                          <span className="text-xs text-gray-700">PCP-1-P</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F39C34' }}></div>
+                          <span className="text-xs text-gray-700">PCP-1</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F7E08C' }}></div>
+                          <span className="text-xs text-gray-700">PCP-2-P</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F1C40F' }}></div>
+                          <span className="text-xs text-gray-700">PCP-2</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#A9D18E' }}></div>
+                          <span className="text-xs text-gray-700">PCP-3-P</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#4CAF50' }}></div>
+                          <span className="text-xs text-gray-700">PCP-3</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#2E7D32' }}></div>
+                          <span className="text-xs text-gray-700">PCP-4</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -575,7 +695,7 @@ const FastReport: React.FC = () => {
                               type="checkbox"
                               checked={diseaseLayers[disease]?.outbreaks || false}
                               onChange={() => toggleLayer(disease, 'outbreaks')}
-                              className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
                             />
                             <span className="text-sm text-gray-700">Outbreaks</span>
                           </label>
@@ -585,7 +705,7 @@ const FastReport: React.FC = () => {
                               type="checkbox"
                               checked={diseaseLayers[disease]?.vaccination || false}
                               onChange={() => toggleLayer(disease, 'vaccination')}
-                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
                             />
                             <span className="text-sm text-gray-700">Vaccination</span>
                           </label>
@@ -595,10 +715,23 @@ const FastReport: React.FC = () => {
                               type="checkbox"
                               checked={diseaseLayers[disease]?.status || false}
                               onChange={() => toggleLayer(disease, 'status')}
-                              className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
                             />
                             <span className="text-sm text-gray-700">Disease Status</span>
                           </label>
+                          
+                          {/* PCP-FMD option - only for FMD */}
+                          {disease === 'FMD' && (
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={diseaseLayers[disease]?.pcpFmd || false}
+                                onChange={() => toggleLayer(disease, 'pcpFmd')}
+                                className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
+                              />
+                              <span className="text-sm text-gray-700">PCP-FMD</span>
+                            </label>
+                          )}
                         </div>
                       )}
                     </div>
