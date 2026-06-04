@@ -1,8 +1,15 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, GeoJSON } from 'react-leaflet';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import CollapsibleSidePanel from '../components/FastReport/CollapsibleSidePanel';
+import CountryAnalyticsPanel from '../components/FastReport/CountryAnalyticsPanel';
+import CountryBoundariesLayer, {
+  CountrySelectPayload,
+} from '../components/FastReport/CountryBoundariesLayer';
+import MapZoomTracker from '../components/FastReport/MapZoomTracker';
+import { COUNTRY_ZOOM_THRESHOLD } from '../utils/fastReport/countryAnalytics';
 
 // Fix for default markers in React Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -12,7 +19,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-interface FastReportData {
+export interface FastReportData {
   id: number;
   Year: number;
   Quarter: number;
@@ -32,24 +39,29 @@ interface CountryCoordinates {
   [key: string]: [number, number];
 }
 
-const MapController: React.FC<{ filteredData: FastReportData[], countryCoordinates: CountryCoordinates }> = ({ filteredData, countryCoordinates }) => {
+const MapController: React.FC<{
+  filteredData: FastReportData[];
+  countryCoordinates: CountryCoordinates;
+  skipFit: boolean;
+}> = ({ filteredData, countryCoordinates, skipFit }) => {
   const map = useMap();
-  
+
   useEffect(() => {
+    if (skipFit) return;
     if (filteredData.length > 0) {
       const validCoords = filteredData
-        .map(item => countryCoordinates[item.Country])
-        .filter(coord => coord);
-      
+        .map((item) => countryCoordinates[item.Country])
+        .filter((coord) => coord);
+
       if (validCoords.length > 0) {
-        const group = new L.FeatureGroup(validCoords.map(coord => L.marker(coord)));
+        const group = new L.FeatureGroup(validCoords.map((coord) => L.marker(coord)));
         map.fitBounds(group.getBounds().pad(0.1));
       }
     } else {
       map.setView([50, 20], 3);
     }
-  }, [map, filteredData, countryCoordinates]);
-  
+  }, [map, filteredData, countryCoordinates, skipFit]);
+
   return null;
 };
 
@@ -61,50 +73,85 @@ const FastReport: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
-  
-  // PCP-FMD data and geojson
+
   const [pcpData, setPcpData] = useState<{ Country: string; PCP_Stage: string }[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [geoJsonData, setGeoJsonData] = useState<any>(null);
-  
-  // Disease layer selections: { disease: { outbreaks: bool, vaccination: bool, status: bool, pcpFmd: bool } }
+  const [geoJsonError, setGeoJsonError] = useState<string | null>(null);
+
   const [diseaseLayers, setDiseaseLayers] = useState<{
     [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean; pcpFmd: boolean };
   }>({});
   const [expandedDiseases, setExpandedDiseases] = useState<Set<string>>(new Set());
 
-  // Get available years, diseases, and regions from data
+  const [mapZoom, setMapZoom] = useState(6);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedGeoName, setSelectedGeoName] = useState<string | null>(null);
+  const [selectedFastReportCountry, setSelectedFastReportCountry] = useState<string | null>(null);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+  const [countryPanelCollapsed, setCountryPanelCollapsed] = useState(false);
+
+  const fastReportCountries = useMemo(
+    () => Array.from(new Set(data.map((item) => item.Country).filter(Boolean))),
+    [data]
+  );
+
+  const mapCountriesInteractive = mapZoom >= COUNTRY_ZOOM_THRESHOLD;
+
+  const openCountryPanel = useCallback(
+    (fastReportCountry: string | null, geoName: string | null) => {
+      setSelectedFastReportCountry(fastReportCountry);
+      setSelectedGeoName(geoName);
+      setSelectedCountry(fastReportCountry || geoName);
+      setCountryPanelCollapsed(false);
+    },
+    []
+  );
+
+  const handleCountrySelect = useCallback(
+    (payload: CountrySelectPayload) => {
+      openCountryPanel(payload.fastReportCountry, payload.geoName);
+    },
+    [openCountryPanel]
+  );
+
+  const closeCountryPanel = useCallback(() => {
+    setSelectedCountry(null);
+    setSelectedGeoName(null);
+    setSelectedFastReportCountry(null);
+  }, []);
+
+  const handleMarkerCountryClick = useCallback(
+    (country: string) => {
+      openCountryPanel(country, null);
+    },
+    [openCountryPanel]
+  );
+
   const availableYears = useMemo(() => {
-    const years = Array.from(new Set(data.map(item => item.Year))).sort((a, b) => b - a);
+    const years = Array.from(new Set(data.map((item) => item.Year))).sort((a, b) => b - a);
     return years;
   }, [data]);
 
   const availableDiseases = useMemo(() => {
-    const diseases = Array.from(new Set(data.map(item => item.Disease).filter(Boolean)));
-    
-    // Define preferred order
+    const diseases = Array.from(new Set(data.map((item) => item.Disease).filter(Boolean)));
     const order = ['FMD', 'PPR', 'LSD', 'SPGP', 'RVF', 'BEF'];
-    
+
     return diseases.sort((a, b) => {
       const indexA = order.indexOf(a);
       const indexB = order.indexOf(b);
-      
-      // If both are in the order array, sort by order
       if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-      // If only a is in order, it comes first
       if (indexA !== -1) return -1;
-      // If only b is in order, it comes first
       if (indexB !== -1) return 1;
-      // Otherwise, sort alphabetically
       return a.localeCompare(b);
     });
   }, [data]);
 
   const availableRegions = useMemo(() => {
-    const regions = Array.from(new Set(data.map(item => item.Region).filter(Boolean))).sort();
+    const regions = Array.from(new Set(data.map((item) => item.Region).filter(Boolean))).sort();
     return regions;
   }, [data]);
 
-  // Toggle disease expansion
   const toggleDisease = (disease: string) => {
     const newExpanded = new Set(expandedDiseases);
     if (newExpanded.has(disease)) {
@@ -115,43 +162,38 @@ const FastReport: React.FC = () => {
     setExpandedDiseases(newExpanded);
   };
 
-  // Toggle disease layer
   const toggleLayer = (disease: string, layer: 'outbreaks' | 'vaccination' | 'status' | 'pcpFmd') => {
-    setDiseaseLayers(prev => ({
+    setDiseaseLayers((prev) => ({
       ...prev,
       [disease]: {
         outbreaks: layer === 'outbreaks' ? !prev[disease]?.outbreaks : prev[disease]?.outbreaks || false,
         vaccination: layer === 'vaccination' ? !prev[disease]?.vaccination : prev[disease]?.vaccination || false,
         status: layer === 'status' ? !prev[disease]?.status : prev[disease]?.status || false,
         pcpFmd: layer === 'pcpFmd' ? !prev[disease]?.pcpFmd : prev[disease]?.pcpFmd || false,
-      }
+      },
     }));
   };
 
-  // Filter data based on selected filters
   const filteredData = useMemo(() => {
-    return data.filter(item => {
+    return data.filter((item) => {
       const yearMatch = selectedYear === 'all' || item.Year?.toString() === selectedYear;
       const quarterMatch = selectedQuarter === 'all' || item.Quarter?.toString() === selectedQuarter;
       const regionMatch = selectedRegion === 'all' || item.Region === selectedRegion;
-      
-      // Check if any layer is enabled for this disease
+
       const diseaseLayers_check = diseaseLayers[item.Disease];
-      const diseaseMatch = !diseaseLayers_check || 
-        diseaseLayers_check.outbreaks || 
-        diseaseLayers_check.vaccination || 
+      const diseaseMatch =
+        !diseaseLayers_check ||
+        diseaseLayers_check.outbreaks ||
+        diseaseLayers_check.vaccination ||
         diseaseLayers_check.status;
-      
+
       return yearMatch && quarterMatch && diseaseMatch && regionMatch;
     });
   }, [data, selectedYear, selectedQuarter, selectedRegion, diseaseLayers]);
-  
-  // Data to use for markers - only include entries with actual outbreaks AND outbreak layer enabled
+
   const markerData = useMemo(() => {
-    return filteredData.filter(item => {
-      // Check if outbreak layer is enabled for this disease
+    return filteredData.filter((item) => {
       if (!diseaseLayers[item.Disease]?.outbreaks) return false;
-      
       if (!item.Outbreaks) return false;
       const outbreaksStr = String(item.Outbreaks).trim();
       if (outbreaksStr === '' || outbreaksStr === '0' || outbreaksStr.toLowerCase() === 'null') return false;
@@ -160,13 +202,9 @@ const FastReport: React.FC = () => {
     });
   }, [filteredData, diseaseLayers]);
 
-  // Data for vaccination markers - only include entries with vaccination doses AND vaccination layer enabled
   const vaccinationData = useMemo(() => {
-    return filteredData.filter(item => {
-      // Check if vaccination layer is enabled for this disease
+    return filteredData.filter((item) => {
       if (!diseaseLayers[item.Disease]?.vaccination) return false;
-      
-      // Check if there are vaccination doses
       const doses = Number(item.Vaccination_Doses || 0);
       return doses > 0;
     });
@@ -176,38 +214,31 @@ const FastReport: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
-      
+
       try {
-        // Load country coordinates from JSON file
         const coordsResponse = await fetch('/country-coordinates.json');
         const coords = await coordsResponse.json();
         setCountryCoordinates(coords);
-        
-        console.log('Attempting to fetch data from API...');
+
         const response = await fetch('/api/fast-report/create-dashboard');
-        
+
         if (!response.ok) {
           throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
-        
+
         const dashboardData = await response.json();
-        
-        // Validate API response structure
+
         if (dashboardData && dashboardData.data && Array.isArray(dashboardData.data)) {
-          console.log("Successfully loaded API data:", dashboardData.data.length, "records");
           setData(dashboardData.data);
         } else if (dashboardData && Array.isArray(dashboardData)) {
-          // Handle case where API returns array directly
-          console.log("Successfully loaded API data (direct array):", dashboardData.length, "records");
           setData(dashboardData);
         } else {
-          console.warn("Invalid API data format:", dashboardData);
           throw new Error('Invalid API response format - expected array or {data: array}');
         }
-      } catch (err: any) {
-        console.error('Failed to fetch from API:', err.message);
-        setError(`Unable to load data: ${err.message}`);
-        setData([]); // No fallback data - show empty state
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setError(`Unable to load data: ${message}`);
+        setData([]);
       } finally {
         setLoading(false);
       }
@@ -216,44 +247,56 @@ const FastReport: React.FC = () => {
     fetchData();
   }, []);
 
-  // Initialize disease layers when diseases are available
+  useEffect(() => {
+    const loadGeoJson = async () => {
+      if (geoJsonData) return;
+      try {
+        const geoResponse = await fetch('/gadm.geojson');
+        if (!geoResponse.ok) {
+          throw new Error(`GeoJSON not found (${geoResponse.status})`);
+        }
+        const geoData = await geoResponse.json();
+        setGeoJsonData(geoData);
+        setGeoJsonError(null);
+      } catch (geoErr: unknown) {
+        const message = geoErr instanceof Error ? geoErr.message : 'Failed to load map boundaries';
+        console.error('Error loading GeoJSON:', message);
+        setGeoJsonError(message);
+      }
+    };
+
+    loadGeoJson();
+  }, [geoJsonData]);
+
   useEffect(() => {
     if (availableDiseases.length > 0 && Object.keys(diseaseLayers).length === 0) {
-      const initialLayers: { [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean; pcpFmd: boolean } } = {};
-      availableDiseases.forEach(disease => {
+      const initialLayers: {
+        [disease: string]: { outbreaks: boolean; vaccination: boolean; status: boolean; pcpFmd: boolean };
+      } = {};
+      availableDiseases.forEach((disease) => {
         initialLayers[disease] = {
-          outbreaks: true,  // Default: show outbreaks
+          outbreaks: true,
           vaccination: false,
           status: false,
-          pcpFmd: false
+          pcpFmd: false,
         };
       });
       setDiseaseLayers(initialLayers);
     }
   }, [availableDiseases, diseaseLayers]);
 
-  // Load PCP data and GeoJSON when PCP-FMD is enabled
   useEffect(() => {
     const loadPcpData = async () => {
-      if (diseaseLayers['FMD']?.pcpFmd) {
-        try {
-          // Load GeoJSON if not already loaded
-          if (!geoJsonData) {
-            const geoResponse = await fetch('/gadm.geojson');
-            const geoData = await geoResponse.json();
-            setGeoJsonData(geoData);
-          }
-          
-          // Load PCP data for 2026
-          const pcpResponse = await fetch('/api/pcp/pcp-fmd-2026');
-          const pcpResult = await pcpResponse.json();
-          setPcpData(pcpResult.data || []);
-        } catch (error) {
-          console.error('Error loading PCP data:', error);
-        }
+      if (!diseaseLayers['FMD']?.pcpFmd) return;
+      try {
+        const pcpResponse = await fetch('/api/pcp/pcp-fmd-2026');
+        const pcpResult = await pcpResponse.json();
+        setPcpData(pcpResult.data || []);
+      } catch (pcpErr) {
+        console.error('Error loading PCP data:', pcpErr);
       }
     };
-    
+
     loadPcpData();
   }, [diseaseLayers]);
 
@@ -266,32 +309,31 @@ const FastReport: React.FC = () => {
       'PCP-2': '#F1C40F',
       'PCP-3-Provisional': '#A9D18E',
       'PCP-3': '#4CAF50',
-      'PCP-4': '#2E7D32'
+      'PCP-4': '#2E7D32',
     };
     return colors[stage] || '#CCCCCC';
   };
 
   const getMarkerColor = (disease: string): string => {
     const colors: { [key: string]: string } = {
-      'FMD': '#006400',      // dark green
-      'LSD': '#90EE90',      // light green
-      'PPR': '#9370DB',      // purple
-      'RVF': '#DC143C',      // red
-      'SPGP': '#4169E1',     // blue
-      'BEF': '#888888',      // grey
-      'ASF': '#4444ff', 
-      'LUMPY': '#ffff44',
+      FMD: '#006400',
+      LSD: '#90EE90',
+      PPR: '#9370DB',
+      RVF: '#DC143C',
+      SPGP: '#4169E1',
+      BEF: '#888888',
+      ASF: '#4444ff',
+      LUMPY: '#ffff44',
       'Avian Influenza': '#ff8844',
       'Newcastle Disease': '#8844ff',
-      'default': '#888888'
+      default: '#888888',
     };
     return colors[disease] || colors.default;
   };
 
   const createCustomMarker = (disease: string, outbreaks: string) => {
     const color = getMarkerColor(disease);
-    
-    // Parse outbreaks, ensure it's a positive number
+
     let outbreaksNum = 0;
     if (outbreaks) {
       const outbreaksStr = String(outbreaks).trim();
@@ -302,22 +344,20 @@ const FastReport: React.FC = () => {
         }
       }
     }
-    
-    // Size based on number of outbreaks (minimum 15px)
+
     const size = Math.min(30, 15 + outbreaksNum * 2);
-    
+
     return L.divIcon({
       className: 'custom-marker',
       html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;">${outbreaksNum > 0 ? outbreaksNum : ''}</div>`,
       iconSize: [size, size],
-      iconAnchor: [size/2, size/2]
+      iconAnchor: [size / 2, size / 2],
     });
   };
 
   const createSyringeMarker = (disease: string, doses: number | string) => {
     const color = getMarkerColor(disease);
-    
-    // Format doses - convert to K/M for display
+
     let displayDoses = '';
     if (doses) {
       const dosesNum = typeof doses === 'string' ? parseInt(doses, 10) : doses;
@@ -331,8 +371,7 @@ const FastReport: React.FC = () => {
         }
       }
     }
-    
-    // Syringe icon SVG - larger size
+
     const syringeIcon = `
       <svg width="50" height="50" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5">
         <path d="M6 10l-2-2 1.5-1.5L7 8l3-3-1.5-1.5L10 2l4 4-1.5 1.5L9 4 6 7l1.5 1.5L6 10z"/>
@@ -342,7 +381,7 @@ const FastReport: React.FC = () => {
         <line x1="7.5" y1="15" x2="10.5" y2="15" stroke="white" stroke-width="0.5"/>
       </svg>
     `;
-    
+
     return L.divIcon({
       className: 'custom-syringe-marker',
       html: `
@@ -350,17 +389,25 @@ const FastReport: React.FC = () => {
           <div style="position: absolute; top: 0; left: 5px;">
             ${syringeIcon}
           </div>
-          ${displayDoses ? `
+          ${
+            displayDoses
+              ? `
             <div style="position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); background-color: ${color}; color: white; font-size: 11px; font-weight: bold; padding: 3px 6px; border-radius: 4px; border: 1.5px solid white; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
               ${displayDoses}
             </div>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
       `,
       iconSize: [60, 60],
-      iconAnchor: [30, 60]
+      iconAnchor: [30, 60],
     });
   };
+
+  const handleZoomChange = useCallback((zoom: number) => {
+    setMapZoom(zoom);
+  }, []);
 
   if (loading) {
     return (
@@ -377,7 +424,6 @@ const FastReport: React.FC = () => {
         <div className="text-gray-600">
           <p>{error}</p>
           <p className="mt-2 text-sm">Please ensure the FastAPI server is running and the database is accessible.</p>
-          <p className="mt-2 text-sm">Check the browser console for more details.</p>
         </div>
       </div>
     );
@@ -387,398 +433,370 @@ const FastReport: React.FC = () => {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <div className="text-gray-600 text-xl mb-4">No Data Available</div>
-        <div className="text-gray-600">
-          <p>No fast report data found in the database.</p>
-          <p className="mt-2 text-sm">Please check if data has been submitted through the data entry forms.</p>
-        </div>
+        <p className="text-gray-600">No fast report data found in the database.</p>
       </div>
     );
   }
 
+  const countryPanelDisplayName = selectedCountry || '';
+  const countryPanelApiKey = selectedFastReportCountry || selectedCountry || '';
+
   return (
     <div className="w-full space-y-4">
-      {/* Header */}
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Fast Report Dashboard</h2>
         <p className="text-gray-600">
-          Interactive map showing disease outbreak reports across regions. Use filters to explore specific years, diseases, or regions.
+          Interactive map showing disease outbreak reports across regions. Zoom in and click a country
+          for historical trends, or use filters to explore specific years, diseases, or regions.
         </p>
       </div>
 
-      {/* Map and Filters Side-by-Side */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="flex flex-col lg:flex-row gap-0">
-          {/* Map - Left side, smaller width */}
-          <div className="w-full lg:w-2/3 h-96 lg:h-[600px]">
-          <MapContainer
-            center={[47, 28]}
-            zoom={6}
-            scrollWheelZoom={true}
-            className="h-full w-full"
-            zoomControl={true}
-            doubleClickZoom={true}
-            touchZoom={true}
-          >
-            <TileLayer
-              url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
-              attribution="&copy; United Nations Geospatial Information Section"
-              maxZoom={18}
-            />
-            
-            {/* PCP-FMD GeoJSON Layer */}
-            {diseaseLayers['FMD']?.pcpFmd && geoJsonData && (
-              <GeoJSON
-                data={geoJsonData}
-                style={(feature) => {
-                  const countryName = feature?.properties?.COUNTRY || feature?.properties?.NAME_0;
-                  const pcpEntry = pcpData.find(entry => entry.Country === countryName);
-                  const pcpStage = pcpEntry?.PCP_Stage || '';
-                  
-                  return {
-                    fillColor: getPcpStageColor(pcpStage),
-                    fillOpacity: 0.6,
-                    color: '#ffffff',
-                    weight: 1
-                  };
-                }}
-                onEachFeature={(feature, layer) => {
-                  const countryName = feature?.properties?.COUNTRY || feature?.properties?.NAME_0;
-                  const pcpEntry = pcpData.find(entry => entry.Country === countryName);
-                  const pcpStage = pcpEntry?.PCP_Stage || 'No data';
-                  
-                  layer.bindPopup(`
-                    <div style="padding: 8px;">
-                      <h3 style="font-weight: bold; margin-bottom: 4px;">${countryName}</h3>
-                      <p><strong>PCP Stage:</strong> ${pcpStage}</p>
-                    </div>
-                  `);
-                }}
+          <div className="flex-1 min-w-0 h-96 lg:h-[600px] relative">
+            <MapContainer
+              center={[47, 28]}
+              zoom={6}
+              scrollWheelZoom={true}
+              className="h-full w-full"
+              zoomControl={true}
+              doubleClickZoom={true}
+              touchZoom={true}
+            >
+              <TileLayer
+                url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
+                attribution="&copy; United Nations Geospatial Information Section"
+                maxZoom={18}
               />
-            )}
-            
-            {markerData.map((report) => {
-              const coords = countryCoordinates[report.Country];
-              if (!coords) return null;
-              
-              return (
-                <Marker
-                  key={`${report.id}-${report.Country}-${report.Disease}`}
-                  position={coords}
-                  icon={createCustomMarker(report.Disease, report.Outbreaks)}
-                >
-                  <Popup maxWidth={300}>
-                    <div className="p-2">
-                      <h3 className="font-bold text-lg text-gray-800">{report.Country}</h3>
-                      <div className="space-y-1 text-sm">
-                        <p><strong>Disease:</strong> {report.Disease}</p>
-                        <p><strong>Year:</strong> {report.Year} Q{report.Quarter}</p>
-                        <p><strong>Region:</strong> {report.Region}</p>
-                        <p><strong>Outbreaks:</strong> {report.Outbreaks}</p>
-                        <p><strong>Cases:</strong> {report.Cases}</p>
-                        {report.Vaccination && (
-                          <p><strong>Vaccination:</strong> {report.Vaccination === 1 ? 'Yes' : 'No'}</p>
-                        )}
-                        {report.Outbreak_Description && (
-                          <div className="mt-2">
-                            <strong>Description:</strong>
-                            <p className="text-gray-600 mt-1">{report.Outbreak_Description}</p>
-                          </div>
-                        )}
-                        {report.Source && (
-                          <p className="text-xs text-gray-500 mt-2"><strong>Source:</strong> {report.Source}</p>
-                        )}
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
-            
-            {/* Vaccination markers - positioned above country centers */}
-            {vaccinationData.map((report) => {
-              const coords = countryCoordinates[report.Country];
-              if (!coords) return null;
-              
-              // Offset latitude by +2 degrees to position above the outbreak marker
-              const vaccinationCoords: [number, number] = [coords[0] + 2, coords[1]];
-              
-              return (
-                <Marker
-                  key={`vacc-${report.id}-${report.Country}-${report.Disease}`}
-                  position={vaccinationCoords}
-                  icon={createSyringeMarker(report.Disease, report.Vaccination_Doses || 0)}
-                >
-                  <Popup maxWidth={300}>
-                    <div className="p-2">
-                      <h3 className="font-bold text-lg text-gray-800">{report.Country}</h3>
-                      <div className="space-y-1 text-sm">
-                        <p><strong>Disease:</strong> {report.Disease}</p>
-                        <p><strong>Year:</strong> {report.Year} Q{report.Quarter}</p>
-                        <p><strong>Region:</strong> {report.Region}</p>
-                        <p><strong>Vaccination:</strong> Yes</p>
-                        {report.Vaccination_Doses && (
-                          <p><strong>Doses Administered:</strong> {Number(report.Vaccination_Doses).toLocaleString()}</p>
-                        )}
-                        {report.Vaccination_Description && (
-                          <div className="mt-2">
-                            <strong>Vaccination Details:</strong>
-                            <p className="text-gray-600 mt-1">{report.Vaccination_Description}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
-            
-            <MapController filteredData={markerData} countryCoordinates={countryCoordinates} />
-          </MapContainer>
-          </div>
 
-          {/* Filters - Right side, wider with 2 columns inside */}
-          <div className="w-full lg:w-1/3 bg-gray-50 p-4 border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto lg:h-[600px]">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Filters</h3>
-            
-            {/* 2 Column Grid for filters */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Left Column - Basic Filters */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Year:
-                  </label>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+              {geoJsonData && (
+                <CountryBoundariesLayer
+                  geoJsonData={geoJsonData}
+                  mapZoom={mapZoom}
+                  selectedCountry={selectedFastReportCountry}
+                  selectedGeoName={selectedGeoName}
+                  showPcpStyling={!!diseaseLayers['FMD']?.pcpFmd}
+                  pcpData={pcpData}
+                  getPcpStageColor={getPcpStageColor}
+                  fastReportCountries={fastReportCountries}
+                  onCountrySelect={handleCountrySelect}
+                />
+              )}
+
+              {markerData.map((report) => {
+                const coords = countryCoordinates[report.Country];
+                if (!coords) return null;
+
+                return (
+                  <Marker
+                    key={`${report.id}-${report.Country}-${report.Disease}`}
+                    position={coords}
+                    icon={createCustomMarker(report.Disease, report.Outbreaks)}
+                    eventHandlers={{
+                      click: () => handleMarkerCountryClick(report.Country),
+                    }}
                   >
-                    <option value="all">All Years</option>
-                    {availableYears.map(year => (
-                      <option key={year} value={year.toString()}>{year}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Quarter:
-                  </label>
-                  <select
-                    value={selectedQuarter}
-                    onChange={(e) => setSelectedQuarter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Region:
-                  </label>
-                  <select
-                    value={selectedRegion}
-                    onChange={(e) => setSelectedRegion(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="all">All Regions</option>
-                    {availableRegions.map(region => (
-                      <option key={region} value={region}>{region}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="text-sm text-gray-600 bg-white rounded p-3 border border-gray-200">
-                  <div className="font-medium text-gray-800 mb-1">Results:</div>
-                  Showing <span className="font-bold text-green-600">{filteredData.length}</span> report{filteredData.length !== 1 ? 's' : ''}
-                </div>
-                
-                {/* Legends container - side by side when PCP is active */}
-                <div className={`grid ${diseaseLayers['FMD']?.pcpFmd ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-                  {/* Disease Colors Legend */}
-                  <div className="bg-white rounded p-3 border border-gray-200">
-                    <div className="font-medium text-gray-800 mb-2 text-xs">Disease Colors:</div>
-                    <div className="grid grid-cols-1 gap-1">
-                      {availableDiseases.map(disease => (
-                        <div key={disease} className="flex items-center">
-                          <div 
-                            className="w-2.5 h-2.5 rounded-full border border-white mr-1.5 shadow-sm flex-shrink-0"
-                            style={{ backgroundColor: getMarkerColor(disease) }}
-                          ></div>
-                          <span className="text-xs text-gray-700">{disease}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* PCP-FMD Legend - only show when PCP-FMD is active */}
-                  {diseaseLayers['FMD']?.pcpFmd && (
-                    <div className="bg-white rounded p-3 border border-gray-200">
-                      <div className="font-medium text-gray-800 mb-2 text-xs">PCP Stages:</div>
-                      <div className="grid grid-cols-1 gap-1">
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#E41A1C' }}></div>
-                          <span className="text-xs text-gray-700">PCP-0</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F4C7A1' }}></div>
-                          <span className="text-xs text-gray-700">PCP-1-P</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F39C34' }}></div>
-                          <span className="text-xs text-gray-700">PCP-1</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F7E08C' }}></div>
-                          <span className="text-xs text-gray-700">PCP-2-P</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#F1C40F' }}></div>
-                          <span className="text-xs text-gray-700">PCP-2</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#A9D18E' }}></div>
-                          <span className="text-xs text-gray-700">PCP-3-P</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#4CAF50' }}></div>
-                          <span className="text-xs text-gray-700">PCP-3</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0" style={{ backgroundColor: '#2E7D32' }}></div>
-                          <span className="text-xs text-gray-700">PCP-4</span>
+                    <Popup maxWidth={300}>
+                      <div className="p-2">
+                        <h3 className="font-bold text-lg text-gray-800">{report.Country}</h3>
+                        <p className="text-xs text-green-700 mb-2">Click marker for country history</p>
+                        <div className="space-y-1 text-sm">
+                          <p><strong>Disease:</strong> {report.Disease}</p>
+                          <p><strong>Year:</strong> {report.Year} Q{report.Quarter}</p>
+                          <p><strong>Outbreaks:</strong> {report.Outbreaks}</p>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    </Popup>
+                  </Marker>
+                );
+              })}
+
+              {vaccinationData.map((report) => {
+                const coords = countryCoordinates[report.Country];
+                if (!coords) return null;
+
+                const vaccinationCoords: [number, number] = [coords[0] + 2, coords[1]];
+
+                return (
+                  <Marker
+                    key={`vacc-${report.id}-${report.Country}-${report.Disease}`}
+                    position={vaccinationCoords}
+                    icon={createSyringeMarker(report.Disease, report.Vaccination_Doses || 0)}
+                    eventHandlers={{
+                      click: () => handleMarkerCountryClick(report.Country),
+                    }}
+                  >
+                    <Popup maxWidth={300}>
+                      <div className="p-2">
+                        <h3 className="font-bold text-lg text-gray-800">{report.Country}</h3>
+                        <p className="text-xs text-green-700 mb-2">Click marker for country history</p>
+                        <div className="space-y-1 text-sm">
+                          <p><strong>Disease:</strong> {report.Disease}</p>
+                          <p><strong>Doses:</strong> {Number(report.Vaccination_Doses).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+
+              <MapZoomTracker onZoomChange={handleZoomChange} />
+              <MapController
+                filteredData={markerData}
+                countryCoordinates={countryCoordinates}
+                skipFit={!!selectedCountry}
+              />
+            </MapContainer>
+
+            {!mapCountriesInteractive && geoJsonData && (
+              <div className="absolute bottom-3 left-3 right-3 pointer-events-none z-[1000]">
+                <div className="bg-white/90 text-gray-700 text-sm px-3 py-2 rounded shadow border border-gray-200">
+                  Zoom in to select a country on the map
                 </div>
               </div>
-              
-              {/* Right Column - Disease Filters */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Diseases & Layers:
-                </label>
-                <div className="space-y-2">
-                  {availableDiseases.map(disease => (
-                    <div key={disease} className="border border-gray-300 rounded-md overflow-hidden">
-                      {/* Disease Header - Collapsable */}
-                      <button
-                        onClick={() => toggleDisease(disease)}
-                        className="w-full px-3 py-2 bg-white hover:bg-gray-50 flex items-center justify-between text-left"
-                        style={{ 
-                          backgroundColor: expandedDiseases.has(disease) ? '#f9fafb' : 'white',
-                          borderLeft: `4px solid ${getMarkerColor(disease)}`
-                        }}
-                      >
-                        <span className="font-medium text-gray-800">{disease}</span>
-                        <svg
-                          className={`w-5 h-5 transition-transform ${expandedDiseases.has(disease) ? 'rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+            )}
+            {geoJsonError && (
+              <div className="absolute top-3 left-3 right-3 z-[1000]">
+                <div className="bg-amber-50 text-amber-900 text-xs px-3 py-2 rounded border border-amber-200">
+                  Country boundaries unavailable ({geoJsonError}). Marker clicks still open country
+                  history.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {selectedCountry && (
+            <CollapsibleSidePanel
+              title="Country"
+              collapsed={countryPanelCollapsed}
+              onToggleCollapse={() => setCountryPanelCollapsed((c) => !c)}
+              onClose={closeCountryPanel}
+              className={countryPanelCollapsed ? '' : 'w-full lg:w-80 xl:w-96'}
+            >
+              <CountryAnalyticsPanel
+                country={countryPanelApiKey}
+                displayName={countryPanelDisplayName}
+                hasFastReportMatch={!!selectedFastReportCountry}
+                getDiseaseColor={getMarkerColor}
+              />
+            </CollapsibleSidePanel>
+          )}
+
+          <CollapsibleSidePanel
+            title="Filters"
+            collapsed={filtersCollapsed}
+            onToggleCollapse={() => setFiltersCollapsed((c) => !c)}
+            className={filtersCollapsed ? '' : 'w-full lg:w-72 xl:w-80'}
+          >
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Year:</label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="all">All Years</option>
+                      {availableYears.map((year) => (
+                        <option key={year} value={year.toString()}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quarter:</label>
+                    <select
+                      value={selectedQuarter}
+                      onChange={(e) => setSelectedQuarter(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="all">All</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Region:</label>
+                    <select
+                      value={selectedRegion}
+                      onChange={(e) => setSelectedRegion(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="all">All Regions</option>
+                      {availableRegions.map((region) => (
+                        <option key={region} value={region}>
+                          {region}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="text-sm text-gray-600 bg-white rounded p-3 border border-gray-200">
+                    <div className="font-medium text-gray-800 mb-1">Results:</div>
+                    Showing <span className="font-bold text-green-600">{filteredData.length}</span> report
+                    {filteredData.length !== 1 ? 's' : ''}
+                  </div>
+
+                  <div className={`grid ${diseaseLayers['FMD']?.pcpFmd ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                    <div className="bg-white rounded p-3 border border-gray-200">
+                      <div className="font-medium text-gray-800 mb-2 text-xs">Disease Colors:</div>
+                      <div className="grid grid-cols-1 gap-1">
+                        {availableDiseases.map((disease) => (
+                          <div key={disease} className="flex items-center">
+                            <div
+                              className="w-2.5 h-2.5 rounded-full border border-white mr-1.5 shadow-sm flex-shrink-0"
+                              style={{ backgroundColor: getMarkerColor(disease) }}
+                            />
+                            <span className="text-xs text-gray-700">{disease}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {diseaseLayers['FMD']?.pcpFmd && (
+                      <div className="bg-white rounded p-3 border border-gray-200">
+                        <div className="font-medium text-gray-800 mb-2 text-xs">PCP Stages:</div>
+                        <div className="grid grid-cols-1 gap-1">
+                          {[
+                            ['#E41A1C', 'PCP-0'],
+                            ['#F4C7A1', 'PCP-1-P'],
+                            ['#F39C34', 'PCP-1'],
+                            ['#F7E08C', 'PCP-2-P'],
+                            ['#F1C40F', 'PCP-2'],
+                            ['#A9D18E', 'PCP-3-P'],
+                            ['#4CAF50', 'PCP-3'],
+                            ['#2E7D32', 'PCP-4'],
+                          ].map(([color, label]) => (
+                            <div key={label} className="flex items-center">
+                              <div
+                                className="w-2.5 h-2.5 rounded-sm border border-white mr-1.5 flex-shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className="text-xs text-gray-700">{label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Diseases & Layers:</label>
+                  <div className="space-y-2">
+                    {availableDiseases.map((disease) => (
+                      <div key={disease} className="border border-gray-300 rounded-md overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleDisease(disease)}
+                          className="w-full px-3 py-2 bg-white hover:bg-gray-50 flex items-center justify-between text-left"
+                          style={{
+                            backgroundColor: expandedDiseases.has(disease) ? '#f9fafb' : 'white',
+                            borderLeft: `4px solid ${getMarkerColor(disease)}`,
+                          }}
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      
-                      {/* Layer Options - Expandable */}
-                      {expandedDiseases.has(disease) && (
-                        <div className="px-3 py-2 bg-gray-50 space-y-2 border-t border-gray-200">
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={diseaseLayers[disease]?.outbreaks || false}
-                              onChange={() => toggleLayer(disease, 'outbreaks')}
-                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
-                            />
-                            <span className="text-sm text-gray-700">Outbreaks</span>
-                          </label>
-                          
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={diseaseLayers[disease]?.vaccination || false}
-                              onChange={() => toggleLayer(disease, 'vaccination')}
-                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
-                            />
-                            <span className="text-sm text-gray-700">Vaccination</span>
-                          </label>
-                          
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={diseaseLayers[disease]?.status || false}
-                              onChange={() => toggleLayer(disease, 'status')}
-                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
-                            />
-                            <span className="text-sm text-gray-700">Disease Status</span>
-                          </label>
-                          
-                          {/* PCP-FMD option - only for FMD */}
-                          {disease === 'FMD' && (
+                          <span className="font-medium text-gray-800">{disease}</span>
+                          <svg
+                            className={`w-5 h-5 transition-transform ${expandedDiseases.has(disease) ? 'rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+
+                        {expandedDiseases.has(disease) && (
+                          <div className="px-3 py-2 bg-gray-50 space-y-2 border-t border-gray-200">
                             <label className="flex items-center space-x-2 cursor-pointer">
                               <input
                                 type="checkbox"
-                                checked={diseaseLayers[disease]?.pcpFmd || false}
-                                onChange={() => toggleLayer(disease, 'pcpFmd')}
+                                checked={diseaseLayers[disease]?.outbreaks || false}
+                                onChange={() => toggleLayer(disease, 'outbreaks')}
                                 className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
                               />
-                              <span className="text-sm text-gray-700">PCP-FMD</span>
+                              <span className="text-sm text-gray-700">Outbreaks</span>
                             </label>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={diseaseLayers[disease]?.vaccination || false}
+                                onChange={() => toggleLayer(disease, 'vaccination')}
+                                className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
+                              />
+                              <span className="text-sm text-gray-700">Vaccination</span>
+                            </label>
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={diseaseLayers[disease]?.status || false}
+                                onChange={() => toggleLayer(disease, 'status')}
+                                className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
+                              />
+                              <span className="text-sm text-gray-700">Disease Status</span>
+                            </label>
+                            {disease === 'FMD' && (
+                              <label className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={diseaseLayers[disease]?.pcpFmd || false}
+                                  onChange={() => toggleLayer(disease, 'pcpFmd')}
+                                  className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
+                                />
+                                <span className="text-sm text-gray-700">PCP-FMD</span>
+                              </label>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </CollapsibleSidePanel>
         </div>
-        
-        {/* Map Disclaimer */}
+
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
           <p className="text-sm text-gray-700 italic">
-            The boundaries and names shown and the designations used on this map do not imply the 
-            expression of any opinion whatsoever on the part of FAO concerning the legal status of any country, 
-            territory, city or area or of its authorities, or concerning the delimitation of its frontiers and 
-            boundaries.
+            The boundaries and names shown and the designations used on this map do not imply the
+            expression of any opinion whatsoever on the part of FAO concerning the legal status of any
+            country, territory, city or area or of its authorities, or concerning the delimitation of its
+            frontiers and boundaries.
           </p>
         </div>
       </div>
 
-      {/* Summary Statistics */}
       {filteredData.length > 0 && (
         <div className="bg-white rounded-lg shadow p-4">
           <h3 className="font-semibold mb-3 text-gray-800">Summary Statistics:</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-blue-50 rounded">
-              <div className="text-2xl font-bold text-blue-600">
-                {filteredData.length}
-              </div>
+              <div className="text-2xl font-bold text-blue-600">{filteredData.length}</div>
               <div className="text-sm text-gray-600">Total Reports</div>
             </div>
             <div className="text-center p-3 bg-red-50 rounded">
               <div className="text-2xl font-bold text-red-600">
-                {filteredData.reduce((sum, item) => sum + parseInt(item.Outbreaks || '0'), 0)}
+                {filteredData.reduce((sum, item) => sum + parseInt(item.Outbreaks || '0', 10), 0)}
               </div>
               <div className="text-sm text-gray-600">Total Outbreaks</div>
             </div>
             <div className="text-center p-3 bg-green-50 rounded">
               <div className="text-2xl font-bold text-green-600">
-                {Array.from(new Set(filteredData.map(item => item.Country))).length}
+                {Array.from(new Set(filteredData.map((item) => item.Country))).length}
               </div>
               <div className="text-sm text-gray-600">Countries Affected</div>
             </div>
             <div className="text-center p-3 bg-purple-50 rounded">
               <div className="text-2xl font-bold text-purple-600">
-                {Array.from(new Set(filteredData.map(item => item.Disease))).length}
+                {Array.from(new Set(filteredData.map((item) => item.Disease))).length}
               </div>
               <div className="text-sm text-gray-600">Diseases Reported</div>
             </div>
