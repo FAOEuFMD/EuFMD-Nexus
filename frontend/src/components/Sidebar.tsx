@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -25,7 +25,15 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user } = useAuthStore();
+  const [showRispDropdown, setShowRispDropdown] = useState(false);
   const userRole = user?.role?.toLowerCase();
+  const userCountry = user?.country;
+  // South East European Neighbourhood (SEEN) countries
+  const seenCountries = [
+    'Armenia', 'Azerbaijan', 'Georgia', 'Iran (Islamic Republic of)',
+    'Iraq', 'Iraq (KRI)', 'Pakistan', 'Türkiye', 'Turkey', 'Russian Federation'
+  ];
+  const isSeenUser = seenCountries.includes(userCountry || '');
   
   // Check if user is admin (role === "admin" like in Vue app)
   const isAdmin = userRole === 'admin';
@@ -109,19 +117,69 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           {/* RISP section - moved up above Tools and Resources */}
           {(isAdmin || isRispUser) && (
             <div>
-              <Link
-                className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
-                to="/risp"
-                onClick={onClose}
-              >
-                <FontAwesomeIcon icon={faTowerBroadcast} className="text-xl" />
-                <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
-                  RISP
-                </span>
-                <div className="flex flex-col items-start">
-                  <span>RISP</span>
-                </div>
-              </Link>
+              <div className="relative">
+                {isSeenUser ? (
+                  <>
+                    <button
+                      className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline w-full text-left"
+                      onClick={() => setShowRispDropdown(!showRispDropdown)}
+                    >
+                      <FontAwesomeIcon icon={faTowerBroadcast} className="text-xl" />
+                      <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
+                        RISP
+                      </span>
+                      <div className="flex flex-col items-start flex-1">
+                        <span>RISP</span>
+                      </div>
+                      <svg className={`w-4 h-4 transition-transform ${showRispDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    
+                    {showRispDropdown && (
+                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-white/30 pl-3">
+                        {/* Monthly Report (SOI) */}
+                        <Link
+                          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-white/20 transition-colors"
+                          to="/risp/soi"
+                          onClick={onClose}
+                        >
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>Monthly Report (SOI)</span>
+                        </Link>
+                        
+                        {/* Quarterly Report */}
+                        <Link
+                          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-white/20 transition-colors"
+                          to="/risp"
+                          onClick={onClose}
+                        >
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          <span>Quarterly Report (FAST Report)</span>
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <Link
+                    className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline"
+                    to="/risp"
+                    onClick={onClose}
+                  >
+                    <FontAwesomeIcon icon={faTowerBroadcast} className="text-xl" />
+                    <span className="tooltip rounded shadow-lg p-1 bg-black text-white mt-8">
+                      RISP
+                    </span>
+                    <div className="flex flex-col items-start">
+                      <span>RISP</span>
+                    </div>
+                  </Link>
+                )}
+              </div>
             </div>
           )}
 

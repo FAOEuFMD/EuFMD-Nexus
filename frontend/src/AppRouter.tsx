@@ -19,6 +19,7 @@ import {
   GetPrepared,
   Monitoring,
   RISPLanding,
+  RISPSOI,
   RISPOutbreak,
   RISPVaccination,
   RISPSurveillance,
@@ -260,6 +261,15 @@ const AppRouter: React.FC = () => {
             element={
               <RouteGuard requiresAuth={true}>
                 <RISPSurveillance />
+              </RouteGuard>
+            } 
+          />
+          
+          <Route 
+            path="risp/soi" 
+            element={
+              <RouteGuard requiresAuth={true}>
+                <RISPSOI />
               </RouteGuard>
             } 
           />

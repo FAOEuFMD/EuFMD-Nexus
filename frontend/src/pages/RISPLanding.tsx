@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -436,18 +435,10 @@ const RISPLanding: React.FC = () => {
         </p>
         <div className="w-full">
           <h3 className="text-gray-600 welcome-text-full mb-6">
-            {userRegion === 'South East European Neighbourhood (SEEN)' ? (
-              <>
-                Welcome to the SOI database. This platform allows you to report and share information as specified under the Statement of Intentions Agreement. Your input is crucial to help monitor and manage health risks effectively. Please share information about outbreaks, vaccinations and market prices.
-              </>
-            ) : (
-              <>
-                Welcome to the Risk Information Sharing Platform. This platform allows
-                you to visualize and share information. Your input is crucial to help
-                monitor and manage health risks effectively. Please share information about outbreaks, control and surveillance
-                measures for the selected time period.
-              </>
-            )}
+            Welcome to the Risk Information Sharing Platform. This platform allows
+            you to visualize and share information. Your input is crucial to help
+            monitor and manage health risks effectively. Please share information about outbreaks, control and surveillance
+            measures for the selected time period.
           </h3>
         </div>
         
@@ -731,7 +722,7 @@ const RISPLanding: React.FC = () => {
                     // Different styling for countries with/without data
                     const bubbleStyle = hasData 
                       ? "background: linear-gradient(135deg, #015039 0%, #10b981 100%);"
-                      : "background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);";
+                      : "background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);"
                     
                     return (
                       <Marker
