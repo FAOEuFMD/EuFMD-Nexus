@@ -331,6 +331,23 @@ const FastReport: React.FC = () => {
     return colors[disease] || colors.default;
   };
 
+  /** Offset markers by disease so they don't overlap on the same country coordinate.
+   *  Units are degrees lat/lng — small enough to stay within the country area. */
+  const DISEASE_OFFSETS: Record<string, [number, number]> = {
+    FMD: [0, 0],           // center
+    PPR: [-0.2, 1.2],      // → right
+    LSD: [0, -1.2],        // ← left
+    RVF: [1.2, 0],         // ↑ up
+    SPGP: [-1.2, 0],       // ↓ down
+    BEF: [0.6, -0.8],      // ↗ up-right
+    ASF: [0.6, 0.8],       // ↘ down-right
+    LUMPY: [-0.6, 0.8],    // ↙ down-left
+    'Avian Influenza': [-0.6, -0.8],  // ↖ up-left
+    'Newcastle Disease': [0.4, -1.0],  // left-up
+  };
+  const getDiseaseOffset = (disease: string): [number, number] =>
+    DISEASE_OFFSETS[disease] || [0, 0];
+
   const createCustomMarker = (disease: string, outbreaks: string) => {
     const color = getMarkerColor(disease);
 
@@ -372,36 +389,54 @@ const FastReport: React.FC = () => {
       }
     }
 
-    const syringeIcon = `
-      <svg width="50" height="50" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5">
-        <path d="M6 10l-2-2 1.5-1.5L7 8l3-3-1.5-1.5L10 2l4 4-1.5 1.5L9 4 6 7l1.5 1.5L6 10z"/>
-        <rect x="7" y="10" width="4" height="8" rx="1" fill="${color}"/>
-        <rect x="8.5" y="18" width="1" height="3" fill="${color}"/>
-        <line x1="7.5" y1="13" x2="10.5" y2="13" stroke="white" stroke-width="0.5"/>
-        <line x1="7.5" y1="15" x2="10.5" y2="15" stroke="white" stroke-width="0.5"/>
-      </svg>
-    `;
-
     return L.divIcon({
       className: 'custom-syringe-marker',
       html: `
-        <div style="position: relative; width: 60px; height: 60px;">
-          <div style="position: absolute; top: 0; left: 5px;">
-            ${syringeIcon}
+        <div style="
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
+          height: 40px;
+        ">
+          <!-- Needle (pointing left) -->
+          <div style="
+            width: 16px;
+            height: 4px;
+            background: ${color};
+            border: 1.5px solid white;
+            border-right: none;
+            border-radius: 3px 0 0 3px;
+            box-sizing: content-box;
+          "></div>
+          <!-- Barrel / Body with dose number -->
+          <div style="
+            background: ${color};
+            color: white;
+            font-size: 13px;
+            font-weight: 800;
+            padding: 6px 14px;
+            border-radius: 4px;
+            border: 2px solid white;
+            white-space: nowrap;
+            min-width: 28px;
+            text-align: center;
+          ">
+            ${displayDoses || ''}
           </div>
-          ${
-            displayDoses
-              ? `
-            <div style="position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); background-color: ${color}; color: white; font-size: 11px; font-weight: bold; padding: 3px 6px; border-radius: 4px; border: 1.5px solid white; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-              ${displayDoses}
-            </div>
-          `
-              : ''
-          }
+          <!-- Plunger handle (right side) -->
+          <div style="
+            width: 8px;
+            height: 14px;
+            background: ${color};
+            border: 2px solid white;
+            border-left: none;
+            border-radius: 0 4px 4px 0;
+          "></div>
         </div>
       `,
-      iconSize: [60, 60],
-      iconAnchor: [30, 60],
+      iconSize: [80, 40],
+      iconAnchor: [40, 20],
     });
   };
 
@@ -486,11 +521,13 @@ const FastReport: React.FC = () => {
               {markerData.map((report) => {
                 const coords = countryCoordinates[report.Country];
                 if (!coords) return null;
+                const offset = getDiseaseOffset(report.Disease);
+                const offsetCoords: [number, number] = [coords[0] + offset[0], coords[1] + offset[1]];
 
                 return (
                   <Marker
                     key={`${report.id}-${report.Country}-${report.Disease}`}
-                    position={coords}
+                    position={offsetCoords}
                     icon={createCustomMarker(report.Disease, report.Outbreaks)}
                     eventHandlers={{
                       click: () => handleMarkerCountryClick(report.Country),
@@ -548,13 +585,6 @@ const FastReport: React.FC = () => {
               />
             </MapContainer>
 
-            {!mapCountriesInteractive && geoJsonData && (
-              <div className="absolute bottom-3 left-3 right-3 pointer-events-none z-[1000]">
-                <div className="bg-white/90 text-gray-700 text-sm px-3 py-2 rounded shadow border border-gray-200">
-                  Zoom in to select a country on the map
-                </div>
-              </div>
-            )}
             {geoJsonError && (
               <div className="absolute top-3 left-3 right-3 z-[1000]">
                 <div className="bg-amber-50 text-amber-900 text-xs px-3 py-2 rounded border border-amber-200">
@@ -571,7 +601,7 @@ const FastReport: React.FC = () => {
               collapsed={countryPanelCollapsed}
               onToggleCollapse={() => setCountryPanelCollapsed((c) => !c)}
               onClose={closeCountryPanel}
-              className={countryPanelCollapsed ? '' : 'w-full lg:w-80 xl:w-96'}
+              className={countryPanelCollapsed ? '' : 'w-full lg:w-96 xl:w-[420px]'}
             >
               <CountryAnalyticsPanel
                 country={countryPanelApiKey}

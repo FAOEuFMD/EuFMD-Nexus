@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -27,6 +27,8 @@ interface CountryBoundariesLayerProps {
   getPcpStageColor: (stage: string) => string;
   fastReportCountries: string[];
   onCountrySelect: (payload: CountrySelectPayload) => void;
+  /** When true, also renders admin_level 1 (district/province) polygons */
+  showDistrictBoundaries?: boolean;
 }
 
 const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
@@ -39,10 +41,37 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
   getPcpStageColor,
   fastReportCountries,
   onCountrySelect,
+  showDistrictBoundaries = false,
 }) => {
   const map = useMap();
   const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
   const interactive = mapZoom >= COUNTRY_ZOOM_THRESHOLD;
+
+  /**
+   * Filter the GeoJSON features to only include:
+   * - admin_level: 0 (country boundaries) always
+   * - admin_level: 1 (district/province) only when showDistrictBoundaries is true
+   */
+  const filteredGeoJsonData = useMemo(() => {
+    if (!geoJsonData || !geoJsonData.features) return geoJsonData;
+
+    return {
+      ...geoJsonData,
+      features: geoJsonData.features.filter(
+        (feature: { properties?: Record<string, string | number | undefined> }) => {
+          const adminLevel = feature.properties?.admin_level;
+          // Always include features without admin_level (backward compatibility)
+          if (adminLevel === undefined || adminLevel === null) return true;
+          // Include admin_level 0 (countries) always
+          if (adminLevel === 0) return true;
+          // Include admin_level 1 only when showDistrictBoundaries is true
+          if (adminLevel === 1) return showDistrictBoundaries;
+          // Include any other levels
+          return true;
+        }
+      ),
+    };
+  }, [geoJsonData, showDistrictBoundaries]);
 
   const getStyle = useCallback(
     (feature?: GeoFeature) => {
@@ -181,7 +210,7 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
       ref={(instance) => {
         geoJsonLayerRef.current = instance;
       }}
-      data={geoJsonData}
+      data={filteredGeoJsonData}
       style={(feature) => getStyle(feature ?? undefined)}
       onEachFeature={onEachFeature}
     />
