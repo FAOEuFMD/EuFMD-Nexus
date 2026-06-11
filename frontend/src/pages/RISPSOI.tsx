@@ -15,9 +15,19 @@ type SoiSection = 'templates' | 'uploads' | 'data' | 'visualizations' | null;
 type DataCategory = 'outbreaks' | 'vaccination' | 'marketprice';
 
 interface SoiDataRecord {
-  Year: number;
+  Year?: number;
   Country: string;
+  Province?: string;
+  District?: string;
+  Epi_Unit?: string;
+  Latitude?: number;
+  Longitude?: number;
   Disease?: string;
+  Species?: string;
+  Serotype?: string;
+  Date_Suspected?: string;
+  Date_Confirmed?: string;
+  Confirmation_Type?: string;
   Outbreaks?: string;
   Vaccination_Doses?: number;
   Price?: string;
@@ -45,8 +55,9 @@ const RISPSOI: React.FC = () => {
   const [dataRecords, setDataRecords] = useState<SoiDataRecord[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [filterYear, setFilterYear] = useState<string>('all');
   const [filterCountry, setFilterCountry] = useState<string>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
 
   // Fetch data from TCC database tables based on selected category
   useEffect(() => {
@@ -73,16 +84,19 @@ const RISPSOI: React.FC = () => {
   // Filter records
   const filteredRecords = useMemo(() => {
     return dataRecords.filter((record) => {
-      const yearMatch = filterYear === 'all' || record.Year?.toString() === filterYear;
       const countryMatch = filterCountry === 'all' || record.Country === filterCountry;
-      return yearMatch && countryMatch;
-    });
-  }, [dataRecords, filterYear, filterCountry]);
 
-  const availableYears = useMemo(() => {
-    const years = Array.from(new Set(dataRecords.map((r) => r.Year).filter(Boolean)));
-    return years.sort((a, b) => b - a);
-  }, [dataRecords]);
+      // For outbreaks tab, use Date_Confirmed or Date_Suspected for date range filtering
+      let dateMatch = true;
+      if (activeTab === 'outbreaks' && (filterDateFrom || filterDateTo)) {
+        const recordDate = record.Date_Confirmed || record.Date_Suspected || '';
+        if (filterDateFrom && recordDate < filterDateFrom) dateMatch = false;
+        if (filterDateTo && recordDate > filterDateTo) dateMatch = false;
+      }
+
+      return countryMatch && dateMatch;
+    });
+  }, [dataRecords, filterCountry, filterDateFrom, filterDateTo, activeTab]);
 
   const availableCountries = useMemo(() => {
     return Array.from(new Set(dataRecords.map((r) => r.Country).filter(Boolean))).sort();
@@ -92,7 +106,7 @@ const RISPSOI: React.FC = () => {
   const renderTableHeaders = () => {
     switch (activeTab) {
       case 'outbreaks':
-        return ['Year', 'Country', 'Disease', 'Outbreaks', 'Description'];
+        return ['Country', 'Province', 'District', 'Disease', 'Species', 'Serotype', 'Epi_Unit', 'Date_Suspected', 'Date_Confirmed', 'Confirmation_Type'];
       case 'vaccination':
         return ['Year', 'Country', 'Disease', 'Doses', 'Description'];
       case 'marketprice':
@@ -107,11 +121,16 @@ const RISPSOI: React.FC = () => {
       case 'outbreaks':
         return (
           <tr key={index} className="border-b hover:bg-gray-50">
-            <td className="px-3 py-2 text-sm">{record.Year}</td>
-            <td className="px-3 py-2 text-sm">{record.Country}</td>
+            <td className="px-3 py-2 text-sm">{record.Country || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Province || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.District || '-'}</td>
             <td className="px-3 py-2 text-sm">{record.Disease || '-'}</td>
-            <td className="px-3 py-2 text-sm">{record.Outbreaks || '0'}</td>
-            <td className="px-3 py-2 text-sm text-gray-500 max-w-xs truncate">{record.Outbreak_Description || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Species || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Serotype || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Epi_Unit || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Date_Suspected || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Date_Confirmed || '-'}</td>
+            <td className="px-3 py-2 text-sm">{record.Confirmation_Type || '-'}</td>
           </tr>
         );
       case 'vaccination':
@@ -292,11 +311,11 @@ const RISPSOI: React.FC = () => {
                 {(['outbreaks', 'vaccination', 'marketprice'] as DataCategory[]).map((cat) => (
                   <button
                     key={cat}
-                    onClick={() => { setActiveTab(cat); setFilterYear('all'); setFilterCountry('all'); }}
+                    onClick={() => { setActiveTab(cat); setFilterCountry('all'); setFilterDateFrom(''); setFilterDateTo(''); }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       activeTab === cat
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        ? 'bg-[#15736d] text-white'
+                        : 'bg-[#15736d] text-white hover:opacity-80'
                     }`}
                   >
                     {DATA_CATEGORY_LABELS[cat]}
@@ -304,20 +323,7 @@ const RISPSOI: React.FC = () => {
                 ))}
               </div>
               {/* Filters */}
-              <div className="flex gap-4 mb-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Year:</label>
-                  <select
-                    value={filterYear}
-                    onChange={(e) => setFilterYear(e.target.value)}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="all">All Years</option>
-                    {availableYears.map((y) => (
-                      <option key={y} value={y.toString()}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="flex gap-4 mb-4 flex-wrap items-end">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Country:</label>
                   <select
@@ -331,6 +337,28 @@ const RISPSOI: React.FC = () => {
                     ))}
                   </select>
                 </div>
+                {activeTab === 'outbreaks' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">From:</label>
+                      <input
+                        type="date"
+                        value={filterDateFrom}
+                        onChange={(e) => setFilterDateFrom(e.target.value)}
+                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">To:</label>
+                      <input
+                        type="date"
+                        value={filterDateTo}
+                        onChange={(e) => setFilterDateTo(e.target.value)}
+                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="flex items-end text-xs text-gray-500 pb-1">
                   {filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''}
                 </div>

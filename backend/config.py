@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     db2_name: str
     db4_name: Optional[str] = None
     db5_name: Optional[str] = None  # Thrace database
+    db6_name: Optional[str] = None  # TCC database (SOI)
     
     # Security
     secret_key: str
