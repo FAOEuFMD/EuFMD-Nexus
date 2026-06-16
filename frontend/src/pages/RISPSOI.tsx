@@ -103,6 +103,29 @@ const DATA_CATEGORY_FILES: Record<DataCategory, string> = {
   marketprice: '/templates/marketprice.xlsx',
 };
 
+// Allowed countries for SOI dashboard
+const ALLOWED_C = [
+  'Azerbaijan, Republic of',
+  'Armenia, Republic of',
+  'Georgia',
+  'Iran, Islamic, Republic of',
+  'Iraq, Republic of',
+  'Pakistan, Islamic, Republic of',
+  'Russian Federation',
+  'Turkey, Republic of',
+];
+
+const COUNTRY_DISPLAY: Record<string, string> = {
+  'Azerbaijan, Republic of': 'Azerbaijan',
+  'Armenia, Republic of': 'Armenia',
+  'Georgia': 'Georgia',
+  'Iran, Islamic, Republic of': 'Iran',
+  'Iraq, Republic of': 'Iraq',
+  'Pakistan, Islamic, Republic of': 'Pakistan',
+  'Russian Federation': 'Russian Federation',
+  'Turkey, Republic of': 'T\u00FCrkiye',
+};
+
 const RISPSOI: React.FC = () => {
   const [activeSection, setActiveSection] = useState<SoiSection>(null);
   const [selectedCategory, setSelectedCategory] = useState<DataCategory | null>(null);
@@ -119,9 +142,9 @@ const RISPSOI: React.FC = () => {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterQuarter, setFilterQuarter] = useState<string>('all');
 
-  // Map layer toggles
-  const [showOutbreaks, setShowOutbreaks] = useState(false);
-  const [showVaccination, setShowVaccination] = useState(false);
+  // Map layer toggles (default to checked so map shows data on load)
+  const [showOutbreaks, setShowOutbreaks] = useState(true);
+  const [showVaccination, setShowVaccination] = useState(true);
   const [mapOutbreaks, setMapOutbreaks] = useState<SoiDataRecord[]>([]);
   const [mapVaccination, setMapVaccination] = useState<SoiDataRecord[]>([]);
   const [mapLoading, setMapLoading] = useState(false);
@@ -174,12 +197,11 @@ const RISPSOI: React.FC = () => {
     const counts: Record<string, number> = {};
     mapVaccination.forEach((r) => {
       const country = (r.Country || '').toLowerCase();
-      // Try Province, District, and Epi_Unit as matching candidates
-      const candidates = [r.Province, r.District, r.Epi_Unit].filter(Boolean);
-      candidates.forEach((candidate) => {
-        const key = `${country}|${(candidate || '').toLowerCase()}`;
+      if (!ALLOWED_C.some(ac => ac.toLowerCase() === country)) return;
+      if (r.Province) {
+        const key = `${country}|${r.Province.toLowerCase()}`;
         counts[key] = (counts[key] || 0) + 1;
-      });
+      }
     });
     setVaccinationByProvince(counts);
   }, [mapVaccination]);
@@ -188,7 +210,11 @@ const RISPSOI: React.FC = () => {
   // Matches NAME_1 against vaccination data's Province, District, and Epi_Unit
   const choroplethData = useMemo(() => {
     if (!geoJsonData || !showVaccination) return null;
-    const features = geoJsonData.features.filter((f: any) => f.properties.admin_level === 1);
+    const features = geoJsonData.features.filter((f: any) => {
+      if (f.properties.admin_level !== 1) return false;
+      const c = (f.properties.COUNTRY || '').toLowerCase();
+      return ALLOWED_C.some(ac => ac.toLowerCase() === c);
+    });
     return {
       ...geoJsonData,
       features: features.map((f: any) => {
@@ -319,13 +345,7 @@ const RISPSOI: React.FC = () => {
     });
   }, [dataRecords, filterCountry, filterDateFrom, filterDateTo, filterQuarter, activeTab]);
 
-  const availableCountries = useMemo(() => {
-    const countries = new Set<string>();
-    dataRecords.forEach((r) => { if (r.Country) countries.add(r.Country); });
-    mapOutbreaks.forEach((r) => { if (r.Country) countries.add(r.Country); });
-    mapVaccination.forEach((r) => { if (r.Country) countries.add(r.Country); });
-    return Array.from(countries).sort();
-  }, [dataRecords, mapOutbreaks, mapVaccination]);
+  const availableCountries = useMemo(() => ALLOWED_C, []);
 
   const availableQuarters = useMemo(() => {
     return Array.from(new Set(dataRecords.map((r) => r.Quarter).filter(Boolean))).sort();
@@ -971,65 +991,76 @@ const RISPSOI: React.FC = () => {
             {/* Main Content Area (Map or Charts) */}
             <div className="flex-1 min-h-[24rem] rounded-lg overflow-hidden border border-gray-200">
               {dashboardTab === 'spatial' && (
-                <MapContainer
-                  center={[39.0, 35.0]}
-                  zoom={5}
-                  scrollWheelZoom={true}
-                  className="h-full w-full"
-                  style={{ height: '24rem' }}
-                  zoomControl={true}
-                  doubleClickZoom={true}
-                  touchZoom={true}
-                >
-                  <TileLayer
-                    url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
-                    attribution="&copy; United Nations Geospatial Information Section"
-                    maxZoom={18}
-                  />
-                  {showOutbreaks && filteredMapOutbreaks.map((r, i) => (
-                    <Marker key={`ob-${i}`} position={[r.Latitude!, r.Longitude!]} icon={outbreakIcon}>
-                      <Popup>
-                        <div className="text-xs">
-                          <strong>{r.Country}</strong>{r.Province ? `, ${r.Province}` : ''}<br/>
-                          Disease: {r.Disease || '-'}<br/>
-                          Serotype: {r.Serotype || '-'}<br/>
-                          Confirmed: {r.Date_Confirmed || r.Date_Suspected || '-'}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                  {showVaccination && filteredMapVaccination.map((r, i) => (
-                    <Marker key={`vac-${i}`} position={[r.Latitude!, r.Longitude!]} icon={vaccinationIcon}>
-                      <Popup>
-                        <div className="text-xs">
-                          <strong>{r.Country}</strong>{r.Province ? `, ${r.Province}` : ''}<br/>
-                          Campaign: {r.Vaccination_Campaign || '-'}<br/>
-                          Date: {r.Vaccination_Date || '-'}<br/>
-                          Manufacturer: {r.Vaccine_Manufacturer || '-'}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                  {choroplethData && (
-                    <GeoJSON
-                      key={`choropleth-${showVaccination}-${Object.keys(vaccinationByProvince).length}`}
-                      data={choroplethData}
-                      style={(feature) => ({
-                        fillColor: getChoroplethColor(feature?.properties.vaccination_count || 0, maxVaccinationCount),
-                        weight: 1,
-                        opacity: 1,
-                        color: '#9ca3af',
-                        fillOpacity: 0.6,
-                      })}
-                      onEachFeature={(feature, layer) => {
-                        const count = feature.properties.vaccination_count || 0;
-                        layer.bindPopup(
-                          `<div style="font-size:12px"><strong>${feature.properties.NAME_1}</strong> (${feature.properties.COUNTRY})<br/>Vaccination records: ${count}</div>`
-                        );
-                      }}
+                <div className="relative w-full h-full">
+                  <MapContainer
+                    center={[39.0, 35.0]}
+                    zoom={5}
+                    scrollWheelZoom={true}
+                    className="h-full w-full"
+                    style={{ height: '24rem' }}
+                    zoomControl={true}
+                    doubleClickZoom={true}
+                    touchZoom={true}
+                  >
+                    <TileLayer
+                      url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
+                      attribution="&copy; United Nations Geospatial Information Section"
+                      maxZoom={18}
                     />
+                    {showOutbreaks && filteredMapOutbreaks.map((r, i) => (
+                      <Marker key={`ob-${i}`} position={[r.Latitude!, r.Longitude!]} icon={outbreakIcon}>
+                        <Popup>
+                          <div className="text-xs">
+                            <strong>{r.Country}</strong>{r.Province ? `, ${r.Province}` : ''}<br/>
+                            Disease: {r.Disease || '-'}<br/>
+                            Serotype: {r.Serotype || '-'}<br/>
+                            Confirmed: {r.Date_Confirmed || r.Date_Suspected || '-'}
+                          </div>
+                        </Popup>
+                      </Marker>
+                    ))}
+                    {choroplethData && (
+                      <GeoJSON
+                        key={`choropleth-${showVaccination}-${Object.keys(vaccinationByProvince).length}`}
+                        data={choroplethData}
+                        style={(feature) => ({
+                          fillColor: getChoroplethColor(feature?.properties.vaccination_count || 0, maxVaccinationCount),
+                          weight: 1,
+                          opacity: 1,
+                          color: '#9ca3af',
+                          fillOpacity: 0.6,
+                        })}
+                        onEachFeature={(feature, layer) => {
+                          const count = feature.properties.vaccination_count || 0;
+                          layer.bindPopup(
+                            `<div style="font-size:12px"><strong>${feature.properties.NAME_1}</strong> (${feature.properties.COUNTRY})<br/>Vaccination records: ${count}</div>`
+                          );
+                        }}
+                      />
+                    )}
+                  </MapContainer>
+                  {/* Vaccination Choropleth Legend */}
+                  {showVaccination && (
+                    <div className="absolute bottom-2 left-2 z-[1000] bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2.5 border border-gray-200">
+                      <div className="text-[9px] font-semibold text-gray-700 mb-1.5">Vaccination Records</div>
+                      <div className="flex items-center gap-0.5">
+                        {[
+                          { color: '#f0fdf4', label: '0' },
+                          { color: '#bbf7d0', label: '' },
+                          { color: '#86efac', label: '' },
+                          { color: '#4ade80', label: '' },
+                          { color: '#16a34a', label: 'Max' },
+                        ].map((item, i) => (
+                          <div key={i} className="flex flex-col items-center">
+                            <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: item.color, border: '0.5px solid #d1d5db' }} />
+                            {item.label && <span className="text-[7px] text-gray-500 mt-0.5">{item.label}</span>}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-[8px] text-gray-500 mt-1 text-center">Per district</div>
+                    </div>
                   )}
-                </MapContainer>
+                </div>
               )}
 
               {/* Vaccine & Risk Tab Content */}
@@ -1053,97 +1084,110 @@ const RISPSOI: React.FC = () => {
               {/* Surveillance Quality Tab Content */}
               {dashboardTab === 'surveillance' && (
                 <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }}>
-                  <SurveillanceQualityView />
+                  <SurveillanceQualityView
+                    filterCountry={filterCountry}
+                    filterDateFrom={filterDateFrom}
+                    filterDateTo={filterDateTo}
+                  />
                 </div>
               )}
             </div>
 
-            {/* Right Sidebar: Tabs + Filters */}
-            <div className="w-56 flex flex-col gap-3">
-              {/* Dashboard Tabs */}
-              <div className="flex flex-col gap-1">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Dashboard View:</label>
-                {([
-                  { key: 'spatial' as DashboardTab, label: '🗺️ Spatial Overview', desc: 'Map view' },
-                  { key: 'vaccine' as DashboardTab, label: '💉 Vaccine & Risk', desc: 'Vaccination analysis' },
-                  { key: 'economic' as DashboardTab, label: '💰 Economic Impact', desc: 'Market prices' },
-                  { key: 'surveillance' as DashboardTab, label: '🔬 Surveillance Quality', desc: 'Data quality' },
-                ]).map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setDashboardTab(tab.key)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                      dashboardTab === tab.key
-                        ? 'bg-[#15736d] text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+            {/* Right Sidebar: 2-column layout with tabs + filters */}
+            <div className="w-80 flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                {/* Left column: Dashboard Tabs */}
+                <div className="flex flex-col gap-1">
+                  <label className="block text-[10px] font-medium text-gray-600 mb-1">Dashboard View:</label>
+                  {([
+                    { key: 'spatial' as DashboardTab, label: '🗺️ Spatial' },
+                    { key: 'vaccine' as DashboardTab, label: '💉 Vaccine' },
+                    { key: 'economic' as DashboardTab, label: '💰 Economic' },
+                    { key: 'surveillance' as DashboardTab, label: '🔬 Surveillance' },
+                  ]).map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setDashboardTab(tab.key)}
+                      className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                        dashboardTab === tab.key
+                          ? 'bg-[#15736d] text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Right column: Filters */}
+                <div className="flex flex-col gap-2">
+                  <label className="block text-[10px] font-medium text-gray-600 mb-1">Filters:</label>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Country:</label>
+                    <select
+                      value={filterCountry}
+                      onChange={(e) => setFilterCountry(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-1.5 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="all">All Countries</option>
+                      {availableCountries.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">From:</label>
+                    <input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-1.5 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">To:</label>
+                    <input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-1.5 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="border-t border-gray-200 pt-3">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Country:</label>
-                <select
-                  value={filterCountry}
-                  onChange={(e) => setFilterCountry(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="all">All Countries</option>
-                  {availableCountries.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">From:</label>
-                <input
-                  type="date"
-                  value={filterDateFrom}
-                  onChange={(e) => setFilterDateFrom(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">To:</label>
-                <input
-                  type="date"
-                  value={filterDateTo}
-                  onChange={(e) => setFilterDateTo(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
+              {/* Map Layer Toggles (only for spatial view) */}
               {dashboardTab === 'spatial' && (
-                <div className="border-t border-gray-200 pt-3">
-                  <label className="block text-xs font-medium text-gray-600 mb-2">Layers:</label>
-                  <div className="flex flex-col gap-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                <div className="border-t border-gray-200 pt-2">
+                  <label className="block text-[10px] font-medium text-gray-600 mb-1.5">Map Layers:</label>
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={showOutbreaks}
                         onChange={(e) => setShowOutbreaks(e.target.checked)}
-                        className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                        className="w-3.5 h-3.5 text-red-600 rounded border-gray-300 focus:ring-red-500"
                       />
-                      <span className="text-sm text-gray-700">Outbreaks</span>
-                      {showOutbreaks && <span className="text-xs text-gray-400">({filteredMapOutbreaks.length})</span>}
+                      <span className="text-[11px] text-gray-700">Outbreaks</span>
+                      {showOutbreaks && <span className="text-[10px] text-gray-400">({filteredMapOutbreaks.length})</span>}
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={showVaccination}
                         onChange={(e) => setShowVaccination(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        className="w-3.5 h-3.5 text-green-600 rounded border-gray-300 focus:ring-green-500"
                       />
-                      <span className="text-sm text-gray-700">Vaccination</span>
-                      {showVaccination && <span className="text-xs text-gray-400">({filteredMapVaccination.length})</span>}
+                      <span className="text-[11px] text-gray-700">Vaccination</span>
+                      {showVaccination && <span className="text-[10px] text-gray-400">({filteredMapVaccination.length})</span>}
                     </label>
                   </div>
                 </div>
               )}
+
               <button
-                onClick={() => { setFilterCountry('all'); setFilterDateFrom(''); setFilterDateTo(''); setShowOutbreaks(false); setShowVaccination(false); }}
-                className="px-3 py-1.5 text-sm font-medium bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                onClick={() => { setFilterCountry('all'); setFilterDateFrom(''); setFilterDateTo(''); setShowOutbreaks(true); setShowVaccination(true); }}
+                className="px-2 py-1 text-[11px] font-medium bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
               >
                 Reset Filters
               </button>

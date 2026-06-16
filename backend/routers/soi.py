@@ -267,11 +267,15 @@ async def get_species_price_comparison(
 @router.get("/surveillance/response-time-distribution")
 async def get_response_time_distribution(
     nationID: Optional[int] = Query(None, description="Filter by nation ID"),
+    country: Optional[str] = Query(None, description="Filter by country name"),
+    date_from: Optional[str] = Query(None, description="Filter outbreaks from date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter outbreaks to date (YYYY-MM-DD)"),
     months: int = Query(12, description="Number of recent months to include"),
 ):
     """Calculate time-to-confirmation for outbreaks and group into performance buckets."""
     try:
         params: list = []
+        joins = []
         where_clauses = [
             "o.dt_susp IS NOT NULL",
             "o.dt_conf IS NOT NULL",
@@ -280,7 +284,18 @@ async def get_response_time_distribution(
         if nationID is not None:
             where_clauses.append("o.nationID = %s")
             params.append(nationID)
+        elif country:
+            joins.append("LEFT JOIN nations n ON o.nationID = n.nationID")
+            where_clauses.append("n.country = %s")
+            params.append(country)
+        if date_from:
+            where_clauses.append("o.dt_conf >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("o.dt_conf <= %s")
+            params.append(date_to)
 
+        join_sql = " ".join(joins)
         where_sql = " AND ".join(where_clauses)
 
         # Get bucketed counts
@@ -293,7 +308,7 @@ async def get_response_time_distribution(
             "    ELSE 'Critical (>14 days)' "
             "  END AS time_bucket, "
             "  COUNT(*) AS outbreak_count "
-            "FROM outbreaks o "
+            f"FROM outbreaks o {join_sql} "
             f"WHERE {where_sql} "
             "GROUP BY time_bucket "
             "ORDER BY "
@@ -308,7 +323,7 @@ async def get_response_time_distribution(
         # Get average days
         avg_query = (
             "SELECT ROUND(AVG(DATEDIFF(o.dt_conf, o.dt_susp)), 1) AS avg_days_to_confirm "
-            "FROM outbreaks o "
+            f"FROM outbreaks o {join_sql} "
             f"WHERE {where_sql}"
         )
 
@@ -341,16 +356,31 @@ async def get_response_time_distribution(
 @router.get("/surveillance/confirmation-methods")
 async def get_confirmation_methods(
     nationID: Optional[int] = Query(None, description="Filter by nation ID"),
+    country: Optional[str] = Query(None, description="Filter by country name"),
+    date_from: Optional[str] = Query(None, description="Filter outbreaks from date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter outbreaks to date (YYYY-MM-DD)"),
     months: int = Query(12, description="Number of recent months to include"),
 ):
     """Determine the ratio of outbreaks confirmed by Laboratory vs Clinical."""
     try:
         params: list = []
+        joins = []
         where_clauses = ["o.conf_type IS NOT NULL"]
         if nationID is not None:
             where_clauses.append("o.nationID = %s")
             params.append(nationID)
+        elif country:
+            joins.append("LEFT JOIN nations n ON o.nationID = n.nationID")
+            where_clauses.append("n.country = %s")
+            params.append(country)
+        if date_from:
+            where_clauses.append("o.dt_conf >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("o.dt_conf <= %s")
+            params.append(date_to)
 
+        join_sql = " ".join(joins)
         where_sql = " AND ".join(where_clauses)
 
         query = (
@@ -362,7 +392,7 @@ async def get_confirmation_methods(
             "    ELSE o.conf_type "
             "  END AS conf_type_name, "
             "  COUNT(*) AS outbreak_count "
-            "FROM outbreaks o "
+            f"FROM outbreaks o {join_sql} "
             f"WHERE {where_sql} "
             "GROUP BY o.conf_type "
             "ORDER BY outbreak_count DESC"
@@ -391,11 +421,15 @@ async def get_confirmation_methods(
 @router.get("/surveillance/trends")
 async def get_surveillance_trends(
     nationID: Optional[int] = Query(None, description="Filter by nation ID"),
+    country: Optional[str] = Query(None, description="Filter by country name"),
+    date_from: Optional[str] = Query(None, description="Filter outbreaks from date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter outbreaks to date (YYYY-MM-DD)"),
     months: int = Query(12, description="Number of recent months to include"),
 ):
     """Show how diagnostic methods are trending over time."""
     try:
         params: list = []
+        joins = []
         where_clauses = [
             "o.dt_conf IS NOT NULL",
             "o.conf_type IS NOT NULL",
@@ -403,7 +437,18 @@ async def get_surveillance_trends(
         if nationID is not None:
             where_clauses.append("o.nationID = %s")
             params.append(nationID)
+        elif country:
+            joins.append("LEFT JOIN nations n ON o.nationID = n.nationID")
+            where_clauses.append("n.country = %s")
+            params.append(country)
+        if date_from:
+            where_clauses.append("o.dt_conf >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("o.dt_conf <= %s")
+            params.append(date_to)
 
+        join_sql = " ".join(joins)
         where_sql = " AND ".join(where_clauses)
 
         query = (
@@ -411,7 +456,7 @@ async def get_surveillance_trends(
             "  CONCAT(YEAR(o.dt_conf), '-Q', QUARTER(o.dt_conf)) AS period_label, "
             "  o.conf_type AS conf_type, "
             "  COUNT(*) AS outbreak_count "
-            "FROM outbreaks o "
+            f"FROM outbreaks o {join_sql} "
             f"WHERE {where_sql} "
             "GROUP BY period_label, conf_type "
             "ORDER BY period_label ASC, conf_type ASC"
