@@ -842,54 +842,42 @@ async def get_freedom_analysis(
     species: str = "ALL",
     disease: str = "FMD",
     region: str = "ALL",
-    year: int = None,
+    refresh_summary: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Calculate freedom-from-disease analysis using Python ThraceCalculator.
-    Replaces old SQL function: thrace.get_freedom_data()
-    
-    Corrections Implemented:
-    - R1: Combined herd sensitivity with overlap correction (Cameron et al. FAO 2014)
-    - R2: Uses *_tested columns from Excel uploads (protocol-based)
-    - R4: Uses risklevel from epiunits table
-    - R11-R12: Year-specific monthly P(intro) with fallback
-    - R14: Greece RR=1 (risk-based not applicable)
-    
-    Parameters:
-    - species: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
-    - disease: FMD, LSD, SGP, PPR
-    - region: ALL, GR, BG, TK
-    - year: Calculation year (defaults to current year)
+    Calculate freedom-from-disease analysis across all years in thrace.all_data.
+    Set refresh_summary=true to rebuild all_data before calculating.
     """
     try:
-        # Default to current year if not specified
-        if year is None:
-            year = datetime.now().year
-        
-        # Initialize calculator with thrace database engine
         calculator = ThraceCalculator(thrace_engine)
-        
-        # Calculate system sensitivity and probability of freedom
-        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
-        
+
+        print(
+            f"Calculating freedom analysis: species={species}, disease={disease}, "
+            f"region={region}, all_years=true, refresh_summary={refresh_summary}"
+        )
+
         results = calculator.calculate_system_sensitivity(
             species_filter=species,
             disease=disease,
             region_filter=region,
-            year=year
+            refresh_summary=refresh_summary,
         )
-        
+
+        month_count = len(results.get('labels', []))
+
         return {
             "success": True,
             "species": species,
             "disease": disease,
             "region": region,
-            "year": year,
             "data": results,
             "metadata": {
+                "years_included": "all",
+                "month_count": month_count,
                 "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
-                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14"]
+                "data_source": "thrace.all_data",
+                "corrections_applied": ["R1", "R4", "R11", "R12", "R14"]
             }
         }
     except HTTPException:
@@ -906,7 +894,7 @@ async def calculate_and_save_freedom(
     species: str = "ALL",
     disease: str = "FMD",
     region: str = "ALL",
-    year: int = None,
+    refresh_summary: bool = False,
     save_results: bool = True,
     current_user: dict = Depends(get_current_user)
 ):
@@ -929,21 +917,18 @@ async def calculate_and_save_freedom(
     - saved_count: Number of monthly records saved
     """
     try:
-        # Default to current year if not specified
-        if year is None:
-            year = datetime.now().year
-        
-        # Initialize calculator with thrace database engine
         calculator = ThraceCalculator(thrace_engine)
-        
-        # Calculate system sensitivity and probability of freedom
-        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
-        
+
+        print(
+            f"Calculating freedom analysis: species={species}, disease={disease}, "
+            f"region={region}, all_years=true, refresh_summary={refresh_summary}"
+        )
+
         results = calculator.calculate_system_sensitivity(
             species_filter=species,
             disease=disease,
             region_filter=region,
-            year=year
+            refresh_summary=refresh_summary,
         )
         
         # R24: Save to permanent table for audit trail
@@ -970,14 +955,16 @@ async def calculate_and_save_freedom(
             "species": species,
             "disease": disease,
             "region": region,
-            "year": year,
             "data": results,
             "saved": saved,
             "saved_count": saved_count,
             "calculated_by": current_user.get('id'),
             "metadata": {
+                "years_included": "all",
+                "month_count": len(results.get('labels', [])),
                 "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
-                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14", "R24"]
+                "data_source": "thrace.all_data",
+                "corrections_applied": ["R1", "R4", "R11", "R12", "R14", "R24"]
             }
         }
     except HTTPException:

@@ -213,6 +213,7 @@ const Thrace: React.FC = () => {
   const fetchFreedomData = async (refreshSummary = false) => {
     setFreedomLoading(true);
     setFreedomError(null);
+    setFreedomData(null);
     try {
       const res = await apiService.thrace.getFreedomData(
         freedomSpecies,
@@ -220,7 +221,14 @@ const Thrace: React.FC = () => {
         freedomRegion,
         refreshSummary
       );
-      setFreedomData(res.data.data);
+      const payload = res.data?.data;
+      if (!payload?.labels?.length) {
+        setFreedomError(
+          'No surveillance data found for these filters. Upload data or click "Refresh data summary" first.'
+        );
+        return;
+      }
+      setFreedomData(payload);
     } catch (err: any) {
       const message = err?.response?.data?.detail || err?.message || 'Error loading freedom analysis';
       setFreedomError(message);
@@ -229,10 +237,17 @@ const Thrace: React.FC = () => {
     }
   };
 
+  const lastSeriesValue = (series: any[] | undefined) => {
+    if (!series?.length) return 0;
+    return Number(series[series.length - 1]);
+  };
+
   useEffect(() => {
     if (!freedomData || !freedomChartRef.current) return;
 
     const labels: string[] = freedomData.labels || [];
+    if (!labels.length) return;
+
     const pfree = (freedomData.pfree || []).map((v: any) => Number(v));
     const sens = (freedomData.sens || []).map((v: any) => Number(v));
     const pintro = (freedomData.pintro || []).map((v: any) => Number(v));
@@ -339,7 +354,14 @@ const Thrace: React.FC = () => {
 
     const config = { responsive: true };
 
+    Plotly.purge(freedomChartRef.current);
     Plotly.newPlot(freedomChartRef.current, traces, layout, config);
+
+    return () => {
+      if (freedomChartRef.current) {
+        Plotly.purge(freedomChartRef.current);
+      }
+    };
   }, [freedomData]);
 
   const handleDownloadExcel = () => {
@@ -846,6 +868,14 @@ const Thrace: React.FC = () => {
                 >
                   {freedomLoading ? 'Loading...' : 'Load analysis'}
                 </button>
+                <button
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+                  onClick={() => fetchFreedomData(true)}
+                  disabled={freedomLoading}
+                  title="Rebuild thrace.all_data from uploaded surveillance records"
+                >
+                  Refresh data summary
+                </button>
               </div>
             </div>
 
@@ -858,9 +888,10 @@ const Thrace: React.FC = () => {
             {freedomData ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                  <span>P(free) last: {Number(freedomData.pfree?.slice(-1)?.[0] || 0).toFixed(3)}</span>
-                  <span>Sensitivity last: {Number(freedomData.sens?.slice(-1)?.[0] || 0).toFixed(3)}</span>
-                  <span>P(introduction) last: {Number(freedomData.pintro?.slice(-1)?.[0] || 0).toFixed(3)}</span>
+                  <span>{freedomData.labels.length} months (all years)</span>
+                  <span>P(free) last: {lastSeriesValue(freedomData.pfree).toFixed(3)}</span>
+                  <span>Sensitivity last: {lastSeriesValue(freedomData.sens).toFixed(3)}</span>
+                  <span>P(introduction) last: {lastSeriesValue(freedomData.pintro).toFixed(3)}</span>
                 </div>
                 <div ref={freedomChartRef} style={{ width: '100%', height: '80vh' }} />
               </div>

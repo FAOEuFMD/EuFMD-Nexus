@@ -5,11 +5,11 @@ const GetPreparedWall: React.FC = () => {
     <div>
       <div className="flex justify-center p-10">
         <iframe
-          src="https://trello.com/b/SrsgHKzM.html"
+          src="https://padlet.com/eufmdFAST/get-prepared-ekdyee7j5u8df2fb"
           width="1860"
           height="898"
           frameBorder="0"
-          title="Get Prepared Wall Trello Board"
+          title="Get Prepared Wall"
         ></iframe>
       </div>
     </div>

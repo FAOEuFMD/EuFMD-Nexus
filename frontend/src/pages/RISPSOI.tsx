@@ -7,6 +7,13 @@ import KPIBanner from '../components/KPIBanner';
 import VaccineRiskView from '../components/VaccineRiskView';
 import EconomicImpactView from '../components/EconomicImpactView';
 import SurveillanceQualityView from '../components/SurveillanceQualityView';
+import {
+  ALLOWED_SOI_COUNTRIES,
+  isAllowedGeoCountry,
+  isAllowedSoiCountry,
+  vaccinationRegionKeyFromGeoFeature,
+  vaccinationRegionKeyFromSoiRecord,
+} from '../utils/maps/soiChoroplethMatching';
 
 // Fix for default markers in React Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -103,17 +110,8 @@ const DATA_CATEGORY_FILES: Record<DataCategory, string> = {
   marketprice: '/templates/marketprice.xlsx',
 };
 
-// Allowed countries for SOI dashboard
-const ALLOWED_C = [
-  'Azerbaijan, Republic of',
-  'Armenia, Republic of',
-  'Georgia',
-  'Iran, Islamic, Republic of',
-  'Iraq, Republic of',
-  'Pakistan, Islamic, Republic of',
-  'Russian Federation',
-  'Turkey, Republic of',
-];
+// Allowed countries for SOI dashboard (formal TCC nation names)
+const ALLOWED_C = ALLOWED_SOI_COUNTRIES;
 
 const COUNTRY_DISPLAY: Record<string, string> = {
   'Azerbaijan, Republic of': 'Azerbaijan',
@@ -187,8 +185,7 @@ const RISPSOI: React.FC = () => {
     prefetch();
   }, [activeSection]);
 
-  // Compute vaccination counts per province when vaccination data changes
-  // Matches against Province, District, and Epi_Unit fields
+  // Compute vaccination counts per province/region when vaccination data changes
   useEffect(() => {
     if (mapVaccination.length === 0) {
       setVaccinationByProvince({});
@@ -196,32 +193,26 @@ const RISPSOI: React.FC = () => {
     }
     const counts: Record<string, number> = {};
     mapVaccination.forEach((r) => {
-      const country = (r.Country || '').toLowerCase();
-      if (!ALLOWED_C.some(ac => ac.toLowerCase() === country)) return;
-      if (r.Province) {
-        const key = `${country}|${r.Province.toLowerCase()}`;
-        counts[key] = (counts[key] || 0) + 1;
-      }
+      if (!isAllowedSoiCountry(r.Country || '')) return;
+      const key = vaccinationRegionKeyFromSoiRecord(r.Country || '', r.Province);
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
     });
     setVaccinationByProvince(counts);
   }, [mapVaccination]);
 
   // Filter GeoJSON to admin_level 1 and attach vaccination counts
-  // Matches NAME_1 against vaccination data's Province, District, and Epi_Unit
   const choroplethData = useMemo(() => {
     if (!geoJsonData || !showVaccination) return null;
     const features = geoJsonData.features.filter((f: any) => {
       if (f.properties.admin_level !== 1) return false;
-      const c = (f.properties.COUNTRY || '').toLowerCase();
-      return ALLOWED_C.some(ac => ac.toLowerCase() === c);
+      return isAllowedGeoCountry(f.properties.COUNTRY || '');
     });
     return {
       ...geoJsonData,
       features: features.map((f: any) => {
-        const country = (f.properties.COUNTRY || '').toLowerCase();
-        const name1 = (f.properties.NAME_1 || '').toLowerCase();
-        const key = `${country}|${name1}`;
-        const count = vaccinationByProvince[key] || 0;
+        const key = vaccinationRegionKeyFromGeoFeature(f.properties) || '';
+        const count = key ? (vaccinationByProvince[key] || 0) : 0;
         return { ...f, properties: { ...f.properties, vaccination_count: count } };
       }),
     };
@@ -1057,7 +1048,7 @@ const RISPSOI: React.FC = () => {
                           </div>
                         ))}
                       </div>
-                      <div className="text-[8px] text-gray-500 mt-1 text-center">Per district</div>
+                      <div className="text-[8px] text-gray-500 mt-1 text-center">Per province/region</div>
                     </div>
                   )}
                 </div>

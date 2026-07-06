@@ -7,23 +7,48 @@ Corrections Implemented: R1, R2, R4, R7, R11-R15
 
 import math
 import json
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, date
+from typing import Dict, List, Optional, Tuple, Union
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+
+def parse_inspection_date(value: Union[datetime, date, str, None]) -> Optional[datetime]:
+    """Normalize dt_insp from DB rows (datetime, date, or ISO string)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    if isinstance(value, str):
+        raw = value.strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")[:19])
+        except ValueError:
+            return None
+    return None
 
 
 class ThraceCalculator:
     """
     Calculates system sensitivity and probability of freedom for THRACE surveillance model.
-    
-    Key Changes from Old SQL:
-    - R1: Combined herd sensitivity with overlap correction (Cameron et al. FAO 2014, p.147)
-    - R2: Uses *_tested columns instead of *_exam for clinical testing
-    - R4: Uses risklevel from epiunits table (not hardcoded 'high')
-    - R7: Uses DOUBLE precision for parameters
-    - R14: Greece RR=1 (risk-based not applicable)
+    Reads pre-aggregated thrace.all_data (same source as legacy get_freedom_data SQL).
     """
+
+    # all_data uses 'pigs'; calculator filters use 'pig'
+    SPECIES_ALL_DATA = {
+        'cattle': 'cattle',
+        'buffalo': 'buffalo',
+        'sheep': 'sheep',
+        'goat': 'goat',
+        'pig': 'pigs',
+    }
     
     def __init__(self, db_engine: Engine):
         self.db = db_engine
@@ -100,6 +125,8 @@ class ThraceCalculator:
         # If user provided explicit tested count, use it
         if tested_count is not None and tested_count > 0:
             return tested_count
+
+        visit_dt = parse_inspection_date(visit_date)
         
         # Default: Tested = Examined (covers FMD and most cases)
         effective_tested = exam_count if exam_count else 0
@@ -107,9 +134,8 @@ class ThraceCalculator:
         # Protocol Exceptions (Corrections Doc Section 1 table)
         if disease == 'PPR':
             if country == 'GRC':
-                # Convert visit_date to date if it's datetime, for comparison
-                visit_date_obj = visit_date.date() if isinstance(visit_date, datetime) else visit_date
-                if visit_date_obj < datetime(2024, 7, 1).date():
+                visit_date_obj = visit_dt.date() if visit_dt else None
+                if visit_date_obj and visit_date_obj < datetime(2024, 7, 1).date():
                     # Greece PPR before July 2024: 1/4 tested
                     effective_tested = int(exam_count * 0.25) if exam_count else 0
                 # else: all tested (default)
@@ -235,108 +261,71 @@ class ThraceCalculator:
     # DATA RETRIEVAL
     # =========================================================================
     
-    def get_factivities_data(
+    def ensure_all_data(self, refresh: bool = False) -> None:
+        """Build or refresh thrace.all_data summary table (legacy create_data_summary)."""
+        if not refresh:
+            with self.db.connect() as conn:
+                count_row = conn.execute(text("""
+                    SELECT COUNT(*) AS cnt
+                    FROM information_schema.tables
+                    WHERE table_schema = 'thrace' AND table_name = 'all_data'
+                """)).fetchone()
+                if count_row and count_row.cnt:
+                    data_count = conn.execute(text("SELECT COUNT(*) AS cnt FROM thrace.all_data")).fetchone()
+                    if data_count and data_count.cnt > 0:
+                        return
+        with self.db.begin() as conn:
+            conn.execute(text("CALL thrace.create_data_summary()"))
+
+    def get_all_data_rows(
         self,
         countries: List[str],
         disease: str,
-        species_list: List[str]
+        species_list: List[str],
     ) -> List[Dict]:
-        """
-        Retrieve factivities data joined with epiunits and geographic info.
-        Uses TCC schema for geographic hierarchy.
-        Processes ALL years to match SQL function behavior.
-        """
+        """Load pre-aggregated rows from thrace.all_data for all years."""
+        all_data_species = [
+            self.SPECIES_ALL_DATA.get(s, s) for s in species_list
+        ]
         with self.db.connect() as conn:
-            # Build species filter for SQL
-            species_filter = ','.join(f"'{s}'" for s in species_list)
-            countries_filter = ','.join(f"'{c}'" for c in countries)
-            
-            query = text("""
-                SELECT 
-                    fa.factivityID,
-                    fa.epiunitID,
-                    fa.dt_insp,
-                    fa.cattle, fa.sheep, fa.goat, fa.pig, fa.buffalo,
-                    fa.cattleexam, fa.sheepexam, fa.goatsexam, fa.buffaloesexam,
-                    fa.cattletested, fa.sheeptested, fa.goattested, fa.buffalotested,
-                    fa.cattlesample, fa.sheepsample, fa.goatsample, fa.buffaloessample,
-                    eu.risklevel,
-                    n.three_letter_code as country,
-                    n.two_letter_code as country_short
-                FROM thrace.factivities fa
-                JOIN thrace.epiunits eu ON fa.epiunitID = eu.epiunitID
-                JOIN TCC.districts d ON eu.districtID = d.districtID
-                JOIN TCC.provinces p ON d.provinceID = p.provinceID
-                JOIN TCC.nations n ON p.nationID = n.nationID
-                WHERE n.three_letter_code IN :countries
-                AND fa.dt_insp IS NOT NULL
-            """)
-            
-            result = conn.execute(query, {
-                "countries": tuple(countries)
+            result = conn.execute(text("""
+                SELECT year, month, country, risk, size, sero, clin
+                FROM thrace.all_data
+                WHERE disease = :disease
+                  AND country IN :countries
+                  AND species IN :species
+                  AND year > 2015 AND year < 2050
+                  AND size > 0
+            """), {
+                "disease": disease,
+                "countries": tuple(countries),
+                "species": tuple(all_data_species),
             })
-            
-            activities = []
-            for row in result:
-                activities.append({
-                    'factivityID': row.factivityID,
-                    'epiunitID': row.epiunitID,
-                    'dt_insp': row.dt_insp,
-                    'country': row.country,
-                    'risklevel': row.risklevel or 'low',
-                    'populations': {
-                        'cattle': row.cattle or 0,
-                        'sheep': row.sheep or 0,
-                        'goat': row.goat or 0,
-                        'pig': row.pig or 0,
-                        'buffalo': row.buffalo or 0
-                    },
-                    'examined': {
-                        'cattle': row.cattleexam or 0,
-                        'sheep': row.sheepexam or 0,
-                        'goat': row.goatsexam or 0,
-                        'buffalo': row.buffaloesexam or 0
-                    },
-                    'tested': {
-                        'cattle': row.cattletested,
-                        'sheep': row.sheeptested,
-                        'goat': row.goattested,
-                        'buffalo': row.buffalotested
-                    },
-                    'sampled': {
-                        'cattle': row.cattlesample or 0,
-                        'sheep': row.sheepsample or 0,
-                        'goat': row.goatsample or 0,
-                        'buffalo': row.buffaloessample or 0
-                    }
-                })
-            
-            return activities
-    
-    def get_monthly_pintro(self, year: int, month: int, disease: str, country: str) -> float:
-        """
-        R11-R12: Get monthly probability of introduction.
-        First tries year-specific, then falls back to generic monthly values.
-        """
+            return [dict(row._mapping) for row in result]
+
+    def load_monthly_pintro_cache(self) -> Dict[Tuple[Optional[int], int], float]:
+        """Load all monthly P(intro) values in one query."""
+        cache: Dict[Tuple[Optional[int], int], float] = {}
         with self.db.connect() as conn:
-            # Try year-specific first
-            result = conn.execute(text("""
-                SELECT pintro 
-                FROM thrace.monthly_pintro 
-                WHERE year = :year AND month = :month
-            """), {"year": year, "month": month}).fetchone()
-            
-            if result and result.pintro:
-                return float(result.pintro)
-            
-            # Fall back to generic monthly (year IS NULL)
-            result = conn.execute(text("""
-                SELECT pintro 
-                FROM thrace.monthly_pintro 
-                WHERE year IS NULL AND month = :month
-            """), {"month": month}).fetchone()
-            
-            return float(result.pintro) if result and result.pintro else 0.0167  # 1/12 default
+            for row in conn.execute(text(
+                "SELECT year, month, pintro FROM thrace.monthly_pintro"
+            )):
+                cache[(row.year, row.month)] = (
+                    float(row.pintro) if row.pintro is not None else 0.0167
+                )
+        return cache
+
+    @staticmethod
+    def lookup_pintro(
+        cache: Dict[Tuple[Optional[int], int], float],
+        year: int,
+        month: int,
+    ) -> float:
+        if (year, month) in cache:
+            return cache[(year, month)]
+        if (None, month) in cache:
+            return cache[(None, month)]
+        return 0.0167
     
     # =========================================================================
     # MAIN CALCULATION
@@ -347,19 +336,10 @@ class ThraceCalculator:
         species_filter: str,
         disease: str,
         region_filter: str,
-        year: int = None  # Not used for filtering - kept for API compatibility
+        refresh_summary: bool = False,
     ) -> Dict:
         """
-        Main calculation function - replicates get_freedom_data in Python.
-        
-        Parameters:
-        - species_filter: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
-        - disease: FMD, LSD, SGP, PPR
-        - region_filter: ALL, GR, BG, TK
-        - year: Calculation year
-        
-        Returns:
-        - JSON structure matching old get_freedom_data output
+        Main calculation — all years from thrace.all_data (matches legacy SQL).
         """
         # Map species filter to list
         species_map = {
@@ -392,92 +372,71 @@ class ThraceCalculator:
             params['RR_high'] = 1.0
             params['RR_low'] = 1.0
         
-        # Get activities data (all years)
-        activities = self.get_factivities_data(countries, disease, species_list)
-        
-        # Group by month
-        monthly_data = {}
-        for act in activities:
-            month_key = (act['dt_insp'].year, act['dt_insp'].month)
-            if month_key not in monthly_data:
-                monthly_data[month_key] = []
-            monthly_data[month_key].append(act)
-        
+        # Ensure summary table exists / refresh if requested
+        self.ensure_all_data(refresh=refresh_summary)
+
+        # Get pre-aggregated data (all years)
+        rows = self.get_all_data_rows(countries, disease, species_list)
+        pintro_cache = self.load_monthly_pintro_cache()
+
+        # Group by year-month
+        monthly_data: Dict[Tuple[int, int], List[Dict]] = {}
+        for row in rows:
+            month_key = (int(row['year']), int(row['month']))
+            monthly_data.setdefault(month_key, []).append(row)
+
+        adj_risk = self.calculate_adjusted_risk(params)
+        pstar_h = params.get('PstarH', 0.02)
+
         # Calculate monthly sensitivity
         results = []
         p_free = 0.5  # Initial prior probability of freedom
-        
+
         for (year, month) in sorted(monthly_data.keys()):
-            acts = monthly_data[(year, month)]
-            
-            # Calculate herd-level sensitivity for each activity
-            hse_values = []
+            month_rows = monthly_data[(year, month)]
+
+            prod_high = 1.0
+            prod_low = 1.0
             total_animals = 0
-            total_herds = len(acts)
+            total_herds = len(month_rows)
             total_sero = 0
             total_clin = 0
-            
-            for act in acts:
-                # Process each species
-                for species in species_list:
-                    pop = act['populations'].get(species, 0)
-                    exam = act['examined'].get(species, 0)
-                    tested = act['tested'].get(species)
-                    sampled = act['sampled'].get(species, 0)
-                    
-                    if pop == 0:
-                        continue
-                    
-                    total_animals += pop
-                    total_sero += sampled
-                    
-                    # R2: Apply protocol rules for tested count
-                    clin_tested = self.get_tested_count(
-                        species=species,
-                        disease=disease,
-                        country=act['country'],
-                        exam_count=exam,
-                        tested_count=tested,
-                        visit_date=act['dt_insp']
-                    )
-                    
-                    total_clin += clin_tested
-                    
-                    # R4: Use risklevel from epiunits
-                    risk_level = act['risklevel'].lower() if act['risklevel'] else 'low'
-                    
-                    # R1: Calculate combined herd sensitivity
-                    hse = self.calculate_combined_herd_sensitivity_R1(
-                        clin_examined=exam,
-                        clin_tested=clin_tested,
-                        sero_sampled=sampled,
-                        population=pop,
-                        params=params,
-                        risk_level=risk_level
-                    )
-                    
-                    if hse > 0:
-                        hse_values.append(hse)
-            
-            # Aggregate to system sensitivity (monthly)
-            if hse_values:
-                # SSe = 1 - ∏(1 - HSe_i * AdjRisk * P*H)
-                adj_risk = self.calculate_adjusted_risk(params)
-                pstar_h = params.get('PstarH', 0.02)
-                
-                prod_high = 1.0
-                prod_low = 1.0
-                
-                for hse in hse_values:
-                    # Assume all high risk for simplicity (can be improved)
-                    prod_high *= (1 - (adj_risk['high'] * pstar_h * hse))
-                
-                sse = 1 - prod_high
-            else:
-                sse = 0.0
-            
-            # Get monthly PIntro (R11-R12)
-            pintro = self.get_monthly_pintro(year, month, disease, region_filter)
+
+            for row in month_rows:
+                size = int(row.get('size') or 0)
+                clin = int(row.get('clin') or 0)
+                sero = int(row.get('sero') or 0)
+                if size == 0:
+                    continue
+
+                total_animals += size
+                total_sero += sero
+                total_clin += clin
+
+                risk_level = (row.get('risk') or 'high').lower()
+
+                hse = self.calculate_combined_herd_sensitivity_R1(
+                    clin_examined=clin,
+                    clin_tested=clin,
+                    sero_sampled=sero,
+                    population=size,
+                    params=params,
+                    risk_level=risk_level,
+                )
+
+                if hse <= 0:
+                    continue
+
+                adj = adj_risk['high'] if risk_level == 'high' else adj_risk['low']
+                term = adj * pstar_h * hse
+                if risk_level == 'high':
+                    prod_high *= (1 - term)
+                else:
+                    prod_low *= (1 - term)
+
+            sse = 1 - (prod_high * prod_low)
+
+            pintro = self.lookup_pintro(pintro_cache, year, month)
             
             # Bayesian update for P(Free)
             # P(Free|neg) = ((1-PIntro) * P(Free)) / (1 - SSe + (P(Free) * SSe))
@@ -586,13 +545,10 @@ class ThraceCalculator:
         species_filter: str, 
         disease: str, 
         region_filter: str, 
-        year: int
     ) -> Dict:
-        """
-        Validation helper - returns intermediate values for debugging.
-        """
+        """Validation helper - returns intermediate values for debugging."""
         results = self.calculate_system_sensitivity(
-            species_filter, disease, region_filter, year
+            species_filter, disease, region_filter
         )
         
         return {
