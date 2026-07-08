@@ -48,21 +48,20 @@ async def get_outbreak_price_correlation(
     """Correlate outbreak counts with market prices over time.
     Joins outbreak counts per period with cattle price data."""
     try:
-        # Build params: outbreak params first, then price params
-        ob_params: list = []
-        price_params: list = []
-        if nationID is not None:
-            ob_params.append(nationID)
-            price_params.append(nationID)
+        # If nationID is provided, keep previous behaviour: one country's prices + that country's outbreaks.
+        # If nationID is NOT provided, return prices for ALL countries per period while outbreaks remain aggregated by period.
+        params: list = []
 
         ob_where = ["o.dt_conf IS NOT NULL"]
         if nationID is not None:
             ob_where.append("o.nationID = %s")
+            params.append(nationID)
         ob_where_sql = " AND ".join(ob_where)
 
         price_where = ["1=1"]
         if nationID is not None:
-            price_where.append("mp.nationID = %s")
+            price_where.append("mp2.nationID = %s")
+            params.append(nationID)
         price_where_sql = " AND ".join(price_where)
 
         query = (
@@ -71,6 +70,7 @@ async def get_outbreak_price_correlation(
             "  p.dt_from, "
             "  p.descrizione, "
             "  COALESCE(ob.outbreak_count, 0) AS outbreak_count, "
+            "  nat.country AS Country, "
             "  mp.ctl_dis_liveAVG, "
             "  mp.ctl_dis_meatAVG, "
             "  mp.ctl_cap_liveAVG, "
@@ -85,22 +85,16 @@ async def get_outbreak_price_correlation(
             f"  WHERE {ob_where_sql} "
             "  GROUP BY pp.periodID "
             ") ob ON p.periodID = ob.periodID "
-            "LEFT JOIN ( "
-            "  SELECT "
-            "    mp2.periodID, "
-            "    mp2.ctl_dis_liveAVG, "
-            "    mp2.ctl_dis_meatAVG, "
-            "    mp2.ctl_cap_liveAVG, "
-            "    mp2.ctl_cap_meatAVG "
-            "  FROM marketprice mp2 "
-            f"  WHERE {price_where_sql} "
-            f"  ORDER BY mp2.periodID DESC LIMIT {months} "
-            ") mp ON p.periodID = mp.periodID "
-            "WHERE ob.outbreak_count IS NOT NULL OR mp.periodID IS NOT NULL "
-            "ORDER BY p.dt_from ASC"
+            "LEFT JOIN marketprice mp ON p.periodID = mp.periodID "
+            "LEFT JOIN nations nat ON mp.nationID = nat.nationID "
+            f"WHERE ({price_where_sql}) "
+            "  AND p.periodID >= (SELECT COALESCE(MAX(periodID), 0) - %s FROM marketprice_period) "
+            "ORDER BY p.dt_from ASC, nat.country ASC"
         )
 
-        all_params = tuple(ob_params + price_params)
+        # Use a period window based on max periodID. This avoids MySQL LIMIT issues when fetching many countries.
+        # months=12 means last ~12 periods (quarterly).
+        all_params = tuple(params + [months])
         result = await db_helper.execute_tcc_query(query, all_params if all_params else None)
         if result["error"]:
             raise HTTPException(status_code=500, detail=result["error"])
@@ -479,7 +473,7 @@ async def get_herd_immunity_gap(
 ):
     """Calculate vaccination coverage percentage per district to identify herd immunity gaps"""
     try:
-        where_clauses = ["d.district_name IS NOT NULL"]
+        where_clauses = ["d.district_name IS NOT NULL", "n.country IS NOT NULL"]
         params = []
 
         if country:
@@ -496,15 +490,18 @@ async def get_herd_immunity_gap(
 
         query = (
             "SELECT "
+            "n.country AS country, "
+            "p.province_name AS province_name, "
             "d.district_name AS district_name, "
             "SUM(v.cattle_target_pop) AS total_target, "
             "SUM(v.cattle_vacc_doses_inj) AS total_injected, "
             "ROUND((SUM(v.cattle_vacc_doses_inj) / NULLIF(SUM(v.cattle_target_pop), 0)) * 100, 2) AS coverage_percentage "
             "FROM vaccinations v "
             "LEFT JOIN districts d ON v.districtID = d.districtID "
+            "LEFT JOIN provinces p ON d.provinceID = p.provinceID "
             "LEFT JOIN nations n ON v.nationID = n.nationID "
             f"WHERE {where_sql} "
-            "GROUP BY d.district_name "
+            "GROUP BY n.country, p.province_name, d.district_name "
             "HAVING total_target > 0 "
             "ORDER BY coverage_percentage ASC"
         )

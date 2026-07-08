@@ -6,6 +6,7 @@ interface OutbreakPriceRecord {
   dt_from: string;
   descrizione: string;
   outbreak_count: number;
+  Country?: string | null;
   ctl_dis_liveAVG: number | null;
   ctl_dis_meatAVG: number | null;
   ctl_cap_liveAVG: number | null;
@@ -71,7 +72,7 @@ const InsightBox: React.FC<{ text: string; type?: 'info' | 'warning' }> = ({ tex
 // ============ CHART 1: Outbreak vs Price Correlation (Dual-Axis SVG) ============
 const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [tooltipData, setTooltipData] = useState<{ x: number; y: number; item: OutbreakPriceRecord } | null>(null);
+  const [tooltipData, setTooltipData] = useState<{ x: number; y: number; periodLabel: string; outbreakCount: number; prices: { country: string; live: number | null; meat: number | null }[] } | null>(null);
 
   const chartWidth = 700;
   const chartHeight = 380;
@@ -82,17 +83,55 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
   const plotWidth = chartWidth - marginLeft - marginRight;
   const plotHeight = chartHeight - marginTop - marginBottom;
 
-  const maxOutbreaks = Math.max(...data.map((d) => d.outbreak_count || 0), 1);
-  const allPrices: number[] = [];
-  data.forEach((d) => { if (d.ctl_dis_liveAVG != null) allPrices.push(d.ctl_dis_liveAVG); if (d.ctl_dis_meatAVG != null) allPrices.push(d.ctl_dis_meatAVG); });
-  const maxPrice = allPrices.length > 0 ? Math.max(...allPrices) : 1;
-  const priceMax = Math.ceil(maxPrice / 100) * 100 || 100;
+  // Backend can return multiple rows per period (one per country). Normalize into:
+  // - periods: unique time points (bars use outbreaks per period)
+  // - priceSeries: per-country live/meat lines across periods
+  const periods = React.useMemo(() => {
+    const by = new Map<number, { periodID: number; dt_from: string; descrizione: string; outbreak_count: number }>();
+    data.forEach((r) => {
+      if (!by.has(r.periodID)) {
+        by.set(r.periodID, { periodID: r.periodID, dt_from: r.dt_from, descrizione: r.descrizione, outbreak_count: r.outbreak_count || 0 });
+      }
+    });
+    return Array.from(by.values()).sort((a, b) => (a.dt_from || '').localeCompare(b.dt_from || ''));
+  }, [data]);
 
-  const barCount = data.length;
+  const countries = React.useMemo(() => {
+    const s = new Set<string>();
+    data.forEach((r) => { if (r.Country) s.add(r.Country); });
+    return Array.from(s).sort();
+  }, [data]);
+
+  const priceByCountryPeriod = React.useMemo(() => {
+    const map = new Map<string, Map<number, { live: number | null; meat: number | null }>>();
+    countries.forEach((c) => map.set(c, new Map()));
+    data.forEach((r) => {
+      const c = r.Country || null;
+      if (!c) return;
+      const inner = map.get(c) || new Map<number, { live: number | null; meat: number | null }>();
+      inner.set(r.periodID, { live: r.ctl_dis_liveAVG, meat: r.ctl_dis_meatAVG });
+      map.set(c, inner);
+    });
+    return map;
+  }, [data, countries]);
+
+  const maxOutbreaks = Math.max(...periods.map((d) => d.outbreak_count || 0), 1);
+  // Add headroom so outbreak bars don't visually squash the price lines
+  const outbreakAxisMax = Math.max(1, Math.ceil(maxOutbreaks * 1.5));
+  // Price axis fixed to 25 USD max so scales are comparable between countries/periods
+  const priceMax = 25;
+
+  const barCount = periods.length;
   const barGap = Math.max(2, Math.min(6, plotWidth / barCount * 0.3));
   const barWidth = Math.max(4, Math.min(30, (plotWidth - barGap * (barCount - 1)) / barCount));
   const totalBarsWidth = barCount * barWidth + (barCount - 1) * barGap;
   const offsetX = marginLeft + (plotWidth - totalBarsWidth) / 2;
+
+  const palette = ['#2563EB', '#16A34A', '#9333EA', '#EA580C', '#0F766E', '#DC2626', '#DB2777', '#4B5563'];
+  const countryColor = (country: string) => palette[Math.abs(country.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % palette.length];
+
+  const legendCountries = countries.slice(0, 6);
+  const hiddenCount = Math.max(0, countries.length - legendCountries.length);
 
   return (
     <div className="overflow-x-auto">
@@ -106,7 +145,7 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
         {/* Y-axis left gridlines (outbreaks) */}
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const y = marginTop + plotHeight * (1 - ratio);
-          const val = Math.round(ratio * maxOutbreaks);
+          const val = Math.round(ratio * outbreakAxisMax);
           return (
             <g key={`obl-${ratio}`}>
               <line x1={marginLeft} y1={y} x2={marginLeft + plotWidth} y2={y} stroke="#e5e7eb" strokeWidth={1} />
@@ -135,67 +174,73 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
         </text>
 
         {/* Bars (outbreaks) */}
-        {data.map((item, i) => {
+        {periods.map((item, i) => {
           const x = offsetX + i * (barWidth + barGap);
-          const barHeight = ((item.outbreak_count || 0) / maxOutbreaks) * plotHeight;
+          const barHeight = ((item.outbreak_count || 0) / outbreakAxisMax) * plotHeight;
           const y = marginTop + plotHeight - barHeight;
           return (
             <rect
               key={`bar-${i}`}
               x={x} y={y} width={barWidth} height={Math.max(0, barHeight)}
               fill="#DC2626" rx={2} opacity={hoveredIndex === i ? 0.7 : 0.85}
-              onMouseEnter={() => { setHoveredIndex(i); setTooltipData({ x: x + barWidth / 2, y: Math.max(marginTop, y - 10), item }); }}
+              onMouseEnter={() => {
+                setHoveredIndex(i);
+                const prices = legendCountries.map((c) => {
+                  const v = priceByCountryPeriod.get(c)?.get(item.periodID);
+                  return { country: c, live: v?.live ?? null, meat: v?.meat ?? null };
+                });
+                setTooltipData({
+                  x: x + barWidth / 2,
+                  y: Math.max(marginTop, y - 10),
+                  periodLabel: item.descrizione,
+                  outbreakCount: item.outbreak_count || 0,
+                  prices,
+                });
+              }}
               onMouseLeave={() => { setHoveredIndex(null); setTooltipData(null); }}
               style={{ cursor: 'pointer' }}
             />
           );
         })}
 
-        {/* Line: District Live Price */}
-        {(() => {
-          const points = data
-            .map((item, i) => {
-              if (item.ctl_dis_liveAVG == null) return null;
+        {/* Country price lines: same color, live=solid, meat=dashed */}
+        {countries.map((country) => {
+          const color = countryColor(country);
+          const per = priceByCountryPeriod.get(country);
+          if (!per) return null;
+
+          const livePoints = periods
+            .map((p, i) => {
+              const v = per.get(p.periodID);
+              if (!v || v.live == null) return null;
               const x = offsetX + i * (barWidth + barGap) + barWidth / 2;
-              const y = marginTop + plotHeight - (item.ctl_dis_liveAVG / priceMax) * plotHeight;
+              const y = marginTop + plotHeight - (v.live / priceMax) * plotHeight;
               return `${x},${y}`;
             })
             .filter(Boolean)
             .join(' ');
-          return points ? <polyline points={points} fill="none" stroke="#2563EB" strokeWidth={2} strokeLinejoin="round" /> : null;
-        })()}
 
-        {/* Line: District Meat Price */}
-        {(() => {
-          const points = data
-            .map((item, i) => {
-              if (item.ctl_dis_meatAVG == null) return null;
+          const meatPoints = periods
+            .map((p, i) => {
+              const v = per.get(p.periodID);
+              if (!v || v.meat == null) return null;
               const x = offsetX + i * (barWidth + barGap) + barWidth / 2;
-              const y = marginTop + plotHeight - (item.ctl_dis_meatAVG / priceMax) * plotHeight;
+              const y = marginTop + plotHeight - (v.meat / priceMax) * plotHeight;
               return `${x},${y}`;
             })
             .filter(Boolean)
             .join(' ');
-          return points ? <polyline points={points} fill="none" stroke="#16A34A" strokeWidth={2} strokeLinejoin="round" /> : null;
-        })()}
 
-        {/* Dots on lines */}
-        {data.map((item, i) => {
-          const cx = offsetX + i * (barWidth + barGap) + barWidth / 2;
-          const dots: React.ReactNode[] = [];
-          if (item.ctl_dis_liveAVG != null) {
-            const cy = marginTop + plotHeight - (item.ctl_dis_liveAVG / priceMax) * plotHeight;
-            dots.push(<circle key={`dl-${i}`} cx={cx} cy={cy} r={3} fill="#2563EB" />);
-          }
-          if (item.ctl_dis_meatAVG != null) {
-            const cy = marginTop + plotHeight - (item.ctl_dis_meatAVG / priceMax) * plotHeight;
-            dots.push(<circle key={`dm-${i}`} cx={cx} cy={cy} r={3} fill="#16A34A" />);
-          }
-          return dots;
+          return (
+            <g key={`lines-${country}`}>
+              {livePoints ? <polyline points={livePoints} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" opacity={0.9} /> : null}
+              {meatPoints ? <polyline points={meatPoints} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeDasharray="6 4" opacity={0.9} /> : null}
+            </g>
+          );
         })}
 
         {/* X-axis labels */}
-        {data.map((item, i) => {
+        {periods.map((item, i) => {
           const x = offsetX + i * (barWidth + barGap) + barWidth / 2;
           const y = marginTop + plotHeight + 10;
           return (
@@ -209,20 +254,47 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
         <g transform={`translate(${marginLeft + 10}, ${marginTop + 10})`}>
           <rect x={0} y={0} width={12} height={10} fill="#DC2626" rx={1} />
           <text x={16} y={9} fontSize={9} fill="#374151">Outbreaks</text>
-          <line x1={90} y1={5} x2={105} y2={5} stroke="#2563EB" strokeWidth={2} />
-          <text x={110} y={9} fontSize={9} fill="#374151">District Live Price</text>
-          <line x1={210} y1={5} x2={225} y2={5} stroke="#16A34A" strokeWidth={2} />
-          <text x={230} y={9} fontSize={9} fill="#374151">District Meat Price</text>
+          <line x1={90} y1={5} x2={108} y2={5} stroke="#111827" strokeWidth={2} />
+          <text x={114} y={9} fontSize={9} fill="#374151">Live (solid)</text>
+          <line x1={180} y1={5} x2={198} y2={5} stroke="#111827" strokeWidth={2} strokeDasharray="6 4" />
+          <text x={204} y={9} fontSize={9} fill="#374151">Meat (dashed)</text>
+        </g>
+
+        {/* Country color legend (limited) */}
+        <g transform={`translate(${marginLeft + 10}, ${marginTop + 26})`}>
+          {legendCountries.map((c, idx) => {
+            const y = idx * 14;
+            const color = countryColor(c);
+            return (
+              <g key={`leg-${c}`} transform={`translate(0, ${y})`}>
+                <line x1={0} y1={7} x2={14} y2={7} stroke={color} strokeWidth={3} />
+                <text x={18} y={10} fontSize={9} fill="#374151">{c}</text>
+              </g>
+            );
+          })}
+          {hiddenCount > 0 && (
+            <text x={0} y={legendCountries.length * 14 + 10} fontSize={9} fill="#6b7280">
+              +{hiddenCount} more
+            </text>
+          )}
         </g>
 
         {/* Tooltip */}
         {tooltipData && (
           <g>
-            <rect x={Math.min(tooltipData.x - 80, marginLeft + plotWidth - 170)} y={Math.max(marginTop, tooltipData.y - 70)} width={160} height={65} rx={6} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#op-shadow)" />
-            <text x={Math.min(tooltipData.x - 72, marginLeft + plotWidth - 162)} y={Math.max(marginTop + 14, tooltipData.y - 56)} fontSize={10} fontWeight="bold" fill="#1f2937">{tooltipData.item.descrizione}</text>
-            <text x={Math.min(tooltipData.x - 72, marginLeft + plotWidth - 162)} y={Math.max(marginTop + 28, tooltipData.y - 42)} fontSize={9} fill="#ef4444">Outbreaks: {tooltipData.item.outbreak_count}</text>
-            <text x={Math.min(tooltipData.x - 72, marginLeft + plotWidth - 162)} y={Math.max(marginTop + 40, tooltipData.y - 30)} fontSize={9} fill="#2563EB">Live Price: ${tooltipData.item.ctl_dis_liveAVG?.toLocaleString() ?? '-'}</text>
-            <text x={Math.min(tooltipData.x - 72, marginLeft + plotWidth - 162)} y={Math.max(marginTop + 52, tooltipData.y - 18)} fontSize={9} fill="#16A34A">Meat Price: ${tooltipData.item.ctl_dis_meatAVG?.toLocaleString() ?? '-'}</text>
+            <rect x={Math.min(tooltipData.x - 120, marginLeft + plotWidth - 260)} y={Math.max(marginTop, tooltipData.y - 88)} width={250} height={85} rx={6} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#op-shadow)" />
+            <text x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 14, tooltipData.y - 72)} fontSize={10} fontWeight="bold" fill="#1f2937">{tooltipData.periodLabel}</text>
+            <text x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 28, tooltipData.y - 58)} fontSize={9} fill="#ef4444">Outbreaks: {tooltipData.outbreakCount}</text>
+            {tooltipData.prices.slice(0, 3).map((p, idx) => (
+              <text key={`tp-${p.country}`} x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 42 + idx * 14, tooltipData.y - 44 + idx * 14)} fontSize={9} fill={countryColor(p.country)}>
+                {p.country}: L ${p.live?.toLocaleString() ?? '-'} / M ${p.meat?.toLocaleString() ?? '-'}
+              </text>
+            ))}
+            {tooltipData.prices.length > 3 && (
+              <text x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 84, tooltipData.y - 2)} fontSize={9} fill="#6b7280">
+                …
+              </text>
+            )}
           </g>
         )}
       </svg>

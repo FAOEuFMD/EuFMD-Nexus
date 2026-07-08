@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 
 // Types
 interface HerdImmunityRecord {
+  country: string;
+  province_name?: string | null;
   district_name: string;
   total_target: number;
   total_injected: number;
@@ -20,17 +22,7 @@ const truncateName = (name: string, maxLen: number = 14): string => {
   return name.length > maxLen ? name.substring(0, maxLen - 1) + '\u2026' : name;
 };
 
-// Color scale for the heatmap (light yellow to dark red)
-const getHeatmapColor = (count: number, maxCount: number): string => {
-  if (count === 0) return '#fefce8';
-  const ratio = count / maxCount;
-  if (ratio < 0.15) return '#fef9c3';
-  if (ratio < 0.3) return '#fde047';
-  if (ratio < 0.45) return '#facc15';
-  if (ratio < 0.6) return '#f97316';
-  if (ratio < 0.75) return '#dc2626';
-  return '#991b1b';
-};
+const PRAGMATIST_URL = 'https://www.openfmd.org/dashboard/pragmatist/';
 
 // Skeleton loader
 const SkeletonLoader: React.FC = () => (
@@ -54,8 +46,112 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
   </div>
 );
 
-// Pure SVG Bar Chart for Herd Immunity
-const HerdImmunityChart: React.FC<{ data: HerdImmunityRecord[] }> = ({ data }) => {
+type HerdChartMode = 'country' | 'province' | 'district';
+
+const computeCoverage = (totalInjected: number, totalTarget: number) => {
+  if (!totalTarget) return 0;
+  return Math.round((totalInjected / totalTarget) * 10000) / 100;
+};
+
+// Horizontal bar chart so labels stay on the left
+const HerdImmunityHorizontalChart: React.FC<{
+  title: string;
+  rows: { label: string; total_target: number; total_injected: number; coverage_percentage: number }[];
+  threshold: number;
+}> = ({ title, rows, threshold }) => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const chartWidth = 760;
+  const chartHeight = 420;
+  const marginTop = 20;
+  const marginRight = 20;
+  const marginBottom = 35;
+  const marginLeft = 220;
+  const plotWidth = chartWidth - marginLeft - marginRight;
+  const plotHeight = chartHeight - marginTop - marginBottom;
+
+  const sorted = [...rows].sort((a, b) => a.coverage_percentage - b.coverage_percentage);
+  const barCount = sorted.length;
+  const barGap = barCount > 18 ? 4 : 6;
+  const barHeight = Math.max(10, Math.min(22, (plotHeight - barGap * (barCount - 1)) / Math.max(1, barCount)));
+
+  const thresholdX = marginLeft + (threshold / 100) * plotWidth;
+
+  return (
+    <div className="overflow-x-auto">
+      <p className="text-xs font-semibold text-gray-700 mb-2">{title}</p>
+      <svg width="100%" viewBox={`0 0 ${chartWidth} ${chartHeight}`} style={{ minWidth: 520 }}>
+        <defs>
+          <filter id="shadow2" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.15" />
+          </filter>
+        </defs>
+
+        {/* X axis grid + labels */}
+        {[0, 20, 40, 60, 80, 100].map((tick) => {
+          const x = marginLeft + plotWidth * (tick / 100);
+          return (
+            <g key={`x-${tick}`}>
+              <line x1={x} y1={marginTop} x2={x} y2={marginTop + plotHeight} stroke="#e5e7eb" strokeWidth={1} />
+              <text x={x} y={marginTop + plotHeight + 22} textAnchor="middle" fontSize={10} fill="#6b7280">
+                {tick}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Threshold line */}
+        <line x1={thresholdX} y1={marginTop} x2={thresholdX} y2={marginTop + plotHeight} stroke="#000" strokeWidth={1.5} strokeDasharray="6 3" />
+        <text x={Math.min(thresholdX + 6, marginLeft + plotWidth - 20)} y={marginTop + 12} fontSize={9} fill="#000" fontWeight="bold">
+          {threshold}%
+        </text>
+
+        {/* Bars */}
+        {sorted.map((item, i) => {
+          const y = marginTop + i * (barHeight + barGap);
+          const w = (Math.max(0, Math.min(100, item.coverage_percentage)) / 100) * plotWidth;
+          const x = marginLeft;
+          const isHovered = hoveredIndex === i;
+          const color = item.coverage_percentage < threshold ? '#ef4444' : '#22c55e';
+          return (
+            <g
+              key={`${item.label}-${i}`}
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              style={{ cursor: 'pointer' }}
+            >
+              <text x={marginLeft - 8} y={y + barHeight * 0.72} textAnchor="end" fontSize={10} fill="#374151">
+                {item.label.length > 28 ? item.label.slice(0, 27) + '…' : item.label}
+              </text>
+              <rect x={x} y={y} width={w} height={barHeight} fill={color} rx={3} opacity={isHovered ? 0.85 : 1} />
+              <text x={x + Math.min(w + 6, plotWidth - 4)} y={y + barHeight * 0.72} fontSize={10} fill="#111827">
+                {item.coverage_percentage}%
+              </text>
+
+              {isHovered && (
+                <g>
+                  <rect x={marginLeft + 10} y={Math.max(marginTop, y - 56)} width={260} height={52} rx={6} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#shadow2)" />
+                  <text x={marginLeft + 18} y={Math.max(marginTop + 16, y - 40)} fontSize={11} fontWeight="bold" fill="#1f2937">
+                    {item.label}
+                  </text>
+                  <text x={marginLeft + 18} y={Math.max(marginTop + 32, y - 24)} fontSize={10} fill="#4b5563">
+                    Target: {item.total_target?.toLocaleString()} | Injected: {item.total_injected?.toLocaleString()}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+// Compact vertical chart for aggregated country view
+const HerdImmunityCountryChart: React.FC<{
+  rows: { label: string; total_target: number; total_injected: number; coverage_percentage: number }[];
+  threshold: number;
+}> = ({ rows, threshold }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const chartWidth = 600;
@@ -66,9 +162,7 @@ const HerdImmunityChart: React.FC<{ data: HerdImmunityRecord[] }> = ({ data }) =
   const marginLeft = 55;
   const plotWidth = chartWidth - marginLeft - marginRight;
   const plotHeight = chartHeight - marginTop - marginBottom;
-  const threshold = 70;
-
-  const sortedData = [...data].sort((a, b) => a.coverage_percentage - b.coverage_percentage);
+  const sortedData = [...rows].sort((a, b) => a.coverage_percentage - b.coverage_percentage);
 
   const barCount = sortedData.length;
   const barGap = barCount > 15 ? 2 : 4;
@@ -113,19 +207,19 @@ const HerdImmunityChart: React.FC<{ data: HerdImmunityRecord[] }> = ({ data }) =
           const x = offsetX + i * (barWidth + barGap);
           const barHeight = (item.coverage_percentage / 100) * plotHeight;
           const y = marginTop + plotHeight - barHeight;
-          const color = item.coverage_percentage < 70 ? '#ef4444' : '#22c55e';
+          const color = item.coverage_percentage < threshold ? '#ef4444' : '#22c55e';
           const isHovered = hoveredIndex === i;
 
           return (
-            <g key={item.district_name} onMouseEnter={() => setHoveredIndex(i)} onMouseLeave={() => setHoveredIndex(null)} style={{ cursor: 'pointer' }}>
+            <g key={item.label} onMouseEnter={() => setHoveredIndex(i)} onMouseLeave={() => setHoveredIndex(null)} style={{ cursor: 'pointer' }}>
               <rect x={x} y={y} width={barWidth} height={barHeight} fill={color} rx={3} opacity={isHovered ? 0.85 : 1} />
               {isHovered && (
                 <g>
                   <rect x={Math.min(x, marginLeft + plotWidth - 180)} y={Math.max(marginTop, y - 78)} width={180} height={72} rx={6} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#shadow)" />
-                  <text x={Math.min(x + 8, marginLeft + plotWidth - 172)} y={Math.max(marginTop + 16, y - 62)} fontSize={11} fontWeight="bold" fill="#1f2937">{item.district_name}</text>
+                  <text x={Math.min(x + 8, marginLeft + plotWidth - 172)} y={Math.max(marginTop + 16, y - 62)} fontSize={11} fontWeight="bold" fill="#1f2937">{item.label}</text>
                   <text x={Math.min(x + 8, marginLeft + plotWidth - 172)} y={Math.max(marginTop + 30, y - 48)} fontSize={10} fill="#4b5563">Target: {item.total_target?.toLocaleString()}</text>
                   <text x={Math.min(x + 8, marginLeft + plotWidth - 172)} y={Math.max(marginTop + 44, y - 34)} fontSize={10} fill="#4b5563">Injected: {item.total_injected?.toLocaleString()}</text>
-                  <text x={Math.min(x + 8, marginLeft + plotWidth - 172)} y={Math.max(marginTop + 58, y - 20)} fontSize={10} fontWeight="bold" fill={item.coverage_percentage < 70 ? '#dc2626' : '#16a34a'}>Coverage: {item.coverage_percentage}%</text>
+                  <text x={Math.min(x + 8, marginLeft + plotWidth - 172)} y={Math.max(marginTop + 58, y - 20)} fontSize={10} fontWeight="bold" fill={item.coverage_percentage < threshold ? '#dc2626' : '#16a34a'}>Coverage: {item.coverage_percentage}%</text>
                 </g>
               )}
             </g>
@@ -138,7 +232,7 @@ const HerdImmunityChart: React.FC<{ data: HerdImmunityRecord[] }> = ({ data }) =
           const y = marginTop + plotHeight + 10;
           return (
             <text key={`lbl-${i}`} x={x} y={y} textAnchor="end" fontSize={9} fill="#6b7280" transform={`rotate(-50, ${x}, ${y})`}>
-              {truncateName(item.district_name)}
+              {truncateName(item.label)}
             </text>
           );
         })}
@@ -158,10 +252,10 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
   const [herdData, setHerdData] = useState<HerdImmunityRecord[]>([]);
   const [herdLoading, setHerdLoading] = useState(true);
   const [herdError, setHerdError] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState<number>(70);
+  const [detailMode, setDetailMode] = useState<HerdChartMode>('district');
 
-  const [matrixData, setMatrixData] = useState<SerotypeStrainRecord[]>([]);
-  const [matrixLoading, setMatrixLoading] = useState(true);
-  const [matrixError, setMatrixError] = useState<string | null>(null);
+  // NOTE: Vaccine matching heatmap removed (see Pragmatist link section below)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -187,36 +281,50 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
     fetchData();
   }, [filterCountry, filterDateFrom, filterDateTo]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setMatrixLoading(true);
-      setMatrixError(null);
-      try {
-        const params = new URLSearchParams();
-        if (filterCountry && filterCountry !== 'all') params.append('country', filterCountry);
-        if (filterDateFrom) params.append('date_from', filterDateFrom);
-        if (filterDateTo) params.append('date_to', filterDateTo);
-        const qs = params.toString();
-        const res = await fetch(`/api/tcc/serotype-vs-strain-matrix${qs ? '?' + qs : ''}`);
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
-        const result = await res.json();
-        setMatrixData(result.data || []);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setMatrixError(`Failed to load matrix data: ${message}`);
-      } finally {
-        setMatrixLoading(false);
-      }
-    };
-    fetchData();
-  }, [filterCountry, filterDateFrom, filterDateTo]);
+  const countryRows = React.useMemo(() => {
+    const by = new Map<string, { total_target: number; total_injected: number }>();
+    herdData.forEach((r) => {
+      const key = r.country || 'Unknown';
+      const cur = by.get(key) || { total_target: 0, total_injected: 0 };
+      cur.total_target += Number(r.total_target || 0);
+      cur.total_injected += Number(r.total_injected || 0);
+      by.set(key, cur);
+    });
+    return Array.from(by.entries()).map(([label, v]) => ({
+      label,
+      total_target: v.total_target,
+      total_injected: v.total_injected,
+      coverage_percentage: computeCoverage(v.total_injected, v.total_target),
+    }));
+  }, [herdData]);
 
-  const serotypes = Array.from(new Set(matrixData.map((d) => d.serotype))).sort();
-  const vaccineStrains = Array.from(new Set(matrixData.map((d) => d.vaccine_strain))).sort();
-  const maxOutbreakCount = matrixData.length > 0 ? Math.max(...matrixData.map((d) => d.outbreak_count)) : 1;
-
-  const matrixLookup = new Map<string, number>();
-  matrixData.forEach((d) => { matrixLookup.set(`${d.serotype}|${d.vaccine_strain}`, d.outbreak_count); });
+  const detailRows = React.useMemo(() => {
+    if (detailMode === 'district') {
+      return herdData.map((r) => ({
+        label: r.district_name,
+        total_target: Number(r.total_target || 0),
+        total_injected: Number(r.total_injected || 0),
+        coverage_percentage: Number(r.coverage_percentage || 0),
+      }));
+    }
+    if (detailMode === 'province') {
+      const by = new Map<string, { total_target: number; total_injected: number }>();
+      herdData.forEach((r) => {
+        const key = r.province_name || 'Unknown';
+        const cur = by.get(key) || { total_target: 0, total_injected: 0 };
+        cur.total_target += Number(r.total_target || 0);
+        cur.total_injected += Number(r.total_injected || 0);
+        by.set(key, cur);
+      });
+      return Array.from(by.entries()).map(([label, v]) => ({
+        label,
+        total_target: v.total_target,
+        total_injected: v.total_injected,
+        coverage_percentage: computeCoverage(v.total_injected, v.total_target),
+      }));
+    }
+    return [];
+  }, [herdData, detailMode]);
 
   return (
     <div className="space-y-6">
@@ -225,14 +333,34 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
       </h2>
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Chart 1: Herd Immunity Gap Bar Chart */}
+        {/* Chart 1: Country first + movable threshold */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-1">
-            District Vaccination Coverage vs. Herd Immunity Threshold
+            Country Vaccination Coverage vs. Herd Immunity Threshold
           </h3>
           <p className="text-xs text-gray-500 mb-4">
-            Cattle vaccination coverage by district. The dashed line represents the 70% herd immunity threshold.
+            Cattle vaccination coverage aggregated by country. Adjust the threshold as needed.
           </p>
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <label className="text-xs font-medium text-gray-600">Threshold:</label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              className="w-56"
+            />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              className="w-16 border border-gray-300 rounded px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-gray-500">%</span>
+          </div>
           {herdLoading ? (
             <div style={{ height: 350 }}><SkeletonLoader /></div>
           ) : herdError ? (
@@ -240,77 +368,75 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
           ) : herdData.length === 0 ? (
             <EmptyState message="No vaccination coverage data available" />
           ) : (
-            <HerdImmunityChart data={herdData} />
+            <HerdImmunityCountryChart rows={countryRows} threshold={threshold} />
           )}
         </div>
 
-        {/* Chart 2: Serotype vs Vaccine Strain Heatmap */}
+        {/* Chart 2: Detail view (district/province) horizontal, labels on left */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Coverage detail (labels on the left)
+            </h3>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDetailMode('district')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  detailMode === 'district' ? 'bg-[#15736d] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                District
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetailMode('province')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  detailMode === 'province' ? 'bg-[#15736d] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Province
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Same data as before, but shown horizontally so the district/province list stays on the left.
+          </p>
+          {herdLoading ? (
+            <div style={{ height: 350 }}><SkeletonLoader /></div>
+          ) : herdError ? (
+            <div className="text-center py-8 text-red-500 text-sm">{herdError}</div>
+          ) : detailRows.length === 0 ? (
+            <EmptyState message="No coverage detail available" />
+          ) : (
+            <HerdImmunityHorizontalChart
+              title={detailMode === 'district' ? 'District coverage' : 'Province coverage'}
+              rows={detailRows}
+              threshold={threshold}
+            />
+          )}
+        </div>
+
+        {/* Chart 2: Vaccine strain matching (external tool) */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-1">
-            Outbreak Serotypes vs. Deployed Vaccine Strains
+            Vaccine strain matching (FMD)
           </h3>
           <p className="text-xs text-gray-500 mb-4">
-            Shows how many outbreaks of each serotype (rows) occurred in districts using each vaccine strain (columns).
-            A high count where the serotype differs from the vaccine strain suggests the vaccine may not protect against that serotype.
-            Green diagonal (same serotype = strain) indicates good match. Red off-diagonal cells indicate potential gaps.
+            Use PRAGMATIST (WRLFMD/EuFMD) for evidence-based FMD vaccine strain prioritisation.
           </p>
-          {matrixLoading ? (
-            <div style={{ height: 350 }}><SkeletonLoader /></div>
-          ) : matrixError ? (
-            <div className="text-center py-8 text-red-500 text-sm">{matrixError}</div>
-          ) : matrixData.length === 0 ? (
-            <EmptyState message="No serotype vs. strain data available" />
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="grid gap-px bg-gray-200" style={{ gridTemplateColumns: `120px repeat(${vaccineStrains.length}, minmax(80px, 1fr))` }}>
-                <div className="bg-gray-100 p-2 text-xs font-semibold text-gray-600 flex items-end justify-center">Serotype &darr; &nbsp; Strain &rarr;</div>
-                {vaccineStrains.map((strain) => (
-                  <div key={`hdr-${strain}`} className="bg-gray-100 p-2 text-xs font-semibold text-gray-700 text-center flex items-end justify-center">{strain}</div>
-                ))}
-                {serotypes.map((serotype) => (
-                  <React.Fragment key={`row-${serotype}`}>
-                    <div className="bg-gray-50 p-2 text-xs font-semibold text-gray-700 flex items-center">{serotype}</div>
-                    {vaccineStrains.map((strain) => {
-                      const count = matrixLookup.get(`${serotype}|${strain}`) || 0;
-                      const isMatch = serotype === strain;
-                      let bgColor: string;
-                      let textColor = '#1f2937';
-                      if (count === 0) {
-                        bgColor = isMatch ? '#f0fdf4' : '#fefce8';
-                      } else if (isMatch) {
-                        // Match: green scale (good)
-                        const ratio = count / maxOutbreakCount;
-                        bgColor = ratio < 0.33 ? '#bbf7d0' : ratio < 0.66 ? '#4ade80' : '#16a34a';
-                        textColor = ratio > 0.5 ? '#fff' : '#1f2937';
-                      } else {
-                        // Mismatch: red scale (risk)
-                        bgColor = getHeatmapColor(count, maxOutbreakCount);
-                        textColor = count > maxOutbreakCount * 0.45 ? '#fff' : '#1f2937';
-                      }
-                      return (
-                        <div key={`cell-${serotype}-${strain}`} className="p-2 text-xs font-medium flex items-center justify-center cursor-default transition-colors" style={{ backgroundColor: bgColor, color: textColor }} title={isMatch ? `${serotype} = ${strain} (match): ${count} outbreak(s)` : `${serotype} vs ${strain} (mismatch): ${count} outbreak(s)`}>{count}</div>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-              </div>
-              <div className="flex items-center gap-4 mt-4 text-xs text-gray-500 flex-wrap">
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: '#bbf7d0' }} />
-                  <span>Match (green)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: '#fde047' }} />
-                  <span>Low risk</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: '#dc2626' }} />
-                  <span>High risk (red)</span>
-                </div>
-                <span className="text-gray-400">| number = outbreak count</span>
-              </div>
-            </div>
-          )}
+          <a
+            href={PRAGMATIST_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#15736d] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Open PRAGMATIST
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3h7m0 0v7m0-7L10 14" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10v11h11" />
+            </svg>
+          </a>
         </div>
       </div>
     </div>

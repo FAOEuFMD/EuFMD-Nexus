@@ -7,6 +7,14 @@ import KPIBanner from '../components/KPIBanner';
 import VaccineRiskView from '../components/VaccineRiskView';
 import EconomicImpactView from '../components/EconomicImpactView';
 import SurveillanceQualityView from '../components/SurveillanceQualityView';
+import SoiColumnFilterHeader from '../components/SoiColumnFilterHeader';
+import { SoiColumnFilter } from '../components/SoiColumnFilterHeader';
+import {
+  applyColumnFilters,
+  ColumnFilters,
+  MARKET_PRICE_FILTER_FIELDS,
+  uniqueColumnValues,
+} from '../utils/soiColumnFilters';
 import {
   ALLOWED_SOI_COUNTRIES,
   isAllowedGeoCountry,
@@ -138,7 +146,7 @@ const RISPSOI: React.FC = () => {
   const [filterCountry, setFilterCountry] = useState<string>('all');
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
-  const [filterQuarter, setFilterQuarter] = useState<string>('all');
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
 
   // Map layer toggles (default to checked so map shows data on load)
   const [showOutbreaks, setShowOutbreaks] = useState(true);
@@ -201,9 +209,9 @@ const RISPSOI: React.FC = () => {
     setVaccinationByProvince(counts);
   }, [mapVaccination]);
 
-  // Filter GeoJSON to admin_level 1 and attach vaccination counts
-  const choroplethData = useMemo(() => {
-    if (!geoJsonData || !showVaccination) return null;
+  // Filter GeoJSON to admin_level 1 and attach vaccination counts for choropleth
+  const adminBoundaryData = useMemo(() => {
+    if (!geoJsonData) return null;
     const features = geoJsonData.features.filter((f: any) => {
       if (f.properties.admin_level !== 1) return false;
       return isAllowedGeoCountry(f.properties.COUNTRY || '');
@@ -216,7 +224,7 @@ const RISPSOI: React.FC = () => {
         return { ...f, properties: { ...f.properties, vaccination_count: count } };
       }),
     };
-  }, [geoJsonData, vaccinationByProvince, showVaccination]);
+  }, [geoJsonData, vaccinationByProvince]);
 
   // Green color scale for choropleth
   const getChoroplethColor = (count: number, maxCount: number) => {
@@ -308,52 +316,50 @@ const RISPSOI: React.FC = () => {
     fetchData();
   }, [activeSection, activeTab]);
 
-  // Filter records
-  const filteredRecords = useMemo(() => {
-    return dataRecords.filter((record) => {
-      const countryMatch = filterCountry === 'all' || record.Country === filterCountry;
-
-      // For outbreaks tab use Date_Confirmed/Date_Suspected; for vaccination use Vaccination_Date
-      let dateMatch = true;
-      if (filterDateFrom || filterDateTo) {
-        let recordDate = '';
-        if (activeTab === 'outbreaks') {
-          recordDate = record.Date_Confirmed || record.Date_Suspected || '';
-        } else if (activeTab === 'vaccination') {
-          recordDate = record.Vaccination_Date || '';
-        }
-        if (filterDateFrom && recordDate < filterDateFrom) dateMatch = false;
-        if (filterDateTo && recordDate > filterDateTo) dateMatch = false;
-      }
-
-      // For marketprice, filter by quarter
-      let quarterMatch = true;
-      if (activeTab === 'marketprice' && filterQuarter !== 'all') {
-        quarterMatch = record.Quarter === filterQuarter;
-      }
-
-      return countryMatch && dateMatch && quarterMatch;
-    });
-  }, [dataRecords, filterCountry, filterDateFrom, filterDateTo, filterQuarter, activeTab]);
-
-  const availableCountries = useMemo(() => ALLOWED_C, []);
-
-  const availableQuarters = useMemo(() => {
-    return Array.from(new Set(dataRecords.map((r) => r.Quarter).filter(Boolean))).sort();
-  }, [dataRecords]);
-
-  // Render table columns based on active tab (for outbreaks and vaccination)
-  const renderTableHeaders = () => {
+  const dataTableFields = useMemo(() => {
     switch (activeTab) {
       case 'outbreaks':
         return ['Country', 'Province', 'District', 'Disease', 'Species', 'Serotype', 'Epi_Unit', 'Date_Suspected', 'Date_Confirmed', 'Confirmation_Type'];
       case 'vaccination':
         return ['Country', 'Province', 'District', 'Vaccination_Campaign', 'Vaccination_Date', 'Vaccine_Manufacturer', 'Cattle_Strain', 'SR_Strain', 'Cattle_Population', 'Cattle_Target_Pop', 'Cattle_Estimated_Doses', 'Cattle_Doses_Injected', 'SR_Population', 'SR_Target_Pop', 'SR_Estimated_Doses', 'SR_Doses_Injected'];
+      case 'marketprice':
+        return [...MARKET_PRICE_FILTER_FIELDS];
       default:
         return [];
     }
+  }, [activeTab]);
+
+  const columnUniqueValuesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    dataTableFields.forEach((field) => {
+      map[field] = uniqueColumnValues(dataRecords, field);
+    });
+    return map;
+  }, [dataRecords, dataTableFields]);
+
+  const filteredRecords = useMemo(
+    () => applyColumnFilters(dataRecords, columnFilters, dataTableFields),
+    [dataRecords, columnFilters, dataTableFields],
+  );
+
+  const hasActiveColumnFilters = useMemo(
+    () => Object.keys(columnFilters).length > 0,
+    [columnFilters],
+  );
+
+  const handleColumnFilterChange = (columnKey: string, selected: Set<string> | undefined) => {
+    setColumnFilters((prev) => {
+      if (selected === undefined) {
+        const { [columnKey]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [columnKey]: selected };
+    });
   };
 
+  const availableCountries = useMemo(() => ALLOWED_C, []);
+
+  // Render table rows based on active tab (for outbreaks and vaccination)
   const renderTableRow = (record: SoiDataRecord, index: number) => {
     switch (activeTab) {
       case 'outbreaks':
@@ -714,7 +720,7 @@ const RISPSOI: React.FC = () => {
                 {(['outbreaks', 'vaccination', 'marketprice'] as DataCategory[]).map((cat) => (
                   <button
                     key={cat}
-                    onClick={() => { setActiveTab(cat); setFilterCountry('all'); setFilterDateFrom(''); setFilterDateTo(''); setFilterQuarter('all'); }}
+                    onClick={() => { setActiveTab(cat); setColumnFilters({}); }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       activeTab === cat
                         ? 'bg-[#15736d] text-white'
@@ -726,83 +732,21 @@ const RISPSOI: React.FC = () => {
                 ))}
               </div>
 
-              {/* Filters */}
-              <div className="flex gap-4 mb-4 flex-wrap items-end">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Country:</label>
-                  <select
-                    value={filterCountry}
-                    onChange={(e) => setFilterCountry(e.target.value)}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              <div className="flex gap-4 mb-4 flex-wrap items-center">
+                <p className="text-xs text-gray-500">
+                  {filteredRecords.length} of {dataRecords.length} record{dataRecords.length !== 1 ? 's' : ''}
+                  {hasActiveColumnFilters ? ' (filtered)' : ''}
+                </p>
+                {hasActiveColumnFilters && (
+                  <button
+                    type="button"
+                    onClick={() => setColumnFilters({})}
+                    className="text-xs text-[#15736d] hover:underline"
                   >
-                    <option value="all">All Countries</option>
-                    {availableCountries.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                {activeTab === 'outbreaks' && (
-                  <>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">From:</label>
-                      <input
-                        type="date"
-                        value={filterDateFrom}
-                        onChange={(e) => setFilterDateFrom(e.target.value)}
-                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">To:</label>
-                      <input
-                        type="date"
-                        value={filterDateTo}
-                        onChange={(e) => setFilterDateTo(e.target.value)}
-                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                  </>
+                    Clear column filters
+                  </button>
                 )}
-                {activeTab === 'vaccination' && (
-                  <>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">From:</label>
-                      <input
-                        type="date"
-                        value={filterDateFrom}
-                        onChange={(e) => setFilterDateFrom(e.target.value)}
-                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">To:</label>
-                      <input
-                        type="date"
-                        value={filterDateTo}
-                        onChange={(e) => setFilterDateTo(e.target.value)}
-                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                  </>
-                )}
-                {activeTab === 'marketprice' && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Quarter:</label>
-                    <select
-                      value={filterQuarter}
-                      onChange={(e) => setFilterQuarter(e.target.value)}
-                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value="all">All Quarters</option>
-                      {availableQuarters.map((q) => (
-                        <option key={q} value={q!}>{q}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="flex items-end text-xs text-gray-500 pb-1">
-                  {filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''}
-                </div>
+                <p className="text-xs text-gray-400">Click the funnel icon in any column header to filter</p>
               </div>
 
               {/* Data Table */}
@@ -817,8 +761,30 @@ const RISPSOI: React.FC = () => {
                     <thead className="bg-gray-200">
                       {/* Row 1: Species categories */}
                       <tr>
-                        <th rowSpan={4} className="px-2 py-1 text-left font-medium border-r bg-gray-300">Quarter</th>
-                        <th rowSpan={4} className="px-2 py-1 text-left font-medium border-r bg-gray-300">Country</th>
+                        <th rowSpan={5} className="px-2 py-1 text-left font-medium border-r bg-gray-300 align-top">
+                          <div className="flex flex-col gap-2">
+                            <span>Quarter</span>
+                            <SoiColumnFilter
+                              label="Quarter"
+                              columnKey="Quarter"
+                              uniqueValues={columnUniqueValuesMap.Quarter || []}
+                              selectedValues={columnFilters.Quarter}
+                              onFilterChange={handleColumnFilterChange}
+                            />
+                          </div>
+                        </th>
+                        <th rowSpan={5} className="px-2 py-1 text-left font-medium border-r bg-gray-300 align-top">
+                          <div className="flex flex-col gap-2">
+                            <span>Country</span>
+                            <SoiColumnFilter
+                              label="Country"
+                              columnKey="Country"
+                              uniqueValues={columnUniqueValuesMap.Country || []}
+                              selectedValues={columnFilters.Country}
+                              onFilterChange={handleColumnFilterChange}
+                            />
+                          </div>
+                        </th>
                         <th colSpan={12} className="px-2 py-1 text-center font-bold border-r">Cattle/Beef</th>
                         <th colSpan={12} className="px-2 py-1 text-center font-bold border-r">Sheep</th>
                         <th colSpan={12} className="px-2 py-1 text-center font-bold">Pig</th>
@@ -880,11 +846,26 @@ const RISPSOI: React.FC = () => {
                           <th key={`pig_cap_${type}_${agg}`} className="px-1 py-1 text-center font-medium border-r">{agg === 'Min' ? 'm' : agg === 'Max' ? 'M' : 'A'}</th>
                         )))}
                       </tr>
+                      {/* Row 5: column filters for price fields */}
+                      <tr className="bg-gray-100">
+                        {MARKET_PRICE_FILTER_FIELDS.slice(2).map((field) => (
+                          <th key={`filter_${field}`} className="px-1 py-1 border-r">
+                            <SoiColumnFilter
+                              label={field}
+                              columnKey={field}
+                              uniqueValues={columnUniqueValuesMap[field] || []}
+                              selectedValues={columnFilters[field]}
+                              onFilterChange={handleColumnFilterChange}
+                              compact
+                            />
+                          </th>
+                        ))}
+                      </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={26} className="px-3 py-8 text-center text-sm text-gray-500">
+                          <td colSpan={MARKET_PRICE_FILTER_FIELDS.length} className="px-3 py-8 text-center text-sm text-gray-500">
                             No records found
                           </td>
                         </tr>
@@ -945,19 +926,24 @@ const RISPSOI: React.FC = () => {
                 /* Generic Table for outbreaks / vaccination */
                 <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
                   <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
-                        {renderTableHeaders().map((header) => (
-                          <th key={header} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            {header}
-                          </th>
+                        {dataTableFields.map((header) => (
+                          <SoiColumnFilterHeader
+                            key={header}
+                            label={header}
+                            columnKey={header}
+                            uniqueValues={columnUniqueValuesMap[header] || []}
+                            selectedValues={columnFilters[header]}
+                            onFilterChange={handleColumnFilterChange}
+                          />
                         ))}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={renderTableHeaders().length} className="px-3 py-8 text-center text-sm text-gray-500">
+                          <td colSpan={dataTableFields.length} className="px-3 py-8 text-center text-sm text-gray-500">
                             No records found
                           </td>
                         </tr>
@@ -1010,22 +996,41 @@ const RISPSOI: React.FC = () => {
                         </Popup>
                       </Marker>
                     ))}
-                    {choroplethData && (
+                    {adminBoundaryData && (
                       <GeoJSON
-                        key={`choropleth-${showVaccination}-${Object.keys(vaccinationByProvince).length}`}
-                        data={choroplethData}
-                        style={(feature) => ({
-                          fillColor: getChoroplethColor(feature?.properties.vaccination_count || 0, maxVaccinationCount),
-                          weight: 1,
-                          opacity: 1,
-                          color: '#9ca3af',
-                          fillOpacity: 0.6,
-                        })}
+                        key={`admin-boundaries-${showVaccination}-${Object.keys(vaccinationByProvince).length}`}
+                        data={adminBoundaryData}
+                        style={(feature) => {
+                          if (showVaccination) {
+                            return {
+                              fillColor: getChoroplethColor(feature?.properties.vaccination_count || 0, maxVaccinationCount),
+                              weight: 1,
+                              opacity: 1,
+                              color: '#9ca3af',
+                              fillOpacity: 0.6,
+                            };
+                          }
+                          return {
+                            fillColor: '#e5e7eb',
+                            weight: 1,
+                            opacity: 1,
+                            color: '#6b7280',
+                            fillOpacity: 0.2,
+                          };
+                        }}
                         onEachFeature={(feature, layer) => {
-                          const count = feature.properties.vaccination_count || 0;
-                          layer.bindPopup(
-                            `<div style="font-size:12px"><strong>${feature.properties.NAME_1}</strong> (${feature.properties.COUNTRY})<br/>Vaccination records: ${count}</div>`
-                          );
+                          const name = feature.properties.NAME_1;
+                          const country = feature.properties.COUNTRY;
+                          if (showVaccination) {
+                            const count = feature.properties.vaccination_count || 0;
+                            layer.bindPopup(
+                              `<div style="font-size:12px"><strong>${name}</strong> (${country})<br/>Vaccination records: ${count}</div>`
+                            );
+                          } else {
+                            layer.bindPopup(
+                              `<div style="font-size:12px"><strong>${name}</strong><br/>${country}</div>`
+                            );
+                          }
                         }}
                       />
                     )}
