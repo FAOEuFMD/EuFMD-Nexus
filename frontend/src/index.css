@@ -656,7 +656,33 @@
   .content-wrapper {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: stretch;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .diagnostic-page {
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+    width: calc(100% + 1rem);
+  }
+
+  @media (min-width: 1280px) {
+    .diagnostic-page {
+      margin-left: -1rem;
+      margin-right: -1rem;
+      width: calc(100% + 2rem);
+    }
+  }
+
+  .diagnostic-page .content-wrapper {
+    flex-wrap: nowrap;
+  }
+
+  @media (max-width: 1100px) {
+    .diagnostic-page .content-wrapper {
+      flex-wrap: wrap;
+    }
   }
 
   .component {
@@ -678,9 +704,25 @@
     box-sizing: border-box;
     border: 15px solid #15736d;
     height: 50vh;
+    min-height: 22rem;
     padding: 0;
-    overflow: auto;
+    overflow: hidden;
     position: relative;
+  }
+
+  .diagnostic-page #graph-component,
+  .diagnostic-page #map-component {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+    width: calc(50% - 0.25rem);
+  }
+
+  #graph-component {
+    overflow: auto;
+  }
+
+  .diagnostic-map-panel .leaflet-container {
+    z-index: 1;
   }
 
   .graph,
@@ -700,7 +742,18 @@
   }
 
   .graph {
-    transform: scale(0.8);
+    transform: none;
+    width: 100%;
+  }
+
+  .diagnostic-page .graph {
+    align-items: stretch;
+    justify-content: flex-start;
+    padding-right: 0;
+  }
+
+  #graph-component .graph > div {
+    width: 100%;
   }
 
   .legend {
@@ -815,6 +868,18 @@
     #map-component {
       flex: 1 1 100%;
       height: auto;
+    }
+
+    .diagnostic-page #graph-component,
+    .diagnostic-page #map-component {
+      width: 100%;
+    }
+  }
+
+  @media (min-width: 1501px) {
+    .diagnostic-page #graph-component,
+    .diagnostic-page #map-component {
+      height: 52vh;
     }
   }
 

@@ -93,6 +93,12 @@ export const apiService = {
     
     postDiseaseStatus: (data: any) =>
       api.post('/api/rmt/disease-status', data),
+
+    getAdminDiseaseStatus: () =>
+      api.get('/api/rmt/admin/disease-status'),
+
+    saveAdminDiseaseStatus: (data: any[]) =>
+      api.post('/api/rmt/admin/disease-status', data),
     
     getMitigationMeasures: () =>
       api.get('/api/rmt/mitigation-measures'),
@@ -105,6 +111,12 @@ export const apiService = {
     
     postMitigationMeasures: (data: any) =>
       api.post('/api/rmt/mitigation-measures', data),
+
+    getAdminMitigationMeasures: () =>
+      api.get('/api/rmt/admin/mitigation-measures'),
+
+    saveAdminMitigationMeasures: (data: any[]) =>
+      api.post('/api/rmt/admin/mitigation-measures', data),
     
     getConnections: () =>
       api.get('/api/rmt-data/connections'),
