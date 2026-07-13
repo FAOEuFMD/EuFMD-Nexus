@@ -1,4 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  getMaxRiskScore,
+  getRiskBgClass,
+  getRiskTextClass,
+  normalizeRiskScore,
+} from '../utils/riskScoreColors';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { calculateRiskScores, Connections } from '../utils/calculateRiskScores';
@@ -89,6 +95,8 @@ const RMTResults: React.FC = () => {
   const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
   const [sourceCountries, setSourceCountries] = useState<Country[]>([]);
   const [receiverCountry, setReceiverCountry] = useState<string>('');
+  const [receiverCountryInfo, setReceiverCountryInfo] = useState<Country | null>(null);
+  const [receiverIsCustom, setReceiverIsCustom] = useState(false);
   
   // Data for visualization
   const [diseaseStatus, setDiseaseStatus] = useState<Array<{ name_un: string; [key: string]: any }>>([]);
@@ -117,7 +125,9 @@ const RMTResults: React.FC = () => {
         const { 
           connections, 
           selectedCountries, 
+          receiverCountry: stateReceiverCountry,
           receiverCountryName,
+          receiverIsCustom: stateReceiverIsCustom,
           diseaseStatusData: stateDisease,
           mitigationMeasuresData: stateMitigation,
           sourceCountriesData
@@ -129,7 +139,11 @@ const RMTResults: React.FC = () => {
           return;
         }
         
-        setReceiverCountry(receiverCountryName || 'Unknown Country');
+        setReceiverCountry(receiverCountryName || stateReceiverCountry?.name_un || 'Unknown Country');
+        setReceiverIsCustom(Boolean(stateReceiverIsCustom));
+        if (!stateReceiverIsCustom && stateReceiverCountry?.iso3) {
+          setReceiverCountryInfo(stateReceiverCountry);
+        }
         
         // Initialize data structures
         let diseaseStatusData: Record<number, DiseaseStatus> = {};
@@ -187,6 +201,14 @@ const RMTResults: React.FC = () => {
               };
             }
           });
+        }
+
+        if (!stateReceiverIsCustom && !stateReceiverCountry?.iso3 && receiverCountryName) {
+          const allCountriesResponse = await apiService.countries.getAll();
+          const match = allCountriesResponse.data?.find(
+            (c: Country) => c.name_un === receiverCountryName,
+          );
+          if (match) setReceiverCountryInfo(match);
         }
         
         setSourceCountries(countriesData);
@@ -336,18 +358,8 @@ const RMTResults: React.FC = () => {
   }, [location, diseases, pathwaysData]);
   
   // Format risk scores for the map visualization
-  const formatRiskScoresForMap = () => {
+  const formatRiskScoresForMap = (maxRiskScore: number) => {
     const countryRiskScores: Record<string, Record<string, number>> = {};
-    
-    // Find maximum risk score for normalization
-    let maxRiskScore = 0;
-    riskScores.forEach(score => {
-      if (score.riskScore > maxRiskScore) {
-        maxRiskScore = score.riskScore;
-      }
-    });
-    
-    // Use a safe normalization factor (ensure we don't divide by zero)
     const normalizationFactor = maxRiskScore > 0 ? maxRiskScore / 3 : 1;
     
     // Normalize and collect scores
@@ -355,7 +367,6 @@ const RMTResults: React.FC = () => {
       if (!countryRiskScores[score.sourceCountry]) {
         countryRiskScores[score.sourceCountry] = {};
       }
-      // Normalize score to 0-3 range
       const normalizedScore = Math.min(3, score.riskScore / normalizationFactor);
       countryRiskScores[score.sourceCountry][score.disease] = normalizedScore;
     });
@@ -397,23 +408,19 @@ const RMTResults: React.FC = () => {
       return {
         id: country.id,
         name_un: country.name_un,
+        iso3: country.iso3,
         riskScores
       };
     });
   };
 
-  // Get color based on risk level
-  const getRiskColor = (score: number): string => {
-    if (score === 0) return 'bg-green-500'; // Low risk
-    if (score <= 1) return 'bg-yellow-500'; // Low-medium risk
-    if (score <= 2) return 'bg-orange-500'; // Medium-high risk
-    return 'bg-red-500'; // High risk
+  // Get color based on normalized risk level (same scale as map)
+  const getCellColor = (rawScore: number, maxRiskScore: number): string => {
+    return getRiskBgClass(normalizeRiskScore(rawScore, maxRiskScore));
   };
 
-  // Get text color for risk score cells
-  const getTextColor = (score: number): string => {
-    if (score > 2) return 'text-white'; // White text on dark backgrounds
-    return 'text-gray-900'; // Dark text on light backgrounds
+  const getCellTextColor = (rawScore: number, maxRiskScore: number): string => {
+    return getRiskTextClass(normalizeRiskScore(rawScore, maxRiskScore));
   };
 
   // Handle going back to previous step (Connections page)
@@ -422,6 +429,10 @@ const RMTResults: React.FC = () => {
       connections, 
       selectedCountries, 
       receiverCountryName,
+      receiverIsCustom,
+      receiverMode,
+      customReceiverName,
+      receiverCountry: stateReceiverCountry,
       diseaseStatusData,
       mitigationMeasuresData,
       sourceCountriesData
@@ -433,6 +444,10 @@ const RMTResults: React.FC = () => {
         connections,
         selectedCountries,
         receiverCountryName,
+        receiverIsCustom,
+        receiverMode,
+        customReceiverName,
+        receiverCountry: stateReceiverCountry,
         diseaseStatusData,
         mitigationMeasuresData,
         sourceCountriesData,
@@ -443,10 +458,8 @@ const RMTResults: React.FC = () => {
 
   // Handle starting a new assessment (clear all stored data)
   const handleStartNewAssessment = () => {
-    // Clear stored RMT state
     sessionStorage.removeItem('rmtState');
-    // Navigate to the main RMT page
-    navigate('/rmt');
+    navigate('/rmt/risk-scores', { replace: true });
   };
 
   if (loading) {
@@ -460,7 +473,8 @@ const RMTResults: React.FC = () => {
     );
   }
 
-  const mapData = formatRiskScoresForMap();
+  const maxRiskScore = getMaxRiskScore(riskScores);
+  const mapData = formatRiskScoresForMap(maxRiskScore);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -484,7 +498,10 @@ const RMTResults: React.FC = () => {
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Risk Map Visualization</h3>
         <p className="text-gray-600 mb-4">
-          This map shows the overall risk level for each source country relative to {receiverCountry}. Countries with a similar level of risk are colored with the same color, on a scale from green (lower risk score) to red (higher risk score). The target country is highlighted in gray.
+          This map shows the overall risk level for each source country relative to {receiverCountry}. Countries with a similar level of risk are colored with the same color, on a scale from green (lower risk score) to red (higher risk score).
+          {receiverIsCustom
+            ? ' No target area is shown on the map because a custom evaluation name was used.'
+            : ' The target country is highlighted in gray.'}
         </p>
         <div className="mb-3">
           <label className="mr-2 font-medium text-sm sm:text-base">Select Disease: </label>
@@ -509,6 +526,7 @@ const RMTResults: React.FC = () => {
         <RiskScoreMap 
           countryData={mapData}
           targetCountryName={receiverCountry}
+          targetCountryIso3={receiverIsCustom ? undefined : receiverCountryInfo?.iso3}
           selectedDisease={selectedDisease}
         />
       </div>
@@ -519,10 +537,10 @@ const RMTResults: React.FC = () => {
         <p className="text-gray-600 mb-4">
           This table presents the risk scores for each disease across all source countries. Higher scores indicate a higher risk of entry of the pathogen. The scores should be used to compare the risk of entry of a pathogen among source countries, but should not be compared among different diseases.
         </p>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse rmt-table min-w-[600px]">
+        <div className="rmt-table-container rmt-table-scroll-y">
+          <table className="w-full rmt-table min-w-[600px]">
             <thead>
-              <tr className="bg-[#15736d] text-white">
+              <tr>
                 <th className="px-4 py-2 text-left">Source Country</th>
                 {diseases.map(disease => (
                   <th key={disease} className="px-4 py-2 text-center">{disease}</th>
@@ -543,13 +561,14 @@ const RMTResults: React.FC = () => {
                     <td className="px-4 py-2 font-medium">{country.name_un}</td>
                     {diseases.map(disease => {
                       const score = countryScores[disease] || 0;
+                      const displayScore = Math.round(score);
                       return (
                         <td 
                           key={`${country.id}-${disease}`} 
                           className="px-4 py-2 text-center"
                         >
-                          <span className={`inline-block w-8 h-8 rounded-full ${getRiskColor(score)} ${getTextColor(score)} text-center leading-8`}>
-                            {score}
+                          <span className={`inline-block w-8 h-8 rounded-full ${getCellColor(score, maxRiskScore)} ${getCellTextColor(score, maxRiskScore)} text-center leading-8 font-semibold`}>
+                            {displayScore}
                           </span>
                         </td>
                       );
@@ -569,13 +588,9 @@ const RMTResults: React.FC = () => {
           This heatmap shows the disease status for each disease across all source countries.
           Darker colors indicate higher disease prevalence.
         </p>
-        <div className="flex justify-center">
-          <div className="w-full">
-            <SimpleHeatmap 
-              diseaseStatusData={diseaseStatus} 
-            />
-          </div>
-        </div>
+        <SimpleHeatmap 
+          diseaseStatusData={diseaseStatus} 
+        />
       </div>
 
       {/* Pathway Effectiveness Radar */}

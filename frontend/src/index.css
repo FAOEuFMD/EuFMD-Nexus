@@ -332,6 +332,48 @@
     flex-shrink: 0;
   }
   
+  input[type="radio"].rmt-radio {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    border: 2px solid #9ca3af;
+    border-radius: 50%;
+    background-color: #ffffff;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+    vertical-align: middle;
+  }
+
+  input[type="radio"].rmt-radio:checked {
+    border-color: #15736d;
+    background-color: #ffffff;
+  }
+
+  input[type="radio"].rmt-radio:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background-color: #15736d;
+    transform: translate(-50%, -50%);
+  }
+
+  input[type="radio"].rmt-radio:focus-visible {
+    outline: 2px solid #15736d;
+    outline-offset: 2px;
+  }
+
+  input[type="radio"].rmt-radio:hover {
+    border-color: #15736d;
+  }
+
   /* RMT table styling */
   .rmt-table {
     width: 100%;
@@ -448,6 +490,25 @@
     border-radius: 0.5rem;
     border: 1px solid #e2e8f0;
     max-width: 100%;
+  }
+
+  .rmt-table-scroll-y {
+    max-height: min(70vh, 640px);
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+
+  .rmt-table-scroll-y .rmt-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #15736d;
+    color: white;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  .rmt-table-scroll-y .rmt-table {
+    overflow: visible;
   }
 
   @media (max-width: 767px) {
@@ -917,7 +978,8 @@
   }
 
   /* Force background colors for all risk color classes */
-  .bg-green-500, .bg-yellow-500, .bg-orange-500, .bg-red-500 {
+  .bg-green-500, .bg-yellow-500, .bg-orange-500, .bg-red-500,
+  .bg-\[\#4CAF50\], .bg-\[\#FFEB3B\], .bg-\[\#FF9800\], .bg-\[\#F44336\] {
     print-color-adjust: exact !important;
   }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 interface SimpleBarChartProps {
   pathwayScores: Array<{
@@ -24,9 +24,101 @@ interface SimpleBarChartProps {
   }>;
 }
 
+const DISEASES = ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'] as const;
+
+const pathwayConfig = {
+  airborne: { color: '#8DD3C7', label: 'Airborne' },
+  vectorborne: { color: '#FFFFB3', label: 'Vector-borne' },
+  wildAnimals: { color: '#BEBADA', label: 'Wild Animals' },
+  animalProduct: { color: '#FB8072', label: 'Animal Product' },
+  liveAnimal: { color: '#80B1D3', label: 'Live Animal' },
+  fomite: { color: '#FDB462', label: 'Fomite' },
+} as const;
+
+const pathwayKeys = Object.keys(pathwayConfig) as Array<keyof typeof pathwayConfig>;
+
+const PLOT_HEIGHT = 220;
+const BAR_WIDTH = 42;
+const BAR_GAP = 28;
+const MARGIN = { top: 20, right: 130, bottom: 72, left: 52 };
+
+const formatScore = (value: number): string => {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+};
+
+const niceAxisMax = (maxValue: number): number => {
+  if (maxValue <= 0) return 5;
+  const padded = maxValue * 1.05;
+  const magnitude = 10 ** Math.floor(Math.log10(padded));
+  const normalized = padded / magnitude;
+  const niceUnit = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return niceUnit * magnitude;
+};
+
+const buildTicks = (axisMax: number, tickCount = 5): number[] => {
+  const step = axisMax / tickCount;
+  const ticks: number[] = [];
+  for (let value = 0; value <= axisMax + 0.0001; value += step) {
+    ticks.push(Math.round(value * 10) / 10);
+  }
+  return ticks;
+};
+
+const wrapLabel = (text: string, maxCharsPerLine = 12): string[] => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      return;
+    }
+    if (current) lines.push(current);
+    current = word.length > maxCharsPerLine ? `${word.slice(0, maxCharsPerLine - 1)}…` : word;
+  });
+
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines.slice(0, 3) : [text];
+};
+
 const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
-  const [selectedDisease, setSelectedDisease] = useState('FMD');
-  const diseases = ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'];
+  const [selectedDisease, setSelectedDisease] = useState<string>('FMD');
+
+  const chartData = useMemo(() => {
+    return pathwayScores.map((country) => {
+      const scores = country.diseaseScores?.[selectedDisease] || country.scores;
+      const pathways = pathwayKeys.map((pathway) => ({
+        pathway,
+        value: scores[pathway] || 0,
+        color: pathwayConfig[pathway].color,
+        label: pathwayConfig[pathway].label,
+      }));
+      const total = pathways.reduce((sum, item) => sum + item.value, 0);
+      return { country: country.name_un, pathways, total };
+    });
+  }, [pathwayScores, selectedDisease]);
+
+  const axisMax = useMemo(() => {
+    const maxTotal = Math.max(...chartData.map((item) => item.total), 0);
+    return niceAxisMax(maxTotal);
+  }, [chartData]);
+
+  const yTicks = useMemo(() => buildTicks(axisMax), [axisMax]);
+
+  const plotWidth = Math.max(
+    chartData.length * (BAR_WIDTH + BAR_GAP) + BAR_GAP,
+    240,
+  );
+  const svgWidth = plotWidth + MARGIN.left + MARGIN.right;
+  const svgHeight = PLOT_HEIGHT + MARGIN.top + MARGIN.bottom;
+
+  const valueToY = (value: number) =>
+    MARGIN.top + PLOT_HEIGHT - (value / axisMax) * PLOT_HEIGHT;
+
+  const segmentHeight = (value: number) => (value / axisMax) * PLOT_HEIGHT;
 
   if (!pathwayScores || pathwayScores.length === 0) {
     return (
@@ -38,70 +130,19 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
     );
   }
 
-  // Pathway configuration with original Nivo colors
-  const pathwayConfig = {
-    airborne: { color: '#8DD3C7', label: 'Airborne' },
-    vectorborne: { color: '#FFFFB3', label: 'Vector-borne' },
-    wildAnimals: { color: '#BEBADA', label: 'Wild Animals' },
-    animalProduct: { color: '#FB8072', label: 'Animal Product' },
-    liveAnimal: { color: '#80B1D3', label: 'Live Animal' },
-    fomite: { color: '#FDB462', label: 'Fomite' }
-  };
-
-  const pathwayKeys = Object.keys(pathwayConfig) as Array<keyof typeof pathwayConfig>;
-
-  // Get data for selected disease
-  const getChartData = () => {
-    return pathwayScores.map(country => {
-      const scores = country.diseaseScores?.[selectedDisease] || country.scores;
-      
-      return {
-        country: country.name_un,
-        pathways: pathwayKeys.map(pathway => ({
-          pathway,
-          value: scores[pathway] || 0,
-          color: pathwayConfig[pathway].color,
-          label: pathwayConfig[pathway].label
-        }))
-      };
-    });
-  };
-
-  const chartData = getChartData();
-  
-  // Calculate max total height for scaling
-  const maxTotal = Math.max(...chartData.map(item => 
-    item.pathways.reduce((sum, p) => sum + p.value, 0)
-  ));
-  
-  // Max height for bars in pixels - adjusted to fit within container
-  // Container is h-96 (384px) minus top/bottom padding (160px) minus space for country labels and axis (40px)
-  const maxBarHeight = 184;
-
-  // Y-axis tick values
-  const yAxisTicks = [];
-  const tickInterval = Math.max(1, Math.ceil(maxTotal / 5)); // Ensure minimum interval of 1
-  const safeMaxTotal = Math.max(1, maxTotal); // Ensure minimum total of 1
-  
-  for (let i = 0; i <= safeMaxTotal; i += tickInterval) {
-    yAxisTicks.push(i);
-    // Safety break to prevent infinite loops
-    if (yAxisTicks.length > 10) break;
-  }
-
   return (
     <div className="w-full rmt-step mb-6">
-      {/* Header with disease selector (matching original) */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
         <h3 className="text-lg font-semibold">Risk Pathway Scores</h3>
-        <div className="flex space-x-2">
-          {diseases.map(disease => (
+        <div className="flex flex-wrap gap-2">
+          {DISEASES.map((disease) => (
             <button
               key={disease}
+              type="button"
               onClick={() => setSelectedDisease(disease)}
               className={`px-3 py-1 rounded text-sm ${
-                selectedDisease === disease 
-                  ? 'bg-[#15736d] text-white' 
+                selectedDisease === disease
+                  ? 'bg-[#15736d] text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
@@ -111,148 +152,162 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ pathwayScores }) => {
         </div>
       </div>
 
-      {/* Chart container with proper containment and responsive height */}
-      <div className="h-96 relative bg-white rounded border border-gray-200 overflow-hidden max-w-full">
-        <div className="absolute inset-0 overflow-hidden" style={{ padding: '60px 60px 100px 60px' }}>
-        
-          {/* Y-axis */}
-          <div className="absolute left-0 top-16 bottom-20 flex flex-col justify-between items-end pr-3" style={{ width: '55px' }}>
-            {yAxisTicks.reverse().map((tick, index) => (
-              <div key={index} className="text-xs text-gray-600 relative">
-                <span>{tick.toFixed(1)}</span>
-                <div className="absolute left-full top-1/2 w-2 h-px bg-gray-300" style={{ transform: 'translateY(-50%)' }}></div>
-              </div>
-            ))}
-          </div>
+      <div className="bg-white rounded border border-gray-200 overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+          className="w-full min-w-[640px]"
+          role="img"
+          aria-label={`Risk pathway scores for ${selectedDisease}`}
+        >
+          {/* Y-axis line */}
+          <line
+            x1={MARGIN.left}
+            y1={MARGIN.top}
+            x2={MARGIN.left}
+            y2={MARGIN.top + PLOT_HEIGHT}
+            stroke="#9CA3AF"
+            strokeWidth={1}
+          />
+          {/* X-axis line */}
+          <line
+            x1={MARGIN.left}
+            y1={MARGIN.top + PLOT_HEIGHT}
+            x2={MARGIN.left + plotWidth}
+            y2={MARGIN.top + PLOT_HEIGHT}
+            stroke="#9CA3AF"
+            strokeWidth={1}
+          />
 
-          {/* Chart area */}
-          <div className="ml-12 h-full flex items-end justify-around relative border-l border-b border-gray-300 overflow-hidden lg:mr-32">
-            
-            {/* Horizontal grid lines */}
-            {yAxisTicks.map((tick, index) => (
-              <div
-                key={index}
-                className="absolute left-0 right-0 border-t border-gray-200"
-                style={{ bottom: `${(tick / safeMaxTotal) * 100}%` }}
-              ></div>
-            ))}
-
-            {chartData.map((countryData, index) => {
-              const totalHeight = countryData.pathways.reduce((sum, p) => sum + p.value, 0);
-              const scaledHeight = safeMaxTotal > 0 ? (totalHeight / safeMaxTotal) * maxBarHeight : 0;
-              
-              return (
-                <div key={index} className="flex flex-col items-center justify-end" style={{ width: '60px', height: '100%' }}>
-                  {/* Stacked bar positioned directly on the bottom border */}
-                  <div 
-                    className="relative flex flex-col-reverse border border-gray-400"
-                    style={{ 
-                      height: `${Math.max(scaledHeight, 1)}px`,
-                      width: '42px',
-                      minHeight: '1px',
-                      maxHeight: `${maxBarHeight}px`
-                    }}
-                  >
-                    {countryData.pathways.map((pathway, pathwayIndex) => {
-                      if (pathway.value === 0) return null;
-                      
-                      const segmentHeight = safeMaxTotal > 0 
-                        ? (pathway.value / safeMaxTotal) * maxBarHeight 
-                        : 0;
-                      
-                      // Create darker border color similar to Nivo
-                      const borderColor = pathway.color === '#FFFFB3' ? '#E6E68A' : 
-                                        pathway.color === '#8DD3C7' ? '#7AB8A8' :
-                                        pathway.color === '#BEBADA' ? '#A5A1C1' :
-                                        pathway.color === '#FB8072' ? '#E2675F' :
-                                        pathway.color === '#80B1D3' ? '#6D9EBA' :
-                                        '#E4A34F';
-                      
-                      return (
-                        <div
-                          key={pathwayIndex}
-                          className="relative flex items-center justify-center text-xs font-medium border-t"
-                          style={{
-                            backgroundColor: pathway.color,
-                            borderColor: borderColor,
-                            height: `${Math.max(segmentHeight, 12)}px`,
-                            minHeight: '12px',
-                            color: pathway.color === '#FFFFB3' ? '#333' : '#000'
-                          }}
-                          title={`${pathway.label}: ${pathway.value.toFixed(1)}`}
-                        >
-                          {pathway.value > 0 && (
-                            <span className="text-xs font-medium">
-                              {pathway.value.toFixed(1)}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Country labels positioned below the chart area */}
-          <div className="ml-12 flex justify-around relative lg:mr-32" style={{ height: '80px', paddingTop: '15px' }}>
-            {chartData.map((countryData, index) => (
-              <div key={index} className="flex justify-center" style={{ width: '60px' }}>
-                <div 
-                  className="text-center leading-tight"
-                  style={{ 
-                    fontSize: '10px',
-                    width: 'max-content',
-                    maxWidth: '55px',
-                    color: '#374151',
-                    lineHeight: '1.2'
-                  }}
+          {/* Grid lines and Y-axis labels share the same scale */}
+          {yTicks.map((tick) => {
+            const y = valueToY(tick);
+            return (
+              <g key={tick}>
+                <line
+                  x1={MARGIN.left}
+                  y1={y}
+                  x2={MARGIN.left + plotWidth}
+                  y2={y}
+                  stroke="#E5E7EB"
+                  strokeWidth={1}
+                />
+                <text
+                  x={MARGIN.left - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                  className="text-xs font-bold fill-gray-700"
                 >
-                  {countryData.country}
-                </div>
-              </div>
-            ))}
-          </div>
+                  {formatScore(tick)}
+                </text>
+              </g>
+            );
+          })}
 
-          {/* X-axis label */}
-          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-sm text-gray-700 font-medium">
+          {chartData.map((countryData, countryIndex) => {
+            const barX =
+              MARGIN.left + BAR_GAP + countryIndex * (BAR_WIDTH + BAR_GAP);
+            let cumulative = 0;
+
+            return (
+              <g key={countryData.country}>
+                {countryData.pathways.map((pathway) => {
+                  if (pathway.value <= 0) return null;
+
+                  const height = segmentHeight(pathway.value);
+                  const y = valueToY(cumulative + pathway.value);
+                  cumulative += pathway.value;
+
+                  const showLabel = height >= 16;
+
+                  return (
+                    <g key={pathway.pathway}>
+                      <rect
+                        x={barX}
+                        y={y}
+                        width={BAR_WIDTH}
+                        height={height}
+                        fill={pathway.color}
+                        stroke="#9CA3AF"
+                        strokeWidth={0.5}
+                      >
+                        <title>{`${pathway.label}: ${formatScore(pathway.value)}`}</title>
+                      </rect>
+                      {showLabel && (
+                        <text
+                          x={barX + BAR_WIDTH / 2}
+                          y={y + height / 2 + 4}
+                          textAnchor="middle"
+                          className="text-[10px] font-bold fill-gray-900"
+                        >
+                          {formatScore(pathway.value)}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {countryData.total > 0 && (
+                  <text
+                    x={barX + BAR_WIDTH / 2}
+                    y={valueToY(countryData.total) - 6}
+                    textAnchor="middle"
+                    className="text-[10px] font-semibold fill-gray-700"
+                  >
+                    {formatScore(countryData.total)}
+                  </text>
+                )}
+
+                {wrapLabel(countryData.country).map((line, lineIndex) => (
+                  <text
+                    key={`${countryData.country}-${lineIndex}`}
+                    x={barX + BAR_WIDTH / 2}
+                    y={MARGIN.top + PLOT_HEIGHT + 18 + lineIndex * 12}
+                    textAnchor="middle"
+                    className="text-[10px] font-bold fill-gray-700"
+                  >
+                    {line}
+                  </text>
+                ))}
+              </g>
+            );
+          })}
+
+          <text
+            x={MARGIN.left + plotWidth / 2}
+            y={svgHeight - 10}
+            textAnchor="middle"
+            className="text-sm font-bold fill-gray-700"
+          >
             Country
-          </div>
+          </text>
 
-          {/* Legend - positioned like original Nivo chart with responsive behavior */}
-          <div className="absolute right-2 top-16 bottom-20 hidden lg:flex flex-col justify-center" style={{ width: '110px' }}>
-            <div className="space-y-2">
-              {pathwayKeys.map(pathway => (
-                <div key={pathway} className="flex items-center text-xs">
-                  <div
-                    className="w-5 h-5 border border-gray-400 mr-2 flex-shrink-0"
-                    style={{ backgroundColor: pathwayConfig[pathway].color }}
-                  ></div>
-                  <span className="text-gray-700 opacity-85 hover:opacity-100 transition-opacity">
-                    {pathwayConfig[pathway].label}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+          {/* Legend */}
+          {pathwayKeys.map((pathway, index) => (
+            <g
+              key={pathway}
+              transform={`translate(${MARGIN.left + plotWidth + 12}, ${MARGIN.top + index * 24})`}
+            >
+              <rect
+                x={0}
+                y={0}
+                width={14}
+                height={14}
+                fill={pathwayConfig[pathway].color}
+                stroke="#9CA3AF"
+                strokeWidth={0.5}
+              />
+              <text x={20} y={11} className="text-[11px] fill-gray-700">
+                {pathwayConfig[pathway].label}
+              </text>
+            </g>
+          ))}
+        </svg>
       </div>
-      
-      {/* Mobile legend below chart for smaller screens */}
-      <div className="lg:hidden mt-4 flex flex-wrap justify-center gap-3">
-        {pathwayKeys.map(pathway => (
-          <div key={pathway} className="flex items-center text-xs">
-            <div
-              className="w-4 h-4 border border-gray-400 mr-1 flex-shrink-0"
-              style={{ backgroundColor: pathwayConfig[pathway].color }}
-            ></div>
-            <span className="text-gray-700">
-              {pathwayConfig[pathway].label}
-            </span>
-          </div>
-        ))}
-      </div>
+
+      <p className="mt-3 text-xs text-gray-500">
+        Stacked segments show each pathway&apos;s contribution to the total risk score for {selectedDisease}.
+        Segment heights use the same scale as the Y-axis, so they add up to the total shown above each bar.
+      </p>
     </div>
   );
 };

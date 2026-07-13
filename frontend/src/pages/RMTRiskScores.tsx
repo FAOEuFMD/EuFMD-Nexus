@@ -73,8 +73,18 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   
   // Country selection state
   const [countries, setCountries] = useState<Country[]>([]);
+  const [receiverMode, setReceiverMode] = useState<'country' | 'custom'>('country');
   const [receiverCountry, setReceiverCountry] = useState<Country | null>(null);
+  const [customReceiverName, setCustomReceiverName] = useState('');
   const [sourceCountries, setSourceCountries] = useState<Country[]>([]);
+
+  const receiverDisplayName = receiverMode === 'custom'
+    ? customReceiverName.trim()
+    : receiverCountry?.name_un || '';
+  const hasReceiver = receiverMode === 'custom'
+    ? customReceiverName.trim().length > 0
+    : receiverCountry !== null;
+  const receiverIsCustom = receiverMode === 'custom';
   const [selectedSourceCountry, setSelectedSourceCountry] = useState<string>('');
   
   // Carousel/step state - initialize from navigation state if available
@@ -275,7 +285,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       try {
         const rmtState = JSON.parse(savedState);
         setCurrentStep(rmtState.currentStep || 0);
+        setReceiverMode(rmtState.receiverMode || 'country');
         setReceiverCountry(rmtState.receiverCountry);
+        setCustomReceiverName(rmtState.customReceiverName || '');
         setSourceCountries(rmtState.sourceCountries || []);
         setDiseaseStatus(rmtState.diseaseStatus || []);
         setMitigationMeasures(rmtState.mitigationMeasures || []);
@@ -289,6 +301,15 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     // If navigation state has currentStep, use that (for coming back from results)
     else if (navigationState.currentStep !== undefined) {
       setCurrentStep(navigationState.currentStep);
+      if (navigationState.receiverMode) {
+        setReceiverMode(navigationState.receiverMode);
+      }
+      if (navigationState.customReceiverName) {
+        setCustomReceiverName(navigationState.customReceiverName);
+      }
+      if (navigationState.receiverCountry) {
+        setReceiverCountry(navigationState.receiverCountry);
+      }
     }
   }, [navigationState]);
 
@@ -337,16 +358,25 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     }
   };
 
-  const handleReceiverCountryChange = (countryName: string) => {
-    const country = countries.find(c => c.name_un === countryName);
-    setReceiverCountry(country || null);
-    
-    // Clear source countries and data when receiver country changes
+  const clearAssessmentData = () => {
     setSourceCountries([]);
     setSelectedSourceCountry('');
     setDiseaseStatus([]);
     setMitigationMeasures([]);
     setConnections([]);
+  };
+
+  const handleReceiverModeChange = (mode: 'country' | 'custom') => {
+    setReceiverMode(mode);
+    setReceiverCountry(null);
+    setCustomReceiverName('');
+    clearAssessmentData();
+  };
+
+  const handleReceiverCountryChange = (countryName: string) => {
+    const country = countries.find(c => c.name_un === countryName);
+    setReceiverCountry(country || null);
+    clearAssessmentData();
   };
 
   const handleSourceCountrySelection = async (value: string) => {
@@ -645,7 +675,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
   const validateStep = (stepIndex: number): boolean => {
     switch (stepIndex) {
       case 0: // Disease Status
-        return receiverCountry !== null && sourceCountries.length > 0 && diseaseStatus.every(row => 
+        return hasReceiver && sourceCountries.length > 0 && diseaseStatus.every(row => 
           diseases.every(disease => row[disease as keyof typeof row] !== null)
         );
       case 1: // Mitigation Measures
@@ -683,7 +713,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     // Clear sessionStorage
     sessionStorage.removeItem('rmtState');
     setCurrentStep(0);
+    setReceiverMode('country');
     setReceiverCountry(null);
+    setCustomReceiverName('');
     setSourceCountries([]);
     setSelectedSourceCountry('');
     setDiseaseStatus([]);
@@ -710,7 +742,10 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       // Save current state to sessionStorage before navigating
       const rmtState = {
         currentStep,
+        receiverMode,
         receiverCountry,
+        customReceiverName,
+        receiverIsCustom,
         sourceCountries,
         diseaseStatus,
         mitigationMeasures,
@@ -749,9 +784,13 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
       // Navigate to results page with all required data
       navigate('/rmt/results', {
         state: {
-          connections: connections, // Pass the entire connections array per country
+          connections: connections,
           selectedCountries: sourceCountries.map(country => country.id),
-          receiverCountryName: receiverCountry?.name_un,
+          receiverCountry: receiverIsCustom ? null : receiverCountry,
+          receiverCountryName: receiverDisplayName,
+          receiverIsCustom,
+          receiverMode,
+          customReceiverName,
           diseaseStatusData,
           mitigationMeasuresData,
           sourceCountriesData: sourceCountries
@@ -906,52 +945,91 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
           <div className="space-y-6">
             {/* Country Selection Form */}
             <div className="rmt-step">
-              <div className="flex flex-col lg:flex-row gap-4 justify-evenly mb-0">
-                {/* Receiver country select - Left side */}
-                <div className="flex-1 min-w-0">
-                  <label htmlFor="receiverCountry" className="block text-sm font-medium text-gray-700 mb-2">
-                    My country is:
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-2 mb-0">
+                {/* Receiver country - label row */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-gray-700">
+                  <span className="shrink-0">My country is:</span>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer font-normal">
+                    <input
+                      type="radio"
+                      name="receiverMode"
+                      checked={receiverMode === 'country'}
+                      onChange={() => handleReceiverModeChange('country')}
+                      className="rmt-radio"
+                    />
+                    Select from list
                   </label>
-                  <select
-                    id="receiverCountry"
-                    value={receiverCountry?.name_un || ''}
-                    onChange={(e) => handleReceiverCountryChange(e.target.value)}
-                    className="block w-full mx-auto mt-1 p-2 border focus:border-[#15736d] rounded disabled:text-gray-400 bg-white mb-1 invalid:text-gray-400"
-                  >
-                    <option value="">Type name of the country</option>
-                    {countries.map(country => (
-                      <option key={country.id} value={country.name_un}>
-                        {country.name_un}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer font-normal">
+                    <input
+                      type="radio"
+                      name="receiverMode"
+                      checked={receiverMode === 'custom'}
+                      onChange={() => handleReceiverModeChange('custom')}
+                      className="rmt-radio"
+                    />
+                    Enter custom name
+                  </label>
                 </div>
 
-                {/* Source country select - Right side */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-700 mb-2">
-                    I want to evaluate risks with:
-                  </div>
-                  <div className="flex gap-2 justify-evenly">
+                {/* Source country - label row */}
+                <div className="text-sm font-medium text-gray-700 lg:pt-0">
+                  I want to evaluate risks with:
+                </div>
+
+                {/* Receiver country - input row */}
+                <div className="min-w-0">
+                  {receiverMode === 'country' ? (
                     <select
-                      value={selectedSourceCountry}
-                      onChange={(e) => handleSourceCountrySelection(e.target.value)}
-                      className="block w-full mx-auto mt-1 p-2 border focus:border-[#15736d] rounded bg-white mb-1"
-                      disabled={!receiverCountry}
+                      id="receiverCountry"
+                      value={receiverCountry?.name_un || ''}
+                      onChange={(e) => handleReceiverCountryChange(e.target.value)}
+                      className="block w-full p-2 border focus:border-[#15736d] rounded disabled:text-gray-400 bg-white invalid:text-gray-400"
                     >
                       <option value="">Type name of the country</option>
-                      <option value="allEUNeighbourCountries">
-                        Select all European neighbouring countries
-                      </option>
-                      {countries
-                        .filter(country => country.id !== receiverCountry?.id)
-                        .map(country => (
-                          <option key={country.id} value={country.name_un}>
-                            {country.name_un}
-                          </option>
-                        ))}
+                      {countries.map(country => (
+                        <option key={country.id} value={country.name_un}>
+                          {country.name_un}
+                        </option>
+                      ))}
                     </select>
-                  </div>
+                  ) : (
+                    <input
+                      id="customReceiverName"
+                      type="text"
+                      value={customReceiverName}
+                      onChange={(e) => setCustomReceiverName(e.target.value)}
+                      placeholder="e.g. Western Balkans, hypothetical region, farm site"
+                      maxLength={120}
+                      className="block w-full p-2 border focus:border-[#15736d] rounded bg-white"
+                    />
+                  )}
+                  {receiverMode === 'custom' && (
+                    <p className="text-xs text-gray-500 mt-1 mb-0">
+                      Use this for a region, hypothetical area, or any name not in the country list. The map will show source countries only.
+                    </p>
+                  )}
+                </div>
+
+                {/* Source country - input row */}
+                <div className="min-w-0">
+                  <select
+                    value={selectedSourceCountry}
+                    onChange={(e) => handleSourceCountrySelection(e.target.value)}
+                    className="block w-full p-2 border focus:border-[#15736d] rounded bg-white"
+                    disabled={!hasReceiver}
+                  >
+                    <option value="">Type name of the country</option>
+                    <option value="allEUNeighbourCountries">
+                      Select all European neighbouring countries
+                    </option>
+                    {countries
+                      .filter(country => country.id !== receiverCountry?.id)
+                      .map(country => (
+                        <option key={country.id} value={country.name_un}>
+                          {country.name_un}
+                        </option>
+                      ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -969,7 +1047,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
                 <div className="rmt-grid">
                   {/* Disease Status Table */}
                   <div className="h-full">
-                    <div className="rmt-table-container">
+                    <div className="rmt-table-container rmt-table-scroll-y">
                       <table className="rmt-table">
                         <thead>
                           <tr>
@@ -1290,7 +1368,7 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
               <p className="text-gray-600 mb-4">
                 In this section, define the connection scores (table on the left), using the criteria provided when 
                 clicking on the column headers or cells. To help with this process, various data sources are suggested. 
-                The connection scores will then be combined to assess the strength of the connection between {receiverCountry?.name_un} and 
+                The connection scores will then be combined to assess the strength of the connection between {receiverDisplayName || 'the evaluation target'} and 
                 each source country, through each of the 6 pathways, ranging from no connection (0) to highly connected (3).
               </p>
               
@@ -1504,9 +1582,9 @@ const RMTRiskScores: React.FC = (): React.ReactElement => {
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="text-center mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Risk Monitoring Tool</h1>
-        {receiverCountry && currentStep !== 2 && (
+        {hasReceiver && currentStep !== 2 && (
           <h2 className="text-lg sm:text-xl text-gray-700">
-            Evaluating {receiverCountry.name_un}'s risk with:
+            Evaluating {receiverDisplayName}&apos;s risk with:
           </h2>
         )}
       </div>
