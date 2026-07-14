@@ -951,12 +951,27 @@
   }
 }
 
+/* RMT collapsible sections (Results page Outputs / Inputs) */
+.rmt-collapsible-collapsed {
+  display: none;
+}
+
 /* Print styles for RMT Results page */
 @media print {
   /* Ensure background colors print */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* When exporting/printing, show everything regardless of collapse state */
+  .rmt-collapsible-collapsed {
+    display: block !important;
+  }
+
+  /* Hide screen-only controls (download toolbar, navigation buttons) */
+  .rmt-no-print {
+    display: none !important;
   }
 
   /* Hide non-essential elements */

@@ -101,7 +101,7 @@ const Thrace: React.FC = () => {
   const [earlyRegion, setEarlyRegion] = useState('GR');
   const earlyChartRef = useRef<HTMLDivElement | null>(null);
 
-  // Product metadata (ISO 19115-inspired) view/download
+  // Simple product metadata view/download
   const [showMetadataModal, setShowMetadataModal] = useState(false);
   const [metadataText, setMetadataText] = useState('');
   const [metadataLoading, setMetadataLoading] = useState(false);
@@ -1189,7 +1189,7 @@ const Thrace: React.FC = () => {
               </button>
             </div>
             <p className="text-sm text-gray-600 mb-3">
-              ISO 19115-inspired product metadata (custodian, contact, access, extent, lineage).
+              Simple product metadata (custodian, contact, access, extent, lineage).
             </p>
 
             {metadataLoading && <div className="text-gray-500">Loading…</div>}

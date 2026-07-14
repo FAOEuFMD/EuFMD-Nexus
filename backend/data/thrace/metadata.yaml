@@ -1,7 +1,7 @@
-# THRACE module — lightweight product metadata
-# ISO 19115-inspired (not a full ISO 19139 record). Describes the dataset, the freedom
-# model, its reference configuration, provenance and access. Update product_version and
-# metadata_date when the model or reference data change.
+# THRACE module — simple product metadata
+# A plain, human-readable descriptive record (not a formal metadata standard). Describes the
+# dataset, the freedom model, its reference configuration, provenance and access. Update
+# product_version and metadata_date when the model or reference data change.
 
 identification:
   title: "THRACE — FMD/PPR/LSD/SGP surveillance and freedom-from-disease analysis"
@@ -117,7 +117,7 @@ lineage:
   documentation: docs/Thrace.md
 
 metadata:
-  standard: "ISO 19115 (lightweight profile)"
+  standard: "Simple product metadata (no formal standard)"
   language: "eng"
   metadata_date: "2026-07-14"
   maintainer: "FAO / EuFMD"

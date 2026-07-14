@@ -777,7 +777,7 @@ async def get_freedom_analysis(
 
 @router.get("/metadata")
 async def get_thrace_metadata(current_user: dict = Depends(get_current_user)):
-    """Return the THRACE product metadata (ISO 19115-inspired) as raw YAML.
+    """Return the THRACE simple product metadata as raw YAML.
 
     Served as-is from backend/data/thrace/metadata.yaml so authenticated users can view or
     download it. The frontend displays the text and offers a client-side download.

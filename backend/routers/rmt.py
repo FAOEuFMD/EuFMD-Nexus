@@ -1,11 +1,30 @@
 
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import Response
 from typing import List, Optional, Any, Dict
 from models import Country, DiseaseStatus, MitigationMeasure, DiseaseStatusCreate, MitigationMeasureCreate
 from auth import get_current_user, get_current_user_optional
 from database import db_helper
 
 router = APIRouter(prefix="/api/rmt", tags=["rmt"])
+
+
+@router.get("/metadata")
+async def get_rmt_metadata():
+    """Return the RMT-FAST simple product metadata as raw YAML.
+
+    Public product documentation, served as-is from backend/data/rmt/metadata.yaml so users
+    can view or download it. The frontend displays the text and offers a client-side download.
+    """
+    path = Path(__file__).resolve().parents[1] / "data" / "rmt" / "metadata.yaml"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Metadata file not found")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading metadata: {str(e)}")
+    return Response(content=content, media_type="application/x-yaml")
 
 
 def _require_admin(user: Dict[str, Any]) -> None:

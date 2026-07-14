@@ -118,7 +118,7 @@ Shipped under `backend/data/thrace/` (version-controlled) and loaded once, cache
 | `monthly_pintro.csv` | `year, month, pintro_fmd, pintro_lsd, pintro_spgp, pintro_ppr` (blank `year` = generic) | `monthly_pintro_corrected.csv` |
 | `tot_n_epiunits.csv` | EDSSe denominators: active epiunit counts per country × risk × species group | computed by the base-R runner from the census |
 | `risk_levels.json` | BGR high-risk epiunit IDs; GRC high/low districts; TUR high/low provinces | transcribed from the R script |
-| `metadata.yaml` | Lightweight product metadata (ISO 19115-inspired): custodian, contact, access, extent, lineage | hand-maintained |
+| `metadata.yaml` | Simple product metadata (no formal standard): custodian, contact, access, extent, lineage | hand-maintained |
 
 To regenerate (when the corrected R config changes), with the gitignored `Thrace/New items/THRACE R version/` inputs present:
 

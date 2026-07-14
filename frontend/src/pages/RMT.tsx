@@ -1,8 +1,42 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { apiService } from '../services/api';
 
 const RMT: React.FC = () => {
   const [showPopup, setShowPopup] = useState(false);
+
+  // Simple product metadata view/download
+  const [showMetadataModal, setShowMetadataModal] = useState(false);
+  const [metadataText, setMetadataText] = useState('');
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+
+  const handleMetadataClick = async () => {
+    setShowMetadataModal(true);
+    setMetadataError(null);
+    if (metadataText) return;
+    setMetadataLoading(true);
+    try {
+      const res = await apiService.rmt.getMetadata();
+      setMetadataText(typeof res.data === 'string' ? res.data : String(res.data));
+    } catch (err: any) {
+      setMetadataError(err?.response?.data?.detail || err?.message || 'Error loading metadata');
+    } finally {
+      setMetadataLoading(false);
+    }
+  };
+
+  const handleDownloadMetadata = () => {
+    const blob = new Blob([metadataText], { type: 'application/x-yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rmt_metadata.yaml';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const popupContent = [
     'Foot-and-mouth disease (FMD),',
@@ -14,6 +48,21 @@ const RMT: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="flex justify-end mb-2">
+        <button
+          type="button"
+          onClick={handleMetadataClick}
+          className="inline-flex items-center gap-2 text-sm px-3 py-1.5 border border-[#15736d] text-[#15736d] rounded hover:bg-[#15736d] hover:text-white transition-colors"
+          title="View or download the product metadata (methodology, sources, contact)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          About / Metadata
+        </button>
+      </div>
       <p className="text-lg sm:text-xl font-light text-center mb-6">
         Welcome to the Risk Monitoring Tool for FAST diseases
       </p>
@@ -171,6 +220,55 @@ const RMT: React.FC = () => {
           </button>
         </Link>
       </div>
+
+      {/* Metadata Modal */}
+      {showMetadataModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl w-full mx-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">RMT-FAST — Product metadata</h2>
+              <button
+                className="text-gray-500 hover:text-gray-800 text-2xl leading-none"
+                onClick={() => setShowMetadataModal(false)}
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Simple product metadata (methodology, inputs/outputs, sources, access, contact).
+            </p>
+
+            {metadataLoading && <div className="text-gray-500">Loading…</div>}
+            {metadataError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">
+                {metadataError}
+              </div>
+            )}
+            {!metadataLoading && !metadataError && (
+              <pre className="flex-1 overflow-auto text-xs bg-gray-50 border border-gray-200 rounded p-3 whitespace-pre-wrap">
+                {metadataText}
+              </pre>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                onClick={() => setShowMetadataModal(false)}
+              >
+                Close
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg text-sm text-white bg-[#15736d] hover:bg-[#0f5a54] disabled:opacity-50"
+                onClick={handleDownloadMetadata}
+                disabled={!metadataText}
+              >
+                Download metadata.yaml
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -79,6 +79,9 @@ export const apiService = {
 
   // RMT endpoints
   rmt: {
+    getMetadata: () =>
+      api.get('/api/rmt/metadata', { responseType: 'text', transformResponse: [(d) => d] }),
+
     getEUNeighbours: () =>
       api.get('/api/rmt/eu-neighbours'),
     

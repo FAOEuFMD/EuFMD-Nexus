@@ -1,0 +1,123 @@
+# RMT-FAST module — simple product metadata
+# A plain, human-readable descriptive record (not a formal metadata standard). Describes the
+# tool, its inputs/outputs, the risk-scoring method, provenance and access. Update
+# product_version and metadata_date when the method, pathway-effectiveness matrix or default
+# scores change.
+
+identification:
+  title: "RMT-FAST — Risk Monitoring Tool for FAST diseases"
+  abstract: >
+    A simple, semi-quantitative tool that helps animal health authorities identify and
+    prioritise the risk of introduction of Foot-and-Mouth And Similar Transboundary (FAST)
+    animal diseases into a target country from source countries. For each disease and source
+    country it produces a relative risk score built from the disease burden in the source
+    country, the effectiveness of six transmission pathways, and the strength of connection
+    between the source and target countries. Results support risk ranking, risk monitoring,
+    reporting, and as a prelude to full risk assessment.
+  product_version: "1.0"
+  status: "onGoing"
+  language: "eng"
+  topic_categories:
+    - health
+    - farming
+    - boundaries
+  keywords:
+    - foot-and-mouth disease
+    - PPR
+    - lumpy skin disease
+    - Rift Valley fever
+    - sheep pox and goat pox
+    - FAST diseases
+    - risk assessment
+    - risk ranking
+    - pathways of introduction
+    - transboundary animal disease
+
+responsible_parties:
+  custodian:
+    organisation: "Food and Agriculture Organization of the United Nations (FAO)"
+    unit: "European Commission for the Control of Foot-and-Mouth Disease (EuFMD)"
+  point_of_contact:
+    name: "Pilar Rius"
+    role: "Data Engineer"
+    email: "pilar.riusmunoz@fao.org"
+    organisation: "FAO / EuFMD"
+
+constraints:
+  access:
+    classification: "public"
+    statement: >
+      Public EuFMD product. The methodology, pathway-effectiveness matrix and default scoring
+      criteria are openly available. The web version is under development and provided for
+      testing purposes.
+  use:
+    statement: >
+      Free to use for risk ranking, monitoring and reporting of FAST disease introduction risk.
+      Scores are relative and semi-quantitative: for a given disease they may be compared across
+      pathways and source countries, but scores of different diseases within a source country
+      must not be compared. Please cite FAO/EuFMD.
+
+extent:
+  geographic:
+    note: >
+      Global in scope. Default disease-status and mitigation-measure scores are maintained by
+      EuFMD for countries of the European neighbourhood; users may adjust these or add any
+      source country of interest and provide the target (receiver) country or a custom name.
+  temporal:
+    start: "2020-01-01"
+    end: "ongoing"
+
+content:
+  diseases: [FMD, PPR, LSD, RVF, SPGP]
+  pathways:
+    - airborne
+    - vector-borne
+    - wild animals
+    - animal products
+    - live animals
+    - fomites
+  inputs:
+    - "disease status per source country and disease (0-3); EuFMD default, user-adjustable"
+    - "mitigation measures per source country and disease (0-4); EuFMD default, user-adjustable"
+    - "connection scores between target and source countries (0-3; livestock density 0-1); user-provided"
+  outputs:
+    - "risk score per disease and source country"
+    - "risk pathway contributions per source country"
+    - "risk map (colour-graded by relative risk)"
+    - "pathway effectiveness by disease (reference matrix)"
+
+methodology:
+  formula: "risk score = disease risk (disease status + (4 - mitigation)) x sum across pathways (pathway effectiveness x connection strength)"
+  notes: >
+    If disease status is 0 for a disease, all pathway contributions for that disease are 0.
+    Pathway effectiveness is a fixed reference matrix per disease/pathway. Connection strength
+    per pathway is derived from the user-entered connection components.
+
+data_sources:
+  default_scores:
+    description: "EuFMD-maintained disease status and mitigation measures for the European neighbourhood"
+    location: "rmt disease_status / mitigation_measures tables (via /api/rmt/*)"
+    review: "Reviewed quarterly by the EuFMD team; updated when significant changes occur."
+  user_inputs:
+    description: "Connection scores and any user overrides of disease status / mitigation measures"
+    location: "provided in-session; optionally saved per user"
+
+lineage:
+  reference_implementation: >
+    Web port of the EuFMD RMT-FAST (originally a Vue application); scoring logic reproduced in
+    TypeScript utilities.
+  key_code:
+    - backend/routers/rmt.py                                   # disease status / mitigation / neighbours API
+    - backend/routers/rmt_data.py                              # saved RMT data API
+    - frontend/src/pages/RMT.tsx                               # landing / about
+    - frontend/src/pages/RMTRiskScores.tsx                     # data-entry wizard
+    - frontend/src/pages/RMTResults.tsx                        # results (outputs & inputs)
+    - frontend/src/utils/calculateRiskScores.ts                # risk score calculation
+    - frontend/src/utils/calculateConnectionScoresPerPathway.ts
+    - frontend/src/utils/pathwaysConfig.ts                     # pathway-effectiveness matrix
+
+metadata:
+  standard: "Simple product metadata (no formal standard)"
+  language: "eng"
+  metadata_date: "2026-07-14"
+  maintainer: "FAO / EuFMD"
