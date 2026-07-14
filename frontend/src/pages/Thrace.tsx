@@ -24,6 +24,47 @@ interface CycleReportData {
   serology: any[];
 }
 
+interface LegendItem {
+  label: string;
+  color: string;
+}
+
+// Custom legend column rendered beside the Plotly chart (Plotly's own legend is disabled).
+const ChartLegend: React.FC<{ items: LegendItem[] }> = ({ items }) => (
+  <div className="flex flex-col gap-2 pl-3 pt-2" style={{ width: 150, flex: '0 0 150px' }}>
+    {items.map((it) => (
+      <div key={it.label} className="flex items-center gap-2 text-sm text-gray-700">
+        <span
+          style={{
+            display: 'inline-block',
+            width: 14,
+            height: 14,
+            borderRadius: 3,
+            backgroundColor: it.color,
+            flex: '0 0 14px',
+          }}
+        />
+        <span>{it.label}</span>
+      </div>
+    ))}
+  </div>
+);
+
+const FREEDOM_LEGEND: LegendItem[] = [
+  { label: 'P(free)', color: '#7fc97f' },
+  { label: 'Sensitivity (FSSe)', color: '#80b1d3' },
+  { label: 'P(Intro)', color: '#f16913' },
+  { label: 'Serology', color: '#fdc086' },
+  { label: 'Clinical', color: '#beaed4' },
+];
+
+const EARLY_LEGEND: LegendItem[] = [
+  { label: 'EDSSe', color: '#c59d00' },
+  { label: 'P(Intro)', color: '#f16913' },
+  { label: 'Serology', color: '#fdc086' },
+  { label: 'Clinical', color: '#beaed4' },
+];
+
 const Thrace: React.FC = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -46,15 +87,25 @@ const Thrace: React.FC = () => {
   const [freedomData, setFreedomData] = useState<any | null>(null);
   const [freedomSpecies, setFreedomSpecies] = useState('ALL');
   const [freedomDisease, setFreedomDisease] = useState('FMD');
-  const [freedomRegion, setFreedomRegion] = useState('ALL');
+  // Corrected model is per-country: GR / BG / TK only (no ALL).
+  const [freedomRegion, setFreedomRegion] = useState('GR');
   const freedomChartRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-adjust region when disease changes to PPR (PPR not available in ALL regions)
-  useEffect(() => {
-    if (freedomDisease === 'PPR' && freedomRegion === 'ALL') {
-      setFreedomRegion('GR'); // Default to Greece when switching to PPR
-    }
-  }, [freedomDisease, freedomRegion]);
+  // Early detection (EDSSe) — separate section, own filters, uses the edsse parameters
+  const [showEarlySection, setShowEarlySection] = useState(false);
+  const [earlyLoading, setEarlyLoading] = useState(false);
+  const [earlyError, setEarlyError] = useState<string | null>(null);
+  const [earlyData, setEarlyData] = useState<any | null>(null);
+  const [earlySpecies, setEarlySpecies] = useState('ALL');
+  const [earlyDisease, setEarlyDisease] = useState('FMD');
+  const [earlyRegion, setEarlyRegion] = useState('GR');
+  const earlyChartRef = useRef<HTMLDivElement | null>(null);
+
+  // Product metadata (ISO 19115-inspired) view/download
+  const [showMetadataModal, setShowMetadataModal] = useState(false);
+  const [metadataText, setMetadataText] = useState('');
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
 
   const templates: Template[] = [
     { id: 'bulgaria', name: 'Bulgaria', fileName: 'ThraceActivitiesBulgaria' },
@@ -113,45 +164,29 @@ const Thrace: React.FC = () => {
       console.log('Upload response:', response.data);
 
       if (response.data.success) {
-        // Upload successful - now check for approval
-        setUploadMessage('File uploaded successfully. Checking for data validation errors...');
-        
-        try {
-          // Call approve endpoint to check for errors and move clean data
-          const approveResponse = await apiService.thrace.approveData();
-          console.log('Approval response:', approveResponse.data);
-          
-          if (approveResponse.data.has_errors) {
-            // There are validation errors - show them to user
-            setDataValidationErrors(approveResponse.data.error_rows || []);
-            setShowErrorDetails(true);
-            setUploadMessage(
-              `⚠️ ${approveResponse.data.error_count} rows have validation errors. ` +
-              `${approveResponse.data.error_rows?.length || 0} rows with issues listed below.`
-            );
-            setUploadSuccess(false);
-          } else {
-            // No errors - data approved and imported
-            setUploadSuccess(true);
-            setUploadMessage(`✓ Data approved and imported successfully! ${approveResponse.data.inserted_count} rows inserted.`);
-            if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-            }
-            // Close modal after 3 seconds
-            setTimeout(() => {
-              setShowUploadModal(false);
-              setDataValidationErrors([]);
-              setShowErrorDetails(false);
-            }, 3000);
-          }
-        } catch (approveError: any) {
-          console.error('Approval error:', approveError);
-          setUploadErrors(['Error processing uploaded data. Please try again.']);
-          setUploadSuccess(false);
+        // Validation passed and rows were imported directly into factivities.
+        setUploadSuccess(true);
+        setUploadMessage(`✓ ${response.data.message || `Imported ${response.data.inserted_count} rows.`}`);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
         }
+        setTimeout(() => {
+          setShowUploadModal(false);
+          setDataValidationErrors([]);
+          setShowErrorDetails(false);
+        }, 3000);
+      } else if (response.data.has_errors) {
+        // Validation failed - nothing imported. Show the error report to fix & re-upload.
+        setDataValidationErrors(response.data.error_rows_detail || []);
+        setShowErrorDetails(true);
+        setUploadMessage(
+          `⚠️ ${response.data.error_count} of ${response.data.total_rows} rows have validation errors. ` +
+          `Nothing was imported. Fix the rows below and re-upload.`
+        );
+        setUploadSuccess(false);
       } else {
-        setUploadErrors(response.data.errors || [response.data.message]);
-        setUploadMessage(`Validation failed: ${response.data.valid_rows} valid rows out of ${response.data.total_rows}`);
+        setUploadErrors([response.data.message || 'No valid data rows found in file']);
+        setUploadSuccess(false);
       }
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -207,10 +242,44 @@ const Thrace: React.FC = () => {
   const handleFreedomClick = () => {
     setShowFreedomSection(true);
     setShowReportSection(false);
+    setShowEarlySection(false);
     // Don't auto-fetch - let user set filters first
   };
 
-  const fetchFreedomData = async (refreshSummary = false) => {
+  const handleEarlyClick = () => {
+    setShowEarlySection(true);
+    setShowFreedomSection(false);
+    setShowReportSection(false);
+  };
+
+  const handleMetadataClick = async () => {
+    setShowMetadataModal(true);
+    setMetadataError(null);
+    if (metadataText) return;
+    setMetadataLoading(true);
+    try {
+      const res = await apiService.thrace.getMetadata();
+      setMetadataText(typeof res.data === 'string' ? res.data : String(res.data));
+    } catch (err: any) {
+      setMetadataError(err?.response?.data?.detail || err?.message || 'Error loading metadata');
+    } finally {
+      setMetadataLoading(false);
+    }
+  };
+
+  const handleDownloadMetadata = () => {
+    const blob = new Blob([metadataText], { type: 'application/x-yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'thrace_metadata.yaml';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const fetchFreedomData = async () => {
     setFreedomLoading(true);
     setFreedomError(null);
     setFreedomData(null);
@@ -218,14 +287,11 @@ const Thrace: React.FC = () => {
       const res = await apiService.thrace.getFreedomData(
         freedomSpecies,
         freedomDisease,
-        freedomRegion,
-        refreshSummary
+        freedomRegion
       );
       const payload = res.data?.data;
       if (!payload?.labels?.length) {
-        setFreedomError(
-          'No surveillance data found for these filters. Upload data or click "Refresh data summary" first.'
-        );
+        setFreedomError('No surveillance data found for these filters.');
         return;
       }
       setFreedomData(payload);
@@ -237,9 +303,34 @@ const Thrace: React.FC = () => {
     }
   };
 
+  const fetchEarlyData = async () => {
+    setEarlyLoading(true);
+    setEarlyError(null);
+    setEarlyData(null);
+    try {
+      const res = await apiService.thrace.getFreedomData(
+        earlySpecies,
+        earlyDisease,
+        earlyRegion
+      );
+      const payload = res.data?.data;
+      if (!payload?.labels?.length) {
+        setEarlyError('No surveillance data found for these filters.');
+        return;
+      }
+      setEarlyData(payload);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err?.message || 'Error loading early detection analysis';
+      setEarlyError(message);
+    } finally {
+      setEarlyLoading(false);
+    }
+  };
+
   const lastSeriesValue = (series: any[] | undefined) => {
     if (!series?.length) return 0;
-    return Number(series[series.length - 1]);
+    const nums = series.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+    return nums.length ? nums[nums.length - 1] : 0;
   };
 
   useEffect(() => {
@@ -281,19 +372,19 @@ const Thrace: React.FC = () => {
         y: pintro,
         fill: 'tozeroy',
         yaxis: 'y2',
-        line: { shape: 'spline', smoothing: 0.8 },
-        marker: { color: '#fdc086' }
+        line: { shape: 'spline', smoothing: 0.8, color: '#f16913' },
+        marker: { color: '#f16913' }
       },
-      // Row 3: Sensitivity
+      // Row 3: Surveillance sensitivity (FSSe)
       {
-        name: 'Sensitivity',
+        name: 'Sensitivity (FSSe)',
         type: 'scatter',
         x: labels,
         y: sens,
         fill: 'tozeroy',
         yaxis: 'y3',
-        line: { shape: 'spline', smoothing: 0.8 },
-        marker: { color: '#beaed4' }
+        line: { shape: 'spline', smoothing: 0.8, color: '#80b1d3' },
+        marker: { color: '#80b1d3' }
       },
       // Row 4 (top): P(free)
       {
@@ -311,18 +402,8 @@ const Thrace: React.FC = () => {
     const layout = {
       barmode: 'stack',
       hovermode: 'closest',
-      margin: { t: 20, b: 50, l: 80, r: 180 },
-      showlegend: true,
-      legend: {
-        orientation: 'v',
-        xanchor: 'right',
-        yanchor: 'top',
-        x: 1.18,
-        y: 1,
-        bgcolor: 'rgba(255,255,255,0.9)',
-        bordercolor: '#ddd',
-        borderwidth: 1
-      },
+      margin: { t: 20, b: 50, l: 80, r: 20 },
+      showlegend: false,
       xaxis: {
         title: 'Month',
         type: 'date',
@@ -363,6 +444,101 @@ const Thrace: React.FC = () => {
       }
     };
   }, [freedomData]);
+
+  // Early detection (EDSSe) chart: EDSSe + P(intro) + animals tested
+  useEffect(() => {
+    if (!earlyData || !earlyChartRef.current) return;
+
+    const labels: string[] = earlyData.labels || [];
+    if (!labels.length) return;
+
+    const edsse = (earlyData.edsse || []).map((v: any) => (v === null || v === undefined ? null : Number(v)));
+    const pintro = (earlyData.pintro || []).map((v: any) => Number(v));
+    const sero = earlyData.sero || [];
+    const clin = earlyData.clin || [];
+
+    const traces: any[] = [
+      // Row 1 (bottom): animals tested
+      {
+        name: 'Serology',
+        type: 'bar',
+        x: labels,
+        y: sero,
+        yaxis: 'y',
+        marker: { color: '#fdc086' }
+      },
+      {
+        name: 'Clinical',
+        type: 'bar',
+        x: labels,
+        y: clin,
+        yaxis: 'y',
+        marker: { color: '#beaed4' }
+      },
+      // Row 2: P(introduction)
+      {
+        name: 'P(Intro)',
+        type: 'scatter',
+        x: labels,
+        y: pintro,
+        fill: 'tozeroy',
+        yaxis: 'y2',
+        line: { shape: 'spline', smoothing: 0.8, color: '#f16913' },
+        marker: { color: '#f16913' }
+      },
+      // Row 3 (top): EDSSe
+      {
+        name: 'EDSSe',
+        type: 'scatter',
+        x: labels,
+        y: edsse,
+        fill: 'tozeroy',
+        yaxis: 'y3',
+        connectgaps: false,
+        line: { shape: 'spline', smoothing: 0.8, color: '#c59d00' },
+        marker: { color: '#c59d00' }
+      }
+    ];
+
+    const layout = {
+      barmode: 'stack',
+      hovermode: 'closest',
+      margin: { t: 20, b: 50, l: 80, r: 20 },
+      showlegend: false,
+      xaxis: {
+        title: 'Month',
+        type: 'date',
+        showspikes: true
+      },
+      yaxis: {
+        domain: [0, 0.31],
+        title: 'Animals<br>tested',
+        zeroline: false,
+        autorange: true
+      },
+      yaxis2: {
+        domain: [0.35, 0.64],
+        title: 'Probability<br>of introduction',
+        zeroline: false
+      },
+      yaxis3: {
+        domain: [0.68, 1],
+        title: 'Early detection<br>sensitivity',
+        zeroline: false
+      }
+    };
+
+    const config = { responsive: true };
+
+    Plotly.purge(earlyChartRef.current);
+    Plotly.newPlot(earlyChartRef.current, traces, layout, config);
+
+    return () => {
+      if (earlyChartRef.current) {
+        Plotly.purge(earlyChartRef.current);
+      }
+    };
+  }, [earlyData]);
 
   const handleDownloadExcel = () => {
     if (!reportData) return;
@@ -595,6 +771,18 @@ const Thrace: React.FC = () => {
             onClick={handleFreedomClick}
           >
             Freedom from disease analysis
+          </button>
+          <button 
+            className="nav-btn"
+            onClick={handleEarlyClick}
+          >
+            Early detection
+          </button>
+          <button 
+            className="nav-btn"
+            onClick={handleMetadataClick}
+          >
+            About / Metadata
           </button>
         </div>
       </section>
@@ -852,9 +1040,6 @@ const Thrace: React.FC = () => {
                   onChange={(e) => setFreedomRegion(e.target.value)}
                   className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="ALL" disabled={freedomDisease === 'PPR'}>
-                    All {freedomDisease === 'PPR' ? '(Not available for PPR)' : ''}
-                  </option>
                   <option value="BG">Bulgaria</option>
                   <option value="GR">Greece</option>
                   <option value="TK">Türkiye</option>
@@ -863,18 +1048,10 @@ const Thrace: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   className="nav-btn"
-                  onClick={() => fetchFreedomData(false)}
+                  onClick={() => fetchFreedomData()}
                   disabled={freedomLoading}
                 >
                   {freedomLoading ? 'Loading...' : 'Load analysis'}
-                </button>
-                <button
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
-                  onClick={() => fetchFreedomData(true)}
-                  disabled={freedomLoading}
-                  title="Rebuild thrace.all_data from uploaded surveillance records"
-                >
-                  Refresh data summary
                 </button>
               </div>
             </div>
@@ -890,10 +1067,13 @@ const Thrace: React.FC = () => {
                 <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                   <span>{freedomData.labels.length} months (all years)</span>
                   <span>P(free) last: {lastSeriesValue(freedomData.pfree).toFixed(3)}</span>
-                  <span>Sensitivity last: {lastSeriesValue(freedomData.sens).toFixed(3)}</span>
+                  <span>FSSe last: {lastSeriesValue(freedomData.sens).toFixed(3)}</span>
                   <span>P(introduction) last: {lastSeriesValue(freedomData.pintro).toFixed(3)}</span>
                 </div>
-                <div ref={freedomChartRef} style={{ width: '100%', height: '80vh' }} />
+                <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                  <div ref={freedomChartRef} style={{ flex: 1, minWidth: 0, height: '80vh' }} />
+                  <ChartLegend items={FREEDOM_LEGEND} />
+                </div>
               </div>
             ) : (
               !freedomLoading && (
@@ -902,6 +1082,145 @@ const Thrace: React.FC = () => {
             )}
           </div>
         </section>
+      )}
+
+      {/* Early Detection Section */}
+      {showEarlySection && (
+        <section className="mb-6">
+          <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
+            <h2 className="text-xl font-bold">Early detection surveillance sensitivity (EDSSe)</h2>
+            <p className="text-sm text-gray-600">
+              Uses the early-detection design parameters (design prevalence, temporal coverage and
+              risk weighting), which differ from the freedom-from-disease analysis.
+            </p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Species</label>
+                <select
+                  value={earlySpecies}
+                  onChange={(e) => setEarlySpecies(e.target.value)}
+                  className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="ALL">All species</option>
+                  <option value="LR">Large ruminants</option>
+                  <option value="BOV">Cattle</option>
+                  <option value="BUF">Buffalo</option>
+                  <option value="SR">Small ruminants</option>
+                  <option value="OVI">Sheep</option>
+                  <option value="CAP">Goat</option>
+                  <option value="POR">Pig</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Disease</label>
+                <select
+                  value={earlyDisease}
+                  onChange={(e) => setEarlyDisease(e.target.value)}
+                  className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="FMD">FMD</option>
+                  <option value="LSD">LSD</option>
+                  <option value="SGP">SGP</option>
+                  <option value="PPR">PPR</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                <select
+                  value={earlyRegion}
+                  onChange={(e) => setEarlyRegion(e.target.value)}
+                  className="px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="BG">Bulgaria</option>
+                  <option value="GR">Greece</option>
+                  <option value="TK">Türkiye</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="nav-btn"
+                  onClick={() => fetchEarlyData()}
+                  disabled={earlyLoading}
+                >
+                  {earlyLoading ? 'Loading...' : 'Load analysis'}
+                </button>
+              </div>
+            </div>
+
+            {earlyError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">
+                {earlyError}
+              </div>
+            )}
+
+            {earlyData ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                  <span>{earlyData.labels.length} months (all years)</span>
+                  <span>EDSSe last: {lastSeriesValue(earlyData.edsse).toFixed(3)}</span>
+                  <span>P(introduction) last: {lastSeriesValue(earlyData.pintro).toFixed(3)}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                  <div ref={earlyChartRef} style={{ flex: 1, minWidth: 0, height: '70vh' }} />
+                  <ChartLegend items={EARLY_LEGEND} />
+                </div>
+              </div>
+            ) : (
+              !earlyLoading && (
+                <div className="text-gray-500">Select filters and load the analysis.</div>
+              )
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Metadata Modal */}
+      {showMetadataModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl w-full mx-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">THRACE — Product metadata</h2>
+              <button
+                className="text-gray-500 hover:text-gray-800 text-2xl leading-none"
+                onClick={() => setShowMetadataModal(false)}
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              ISO 19115-inspired product metadata (custodian, contact, access, extent, lineage).
+            </p>
+
+            {metadataLoading && <div className="text-gray-500">Loading…</div>}
+            {metadataError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">
+                {metadataError}
+              </div>
+            )}
+            {!metadataLoading && !metadataError && (
+              <pre className="flex-1 overflow-auto text-xs bg-gray-50 border border-gray-200 rounded p-3 whitespace-pre-wrap">
+                {metadataText}
+              </pre>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                onClick={() => setShowMetadataModal(false)}
+              >
+                Close
+              </button>
+              <button
+                className="nav-btn"
+                onClick={handleDownloadMetadata}
+                disabled={!metadataText}
+              >
+                Download metadata.yaml
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Template Selection Modal */}

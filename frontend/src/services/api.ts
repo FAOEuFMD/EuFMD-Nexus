@@ -312,12 +312,6 @@ export const apiService = {
       });
     },
     
-    getStagingSummary: () =>
-      api.get('/api/thrace/staging-summary'),
-    
-    approveData: () =>
-      api.post('/api/thrace/approve-data', {}),
-    
     getInspectors: () =>
       api.get('/api/thrace/inspectors'),
     
@@ -326,10 +320,13 @@ export const apiService = {
         params: { country_id: countryId, year, quarter }
       }),
 
-    getFreedomData: (species: string, disease: string, region: string, refreshSummary = false) =>
+    getFreedomData: (species: string, disease: string, region: string) =>
       api.get('/api/thrace/freedom-data', {
-        params: { species, disease, region, refresh_summary: refreshSummary }
+        params: { species, disease, region }
       }),
+
+    getMetadata: () =>
+      api.get('/api/thrace/metadata', { responseType: 'text', transformResponse: [(d) => d] }),
   },
 };
 
