@@ -10,12 +10,6 @@ interface HerdImmunityRecord {
   coverage_percentage: number;
 }
 
-interface SerotypeStrainRecord {
-  serotype: string;
-  vaccine_strain: string;
-  outbreak_count: number;
-}
-
 // Truncate long district names for the chart
 const truncateName = (name: string, maxLen: number = 14): string => {
   if (!name) return '';

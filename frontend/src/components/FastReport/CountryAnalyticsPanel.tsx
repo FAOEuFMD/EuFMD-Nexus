@@ -94,8 +94,9 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
       return;
     }
 
+    const outbreakEl = outbreakChartRef.current;
     Plotly.newPlot(
-      outbreakChartRef.current,
+      outbreakEl,
       traces,
       {
         ...PLOT_LAYOUT,
@@ -106,7 +107,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
     );
 
     return () => {
-      if (outbreakChartRef.current) Plotly.purge(outbreakChartRef.current);
+      if (outbreakEl) Plotly.purge(outbreakEl);
     };
   }, [rows, loading, diseaseColorMap]);
 
@@ -114,14 +115,15 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
     if (!vaccinationChartRef.current || loading) return;
 
     const { traces, hasData } = buildVaccinationTraces(rows, diseaseColorMap);
+    const vaccinationEl = vaccinationChartRef.current;
 
     if (!hasData || traces.length === 0) {
-      Plotly.purge(vaccinationChartRef.current);
+      Plotly.purge(vaccinationEl);
       return;
     }
 
     Plotly.newPlot(
-      vaccinationChartRef.current,
+      vaccinationEl,
       traces,
       {
         ...PLOT_LAYOUT,
@@ -133,7 +135,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
     );
 
     return () => {
-      if (vaccinationChartRef.current) Plotly.purge(vaccinationChartRef.current);
+      if (vaccinationEl) Plotly.purge(vaccinationEl);
     };
   }, [rows, loading, diseaseColorMap]);
 
