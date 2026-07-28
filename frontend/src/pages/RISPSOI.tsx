@@ -121,17 +121,6 @@ const DATA_CATEGORY_FILES: Record<DataCategory, string> = {
 // Allowed countries for SOI dashboard (formal TCC nation names)
 const ALLOWED_C = ALLOWED_SOI_COUNTRIES;
 
-const COUNTRY_DISPLAY: Record<string, string> = {
-  'Azerbaijan, Republic of': 'Azerbaijan',
-  'Armenia, Republic of': 'Armenia',
-  'Georgia': 'Georgia',
-  'Iran, Islamic, Republic of': 'Iran',
-  'Iraq, Republic of': 'Iraq',
-  'Pakistan, Islamic, Republic of': 'Pakistan',
-  'Russian Federation': 'Russian Federation',
-  'Turkey, Republic of': 'T\u00FCrkiye',
-};
-
 const RISPSOI: React.FC = () => {
   const [activeSection, setActiveSection] = useState<SoiSection>(null);
   const [selectedCategory, setSelectedCategory] = useState<DataCategory | null>(null);
@@ -153,7 +142,7 @@ const RISPSOI: React.FC = () => {
   const [showVaccination, setShowVaccination] = useState(true);
   const [mapOutbreaks, setMapOutbreaks] = useState<SoiDataRecord[]>([]);
   const [mapVaccination, setMapVaccination] = useState<SoiDataRecord[]>([]);
-  const [mapLoading, setMapLoading] = useState(false);
+  const [, setMapLoading] = useState(false);
 
   // GeoJSON choropleth state
   const [geoJsonData, setGeoJsonData] = useState<any>(null);
@@ -191,7 +180,7 @@ const RISPSOI: React.FC = () => {
       }
     };
     prefetch();
-  }, [activeSection]);
+  }, [activeSection, mapOutbreaks.length, mapVaccination.length]);
 
   // Compute vaccination counts per province/region when vaccination data changes
   useEffect(() => {
@@ -410,12 +399,6 @@ const RISPSOI: React.FC = () => {
   const outbreakIcon = L.divIcon({
     className: 'custom-marker',
     html: '<div style="width:12px;height:12px;background:#ef4444;border:2px solid white;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>',
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
-  });
-  const vaccinationIcon = L.divIcon({
-    className: 'custom-marker',
-    html: '<div style="width:12px;height:12px;background:#3b82f6;border:2px solid white;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>',
     iconSize: [12, 12],
     iconAnchor: [6, 6],
   });

@@ -435,12 +435,13 @@ const Thrace: React.FC = () => {
 
     const config = { responsive: true };
 
-    Plotly.purge(freedomChartRef.current);
-    Plotly.newPlot(freedomChartRef.current, traces, layout, config);
+    const freedomEl = freedomChartRef.current;
+    Plotly.purge(freedomEl);
+    Plotly.newPlot(freedomEl, traces, layout, config);
 
     return () => {
-      if (freedomChartRef.current) {
-        Plotly.purge(freedomChartRef.current);
+      if (freedomEl) {
+        Plotly.purge(freedomEl);
       }
     };
   }, [freedomData]);
@@ -530,12 +531,13 @@ const Thrace: React.FC = () => {
 
     const config = { responsive: true };
 
-    Plotly.purge(earlyChartRef.current);
-    Plotly.newPlot(earlyChartRef.current, traces, layout, config);
+    const earlyEl = earlyChartRef.current;
+    Plotly.purge(earlyEl);
+    Plotly.newPlot(earlyEl, traces, layout, config);
 
     return () => {
-      if (earlyChartRef.current) {
-        Plotly.purge(earlyChartRef.current);
+      if (earlyEl) {
+        Plotly.purge(earlyEl);
       }
     };
   }, [earlyData]);

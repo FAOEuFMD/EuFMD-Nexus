@@ -200,7 +200,7 @@ const BarChart: React.FC<BarChartProps> = ({ uniqueProductsArray, compact = fals
       if (resizeTimer) clearTimeout(resizeTimer);
       d3.select(`.chart-tooltip-${tooltipId}`).remove();
     };
-  }, [dataKey, tooltipId, compact]);
+  }, [dataKey, tooltipId, compact, uniqueProductsArray]);
 
   if (uniqueProductsArray.length === 0) {
     return (

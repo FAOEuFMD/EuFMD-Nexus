@@ -9,8 +9,6 @@ import CountryBoundariesLayer, {
   CountrySelectPayload,
 } from '../components/FastReport/CountryBoundariesLayer';
 import MapZoomTracker from '../components/FastReport/MapZoomTracker';
-import { COUNTRY_ZOOM_THRESHOLD } from '../utils/fastReport/countryAnalytics';
-
 // Fix for default markers in React Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -95,8 +93,6 @@ const FastReport: React.FC = () => {
     () => Array.from(new Set(data.map((item) => item.Country).filter(Boolean))),
     [data]
   );
-
-  const mapCountriesInteractive = mapZoom >= COUNTRY_ZOOM_THRESHOLD;
 
   const openCountryPanel = useCallback(
     (fastReportCountry: string | null, geoName: string | null) => {
