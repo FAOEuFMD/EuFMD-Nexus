@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import Response
 from typing import List, Dict, Any
 from database import DatabaseHelper, thrace_engine
 from auth import get_current_user
 from datetime import datetime
+from pathlib import Path
 import openpyxl
 from io import BytesIO
 import json
@@ -78,9 +80,10 @@ async def upload_thrace_data(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Upload Excel file with THRACE surveillance data (45-column format matching old PHP app)
-    Validates data and saves to factivities_tmp table with error tracking
-    Allows rows with errors to be saved (errore field contains error description)
+    Upload Excel file with THRACE surveillance data.
+    Validates every row; if all rows are clean they are imported directly into the
+    production factivities table (no staging / manual approval step). If any row fails
+    validation, nothing is imported and an error report is returned for correction.
     """
     try:
         print(f"Upload endpoint called - file: {file.filename}, user_id: {current_user.get('user_id')}")
@@ -184,6 +187,7 @@ async def upload_thrace_data(
         total_rows = 0
         inserted_data = []
         error_messages = []
+        error_details = []
         
         # Process rows 2 to 401 (400 data rows max, row 1 is header)
         for row_idx in range(2, min(402, worksheet.max_row + 1)):
@@ -367,292 +371,173 @@ async def upload_thrace_data(
                 if wildserosposFMD > wildsample:
                     error_msg = (error_msg or "") + f"Wild sero. FMD ({wildserosposFMD}) > samples ({wildsample}); "
                 
-                # Skip duplicate check during upload - will be checked during approval
-                # This avoids 400+ separate database queries which cause timeout
-                
-                # Prepare row data for insertion matching SQL table structure (now with 6 new 'tested' fields)
+                # Production row tuple for direct insert into factivities (no staging).
+                # Order matches the INSERT column list below.
                 row_data = (
-                    epiunitID,              # int
                     inspectorID,            # int
+                    epiunitID,              # int
                     dt_insp,                # date
-                    cattle or None,         # int DEFAULT NULL
-                    sheep or None,          # int DEFAULT NULL
-                    goat or None,           # int DEFAULT NULL
-                    pig or None,            # int DEFAULT NULL
-                    buffalo or None,        # int DEFAULT NULL
-                    cattleexam or None,     # int DEFAULT NULL
-                    cattlecliposFMD or None,  # int DEFAULT NULL
-                    cattlecliposLSD or None,  # int DEFAULT NULL
-                    sheepexam or None,      # int DEFAULT NULL
-                    sheepposFMD or None,    # int DEFAULT NULL
-                    sheepposSGP or None,    # int DEFAULT NULL
-                    sheepposPPR or None,    # int DEFAULT NULL
-                    goatsexam or None,      # int DEFAULT NULL
-                    goatsposFMD or None,    # int DEFAULT NULL
-                    goatsposSGP or None,    # int DEFAULT NULL
-                    goatsposPPR or None,    # int DEFAULT NULL
-                    buffaloesexam or None,  # int DEFAULT NULL
-                    buffaloesposFMD or None,# int DEFAULT NULL
-                    buffaloesposLSD or None,# int DEFAULT NULL
-                    cattlesample or None,   # int DEFAULT NULL
-                    cattleseroposFMD or None,# int DEFAULT NULL
-                    cattleseroposLSD or None,# int DEFAULT NULL
-                    sheepsample or None,    # int DEFAULT NULL
-                    sheepseroposFMD or None,# int DEFAULT NULL
-                    sheepseroposSGP or None,# int DEFAULT NULL
-                    sheepseroposPPR or None,# int DEFAULT NULL
-                    goatsample or None,     # int DEFAULT NULL
-                    goatsseroposFMD or None,# int DEFAULT NULL
-                    goatsseroposSGP or None,# int DEFAULT NULL
-                    goatsseroposPPR or None,# int DEFAULT NULL
-                    pigssample or None,     # int DEFAULT NULL
-                    pigsserosposFMD or None,# int DEFAULT NULL
-                    buffaloessample or None,# int DEFAULT NULL
-                    buffaloesseroposFMD or None,# int DEFAULT NULL
-                    buffaloesseroposLSD or None,# int DEFAULT NULL
-                    wildsample or None,     # int DEFAULT NULL
-                    wildserosposFMD or None,# int DEFAULT NULL
-                    cattletested or None,   # int DEFAULT NULL - NEW
-                    sheeptested or None,    # int DEFAULT NULL - NEW
-                    goattested or None,     # int DEFAULT NULL - NEW
-                    buffalotested or None,  # int DEFAULT NULL - NEW
-                    pigtested or None,      # int DEFAULT NULL - NEW
-                    wildtested or None,     # int DEFAULT NULL - NEW
-                    error_msg,              # varchar(255) DEFAULT NULL
-                    datetime.now().date(),  # dt_inival date NOT NULL
-                    user_id,                # userID int NOT NULL
-                    epiunitcountrycode_from_excel,     # varchar(20) NOT NULL
-                    villagename             # varchar(50) NOT NULL
+                    cattle or None,
+                    sheep or None,
+                    goat or None,
+                    pig or None,
+                    buffalo or None,
+                    cattleexam or None,
+                    cattlecliposFMD or None,
+                    cattlecliposLSD or None,
+                    sheepexam or None,
+                    sheepposFMD or None,
+                    sheepposSGP or None,
+                    sheepposPPR or None,
+                    goatsexam or None,
+                    goatsposFMD or None,
+                    goatsposSGP or None,
+                    goatsposPPR or None,
+                    buffaloesexam or None,
+                    buffaloesposFMD or None,
+                    buffaloesposLSD or None,
+                    cattlesample or None,
+                    cattleseroposFMD or None,
+                    cattleseroposLSD or None,
+                    sheepsample or None,
+                    sheepseroposFMD or None,
+                    sheepseroposSGP or None,
+                    sheepseroposPPR or None,
+                    goatsample or None,
+                    goatsseroposFMD or None,
+                    goatsseroposSGP or None,
+                    goatsseroposPPR or None,
+                    pigssample or None,
+                    pigsserosposFMD or None,
+                    buffaloessample or None,
+                    buffaloesseroposFMD or None,
+                    buffaloesseroposLSD or None,
+                    wildsample or None,
+                    wildserosposFMD or None,
+                    cattletested or None,
+                    sheeptested or None,
+                    goattested or None,
+                    buffalotested or None,
+                    pigtested or None,
+                    wildtested or None,
+                    datetime.now().date(),  # dt_inival
+                    user_id,                # userID
                 )
-                
-                inserted_data.append(row_data)
-                
+
                 if error_msg:
                     error_rows += 1
                     error_messages.append(f"Row {row_idx}: {error_msg}")
+                    error_details.append({
+                        "rowId": row_idx,
+                        "village": villagename,
+                        "country": epiunitcountrycode_from_excel,
+                        "date": str(dt_insp) if dt_insp else None,
+                        "error": error_msg,
+                    })
                 else:
                     clean_rows += 1
-                
+                    inserted_data.append(row_data)
+
             except Exception as e:
                 error_rows += 1
                 error_messages.append(f"Row {row_idx}: Error parsing - {str(e)}")
+                error_details.append({
+                    "rowId": row_idx,
+                    "village": "",
+                    "country": "",
+                    "date": "",
+                    "error": f"Error parsing - {str(e)}",
+                })
         
-        # Bulk insert all rows (clean + error rows) to factivities_tmp
-        if inserted_data:
-            try:
-                print(f"Starting bulk insert of {len(inserted_data)} rows...")
-                
-                # Insert all rows using parameterized query (now includes 6 new 'tested' columns)
-                insert_query = """
-                    INSERT INTO factivities_tmp (
-                        epiunitID, inspectorID, dt_insp, cattle, sheep, goat, pig, buffalo,
-                        cattleexam, cattlecliposFMD, cattlecliposLSD,
-                        sheepexam, sheepposFMD, sheepposSGP, sheepposPPR,
-                        goatsexam, goatsposFMD, goatsposSGP, goatsposPPR,
-                        buffaloesexam, buffaloesposFMD, buffaloesposLSD,
-                        cattlesample, cattleseroposFMD, cattleseroposLSD,
-                        sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR,
-                        goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR,
-                        pigssample, pigsserosposFMD,
-                        buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD,
-                        wildsample, wildserosposFMD,
-                        cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
-                        errore, dt_inival, userID, epiunitcountrycode, villagename
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s,
-                        %s, %s, %s,
-                        %s, %s,
-                        %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s
-                    )
-                """
-                
-                successful_inserts = 0
-                print("Starting individual row inserts...")
-                for idx, row_data in enumerate(inserted_data):
-                    if idx % 5 == 0:  # Log progress every 5 rows
-                        print(f"Inserting row {idx+1}/{len(inserted_data)}...")
-                    
-                    insert_result = await DatabaseHelper.execute_thrace_query(insert_query, row_data)
-                    
-                    if insert_result.get("error"):
-                        print(f"Insert error for row {idx}: {insert_result['error']}")
-                        print(f"Row data: {row_data}")
-                        raise HTTPException(status_code=500, detail=f"Insert error on row {idx}: {insert_result['error']}")
-                    
-                    successful_inserts += 1
-                
-                print(f"Successfully inserted {successful_inserts} rows into factivities_tmp")
-                
-                return {
-                    "success": True,
-                    "message": f"Uploaded {total_rows} rows ({clean_rows} clean, {error_rows} with errors)",
-                    "total_rows": total_rows,
-                    "clean_rows": clean_rows,
-                    "error_rows": error_rows,
-                    "inserted_count": successful_inserts,
-                    "errors": error_messages if error_messages else None,
-                    "status": "pending_approval"
-                }
-            
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Database insert error: {str(e)}")
-        else:
+        # Validation is the quality gate: if ANY row has errors, reject the whole file
+        # (nothing is imported) and return the error report so the user can fix & re-upload.
+        if error_rows > 0:
             return {
                 "success": False,
+                "has_errors": True,
+                "message": f"{error_rows} of {total_rows} rows have validation errors. Fix them and re-upload.",
+                "total_rows": total_rows,
+                "clean_rows": clean_rows,
+                "error_rows": error_rows,
+                "error_count": error_rows,
+                "error_rows_detail": error_details,
+                "inserted_count": 0,
+            }
+
+        if not inserted_data:
+            return {
+                "success": False,
+                "has_errors": False,
                 "message": "No valid data rows found in file",
                 "total_rows": total_rows,
                 "clean_rows": clean_rows,
                 "error_rows": error_rows,
-                "inserted_count": 0
+                "inserted_count": 0,
             }
+
+        # All rows clean -> insert directly into the production factivities table.
+        try:
+            print(f"Inserting {len(inserted_data)} clean rows directly into factivities...")
+            insert_query = """
+                INSERT INTO thrace.factivities (
+                    inspectorID, epiunitID, dt_insp, cattle, sheep, goat, pig, buffalo,
+                    cattleexam, cattlecliposFMD, cattlecliposLSD,
+                    sheepexam, sheepposFMD, sheepposSGP, sheepposPPR,
+                    goatsexam, goatsposFMD, goatsposSGP, goatsposPPR,
+                    buffaloesexam, buffaloesposFMD, buffaloesposLSD,
+                    cattlesample, cattleseroposFMD, cattleseroposLSD,
+                    sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR,
+                    goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR,
+                    pigssample, pigsserosposFMD,
+                    buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD,
+                    wildsample, wildserosposFMD,
+                    cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
+                    dt_inival, userID
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s,
+                    %s, %s, %s,
+                    %s, %s,
+                    %s, %s, %s, %s, %s, %s,
+                    %s, %s
+                )
+            """
+
+            successful_inserts = 0
+            for idx, row_data in enumerate(inserted_data):
+                insert_result = await DatabaseHelper.execute_thrace_query(insert_query, row_data)
+                if insert_result.get("error"):
+                    print(f"Insert error for row {idx}: {insert_result['error']}")
+                    raise HTTPException(status_code=500, detail=f"Insert error on row {idx}: {insert_result['error']}")
+                successful_inserts += 1
+
+            print(f"Successfully inserted {successful_inserts} rows into factivities")
+
+            return {
+                "success": True,
+                "has_errors": False,
+                "message": f"Imported {successful_inserts} rows into surveillance data.",
+                "total_rows": total_rows,
+                "clean_rows": clean_rows,
+                "error_rows": 0,
+                "inserted_count": successful_inserts,
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database insert error: {str(e)}")
     
     except HTTPException as e:
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
-
-@router.get("/staging-summary")
-async def get_staging_summary(current_user: dict = Depends(get_current_user)):
-    """
-    Get summary of staging data for current user:
-    - Total rows uploaded
-    - Clean rows (no errors)
-    - Rows with errors
-    """
-    user_id = current_user.get("user_id")
-    
-    try:
-        # Total rows
-        total_query = "SELECT COUNT(*) as count FROM thrace.factivities_tmp WHERE userID = %s"
-        total_result = await DatabaseHelper.execute_thrace_query(total_query, (user_id,))
-        total_rows = total_result["data"][0]["count"] if total_result["data"] else 0
-        
-        # Clean rows
-        clean_query = "SELECT COUNT(*) as count FROM thrace.factivities_tmp WHERE userID = %s AND errore IS NULL"
-        clean_result = await DatabaseHelper.execute_thrace_query(clean_query, (user_id,))
-        clean_rows = clean_result["data"][0]["count"] if clean_result["data"] else 0
-        
-        # Error rows
-        error_query = "SELECT COUNT(*) as count FROM thrace.factivities_tmp WHERE userID = %s AND errore IS NOT NULL"
-        error_result = await DatabaseHelper.execute_thrace_query(error_query, (user_id,))
-        error_rows = error_result["data"][0]["count"] if error_result["data"] else 0
-        
-        return {
-            "total_rows": total_rows,
-            "clean_rows": clean_rows,
-            "error_rows": error_rows
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching staging summary: {str(e)}")
-
-
-@router.post("/approve-data")
-async def approve_staging_data(current_user: dict = Depends(get_current_user)):
-    """
-    Approve and move clean data from factivities_tmp to factivities.
-    If there are errors, return them instead of approving.
-    
-    Returns:
-    - If errors exist: {"has_errors": True, "error_rows": [...]}
-    - If no errors: {"success": True, "message": "Data approved and imported", "inserted_count": N}
-    """
-    user_id = current_user.get("user_id")
-    
-    try:
-        print(f"Approval endpoint called for user {user_id}")
-        
-        # Check for error rows
-        error_query = """
-            SELECT factivity_tmpID, villagename, epiunitcountrycode, dt_insp, errore 
-            FROM thrace.factivities_tmp 
-            WHERE userID = %s AND errore IS NOT NULL
-            ORDER BY factivity_tmpID
-        """
-        error_result = await DatabaseHelper.execute_thrace_query(error_query, (user_id,))
-        print(f"Error check result: {error_result}")
-        
-        error_rows = error_result.get("data", []) if error_result else []
-        print(f"Found {len(error_rows)} error rows")
-        
-        # If there are errors, return them without approving
-        if error_rows:
-            print(f"Returning {len(error_rows)} error rows to user")
-            return {
-                "has_errors": True,
-                "error_count": len(error_rows),
-                "error_rows": [
-                    {
-                        "rowId": row.get("factivity_tmpID"),
-                        "village": row.get("villagename"),
-                        "country": row.get("epiunitcountrycode"),
-                        "date": row.get("dt_insp"),
-                        "error": row.get("errore")
-                    }
-                    for row in error_rows
-                ]
-            }
-        
-        # No errors - move clean data to factivities
-        print(f"No errors found. Moving clean data to production for user {user_id}")
-        
-        insert_query = """
-            INSERT INTO thrace.factivities(
-                inspectorID, epiunitID, dt_insp, cattle, sheep, goat, pig, buffalo,
-                cattleexam, cattlecliposFMD, cattlecliposLSD, sheepexam, sheepposFMD, sheepposSGP, sheepposPPR,
-                goatsexam, goatsposFMD, goatsposSGP, goatsposPPR, buffaloesexam, buffaloesposFMD, buffaloesposLSD,
-                cattlesample, cattleseroposFMD, cattleseroposLSD, sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR,
-                goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR, pigssample, pigsserosposFMD,
-                buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD, wildsample, wildserosposFMD,
-                cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
-                dt_inival, userID
-            )
-            SELECT 
-                inspectorID, epiunitID, dt_insp, cattle, sheep, goat, pig, buffalo,
-                cattleexam, cattlecliposFMD, cattlecliposLSD, sheepexam, sheepposFMD, sheepposSGP, sheepposPPR,
-                goatsexam, goatsposFMD, goatsposSGP, goatsposPPR, buffaloesexam, buffaloesposFMD, buffaloesposLSD,
-                cattlesample, cattleseroposFMD, cattleseroposLSD, sheepsample, sheepseroposFMD, sheepseroposSGP, sheepseroposPPR,
-                goatsample, goatsseroposFMD, goatsseroposSGP, goatsseroposPPR, pigssample, pigsserosposFMD,
-                buffaloessample, buffaloesseroposFMD, buffaloesseroposLSD, wildsample, wildserosposFMD,
-                cattletested, sheeptested, goattested, buffalotested, pigtested, wildtested,
-                dt_inival, userID
-            FROM thrace.factivities_tmp
-            WHERE userID = %s AND errore IS NULL
-        """
-        
-        insert_result = await DatabaseHelper.execute_thrace_query(insert_query, (user_id,))
-        print(f"Insert result: {insert_result}")
-        
-        if insert_result.get("error"):
-            print(f"Insert error: {insert_result['error']}")
-            raise HTTPException(status_code=500, detail=f"Error importing data: {insert_result['error']}")
-        
-        inserted_count = insert_result.get("data", 0)
-        print(f"Successfully inserted {inserted_count} rows")
-        
-        return {
-            "success": True,
-            "message": "Data approved and imported successfully",
-            "inserted_count": inserted_count,
-            "has_errors": False
-        }
-    
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Approval endpoint error: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error approving data: {str(e)}")
 
 def is_numeric(value):
     """Check if value can be converted to a number"""
@@ -841,57 +726,46 @@ async def generate_cycle_report(
 async def get_freedom_analysis(
     species: str = "ALL",
     disease: str = "FMD",
-    region: str = "ALL",
-    year: int = None,
+    region: str = "GR",
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Calculate freedom-from-disease analysis using Python ThraceCalculator.
-    Replaces old SQL function: thrace.get_freedom_data()
-    
-    Corrections Implemented:
-    - R1: Combined herd sensitivity with overlap correction (Cameron et al. FAO 2014)
-    - R2: Uses *_tested columns from Excel uploads (protocol-based)
-    - R4: Uses risklevel from epiunits table
-    - R11-R12: Year-specific monthly P(intro) with fallback
-    - R14: Greece RR=1 (risk-based not applicable)
-    
-    Parameters:
-    - species: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
-    - disease: FMD, LSD, SGP, PPR
-    - region: ALL, GR, BG, TK
-    - year: Calculation year (defaults to current year)
+    Calculate freedom-from-disease analysis on-demand from thrace.factivities using the
+    corrected model (Ausvet/EuFMD post-evaluation). The corrected model is per-country:
+    region must be one of GR, BG, TK (not ALL). Parameters come from static reference data
+    under backend/data/thrace/, not the legacy DB params table.
     """
     try:
-        # Default to current year if not specified
-        if year is None:
-            year = datetime.now().year
-        
-        # Initialize calculator with thrace database engine
         calculator = ThraceCalculator(thrace_engine)
-        
-        # Calculate system sensitivity and probability of freedom
-        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
-        
+
+        print(
+            f"Calculating freedom analysis: species={species}, disease={disease}, region={region}"
+        )
+
         results = calculator.calculate_system_sensitivity(
             species_filter=species,
             disease=disease,
             region_filter=region,
-            year=year
         )
-        
+
+        month_count = len(results.get('labels', []))
+
         return {
             "success": True,
             "species": species,
             "disease": disease,
             "region": region,
-            "year": year,
             "data": results,
             "metadata": {
-                "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
-                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14"]
+                "years_included": "all",
+                "month_count": month_count,
+                "calculation_method": "Corrected THRACE model (sequential SeH, risk levels, EDSSe)",
+                "data_source": "thrace.factivities (live) + backend/data/thrace reference config",
+                "corrections_applied": ["R1", "R2", "R4", "R7", "R8", "R11", "R12", "R14", "R16", "R17", "R18"]
             }
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -901,89 +775,20 @@ async def get_freedom_analysis(
         raise HTTPException(status_code=500, detail=f"Error calculating freedom data: {str(e)}")
 
 
-@router.post("/calculate-freedom")
-async def calculate_and_save_freedom(
-    species: str = "ALL",
-    disease: str = "FMD",
-    region: str = "ALL",
-    year: int = None,
-    save_results: bool = True,
-    current_user: dict = Depends(get_current_user)
-):
+@router.get("/metadata")
+async def get_thrace_metadata(current_user: dict = Depends(get_current_user)):
+    """Return the THRACE simple product metadata as raw YAML.
+
+    Served as-is from backend/data/thrace/metadata.yaml so authenticated users can view or
+    download it. The frontend displays the text and offers a client-side download.
     """
-    Calculate freedom-from-disease analysis and optionally save to audit table.
-    
-    R24: Saves calculation results to thrace.thrace_calculation_results for audit trail.
-    
-    Parameters:
-    - species: ALL, LR, BOV, BUF, SR, OVI, CAP, POR
-    - disease: FMD, LSD, SGP, PPR
-    - region: ALL, GR, BG, TK
-    - year: Calculation year (defaults to current year)
-    - save_results: Whether to save results to permanent table (default: True)
-    
-    Returns:
-    - success: Boolean indicating if calculation succeeded
-    - data: Calculation results (same format as GET endpoint)
-    - saved: Boolean indicating if results were saved
-    - saved_count: Number of monthly records saved
-    """
+    path = Path(__file__).resolve().parents[1] / "data" / "thrace" / "metadata.yaml"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Metadata file not found")
     try:
-        # Default to current year if not specified
-        if year is None:
-            year = datetime.now().year
-        
-        # Initialize calculator with thrace database engine
-        calculator = ThraceCalculator(thrace_engine)
-        
-        # Calculate system sensitivity and probability of freedom
-        print(f"Calculating freedom analysis: species={species}, disease={disease}, region={region}, year={year}")
-        
-        results = calculator.calculate_system_sensitivity(
-            species_filter=species,
-            disease=disease,
-            region_filter=region,
-            year=year
-        )
-        
-        # R24: Save to permanent table for audit trail
-        saved = False
-        saved_count = 0
-        if save_results:
-            try:
-                calculator.save_calculation_results(
-                    results=results,
-                    species_filter=species,
-                    disease=disease,
-                    region_filter=region,
-                    user_id=current_user.get('id')
-                )
-                saved = True
-                saved_count = len(results.get('labels', []))
-                print(f"Saved {saved_count} monthly results to thrace_calculation_results table")
-            except Exception as save_error:
-                print(f"Warning: Failed to save results: {str(save_error)}")
-                # Continue even if save fails - calculation is still valid
-        
-        return {
-            "success": True,
-            "species": species,
-            "disease": disease,
-            "region": region,
-            "year": year,
-            "data": results,
-            "saved": saved,
-            "saved_count": saved_count,
-            "calculated_by": current_user.get('id'),
-            "metadata": {
-                "calculation_method": "Cameron et al. (FAO 2014) - Combined Herd Sensitivity",
-                "corrections_applied": ["R1", "R2", "R4", "R11", "R12", "R14", "R24"]
-            }
-        }
-    except HTTPException:
-        raise
+        content = path.read_text(encoding="utf-8")
     except Exception as e:
-        import traceback
-        print(f"Error in freedom analysis: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error calculating freedom data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error reading metadata: {str(e)}")
+    return Response(content=content, media_type="application/x-yaml")
+
+

@@ -11,25 +11,30 @@ MAIN_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{set
 PCP_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db2_name}"
 THRACE_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db5_name}"
 TRAINING_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db4_name if settings.db4_name else 'db_training'}"
+TCC_DATABASE_URL = f"mysql+pymysql://{settings.db_user}:{settings.db_pass}@{settings.db_host}/{settings.db6_name if settings.db6_name else 'TCC'}"
 
 # Debug: Print database names on startup
 print("Database configuration:")
 print(f"  Main DB: {settings.db_name}")
 print(f"  PCP DB: {settings.db2_name}")
 print(f"  THRACE DB: {settings.db5_name}")
+print(f"  TCC DB: {settings.db6_name}")
 print(f"  THRACE URL: {THRACE_DATABASE_URL.replace(settings.db_pass, '****')}")
+print(f"  TCC URL: {TCC_DATABASE_URL.replace(settings.db_pass, '****')}")
 
 # Create engines
 main_engine = create_engine(MAIN_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 pcp_engine = create_engine(PCP_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 thrace_engine = create_engine(THRACE_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 training_engine = create_engine(TRAINING_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
+tcc_engine = create_engine(TCC_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 
 # Create session makers
 MainSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=main_engine)
 PCPSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=pcp_engine)
 ThraceSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=thrace_engine)
 TrainingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=training_engine)
+TCCSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=tcc_engine)
 
 Base = declarative_base()
 
@@ -51,9 +56,6 @@ class DatabaseHelper:
         finally:
             db.close()
     
-
-
-
     @staticmethod
     async def execute_main_query(query: str, params=None):
         """Execute raw SQL query on main database - runs in thread pool to avoid blocking event loop"""
@@ -169,10 +171,37 @@ class DatabaseHelper:
         except Exception as e:
             return {"data": [], "error": str(e)}
 
-    
-
-
-
+    @staticmethod
+    async def execute_tcc_query(query: str, params: tuple = ()):
+        """Execute raw SQL query on TCC (SOI) database - runs in thread pool to avoid blocking event loop"""
+        try:
+            loop = asyncio.get_event_loop()
+            executor = ThreadPoolExecutor(max_workers=5)
+            
+            def _execute():
+                with tcc_engine.connect() as connection:
+                    if params:
+                        param_count = query.count('%s')
+                        if param_count > 0:
+                            numbered_query = query
+                            for i in range(param_count):
+                                numbered_query = numbered_query.replace('%s', f':param{i}', 1)
+                            param_dict = {f'param{i}': params[i] for i in range(len(params))}
+                            result = connection.execute(text(numbered_query), param_dict)
+                        else:
+                            result = connection.execute(text(query))
+                    else:
+                        result = connection.execute(text(query))
+                        
+                    if query.strip().upper().startswith('SELECT'):
+                        return {"data": [dict(row._mapping) for row in result], "error": None}
+                    else:
+                        connection.commit()
+                        return {"data": result.rowcount, "error": None}
+            
+            return await loop.run_in_executor(executor, _execute)
+        except Exception as e:
+            return {"data": [], "error": str(e)}
 
 # Initialize the helper
 db_helper = DatabaseHelper()

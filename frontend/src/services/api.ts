@@ -79,6 +79,9 @@ export const apiService = {
 
   // RMT endpoints
   rmt: {
+    getMetadata: () =>
+      api.get('/api/rmt/metadata', { responseType: 'text', transformResponse: [(d) => d] }),
+
     getEUNeighbours: () =>
       api.get('/api/rmt/eu-neighbours'),
     
@@ -93,6 +96,12 @@ export const apiService = {
     
     postDiseaseStatus: (data: any) =>
       api.post('/api/rmt/disease-status', data),
+
+    getAdminDiseaseStatus: () =>
+      api.get('/api/rmt/admin/disease-status'),
+
+    saveAdminDiseaseStatus: (data: any[]) =>
+      api.post('/api/rmt/admin/disease-status', data),
     
     getMitigationMeasures: () =>
       api.get('/api/rmt/mitigation-measures'),
@@ -105,6 +114,12 @@ export const apiService = {
     
     postMitigationMeasures: (data: any) =>
       api.post('/api/rmt/mitigation-measures', data),
+
+    getAdminMitigationMeasures: () =>
+      api.get('/api/rmt/admin/mitigation-measures'),
+
+    saveAdminMitigationMeasures: (data: any[]) =>
+      api.post('/api/rmt/admin/mitigation-measures', data),
     
     getConnections: () =>
       api.get('/api/rmt-data/connections'),
@@ -300,12 +315,6 @@ export const apiService = {
       });
     },
     
-    getStagingSummary: () =>
-      api.get('/api/thrace/staging-summary'),
-    
-    approveData: () =>
-      api.post('/api/thrace/approve-data', {}),
-    
     getInspectors: () =>
       api.get('/api/thrace/inspectors'),
     
@@ -314,10 +323,13 @@ export const apiService = {
         params: { country_id: countryId, year, quarter }
       }),
 
-    getFreedomData: (species: string, disease: string, region: string, refreshSummary = false) =>
+    getFreedomData: (species: string, disease: string, region: string) =>
       api.get('/api/thrace/freedom-data', {
-        params: { species, disease, region, refresh_summary: refreshSummary }
+        params: { species, disease, region }
       }),
+
+    getMetadata: () =>
+      api.get('/api/thrace/metadata', { responseType: 'text', transformResponse: [(d) => d] }),
   },
 };
 

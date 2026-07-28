@@ -14,6 +14,8 @@ export { default as FastReport } from './FastReport';
 export { default as GetPrepared } from './GetPrepared';
 export { default as Monitoring } from './Monitoring';
 export { default as RISPLanding } from './RISPLanding';
+export { default as SeenPortal } from './SeenPortal';
+export { default as RISPSOI } from './RISPSOI';
 export { default as RISPOutbreak } from './RISPOutbreak';
 export { default as RISPVaccination } from './RISPVaccination';
 export { default as RISPSurveillance } from './RISPSurveillance';

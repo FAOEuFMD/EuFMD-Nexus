@@ -3,6 +3,9 @@
 ../Vue/
 /Thrace/
 
+# Large GeoJSON files (GADM boundaries)
+frontend/public/gadm.GeoJSON
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -1,0 +1,123 @@
+# THRACE module — simple product metadata
+# A plain, human-readable descriptive record (not a formal metadata standard). Describes the
+# dataset, the freedom model, its reference configuration, provenance and access. Update
+# product_version and metadata_date when the model or reference data change.
+
+identification:
+  title: "THRACE — FMD/PPR/LSD/SGP surveillance and freedom-from-disease analysis"
+  abstract: >
+    Surveillance data management and probability-of-freedom / early-detection analysis for
+    Foot-and-Mouth Disease (FMD), Peste des Petits Ruminants (PPR), Lumpy Skin Disease (LSD)
+    and Sheep & Goat Pox (SGP) across the Thrace region (Bulgaria, Greece, Türkiye). The
+    freedom model is a Python port of the corrected Ausvet/EuFMD post-evaluation model
+    (sequential herd sensitivity, real risk levels, pseudo-species aggregation,
+    disease-specific probability of introduction, positive-case reset, and EDSSe).
+  product_version: "1.0"
+  status: "onGoing"
+  language: "eng"
+  topic_categories:
+    - health
+    - farming
+    - boundaries
+  keywords:
+    - foot-and-mouth disease
+    - PPR
+    - lumpy skin disease
+    - sheep and goat pox
+    - surveillance
+    - freedom from disease
+    - probability of freedom
+    - early detection
+    - Thrace
+    - Bulgaria
+    - Greece
+    - Türkiye
+
+responsible_parties:
+  custodian:
+    organisation: "Food and Agriculture Organization of the United Nations (FAO)"
+    unit: "European Commission for the Control of Foot-and-Mouth Disease (EuFMD)"
+  point_of_contact:
+    name: "Pilar Rius"
+    role: "Data Engineer"
+    email: "pilar.riusmunoz@fao.org"
+    organisation: "FAO / EuFMD"
+
+constraints:
+  access:
+    classification: "internal"
+    statement: >
+      Internal FAO/EuFMD product. Visible only to authenticated users of the EuFMD Nexus
+      platform. Not public and not for redistribution.
+  use:
+    statement: >
+      For EuFMD surveillance evaluation and reporting. Country surveillance data are
+      sensitive; do not share outside FAO/EuFMD without the data owners' agreement.
+
+extent:
+  countries:
+    - code: BGR
+      name: "Bulgaria"
+    - code: GRC
+      name: "Greece"
+    - code: TUR
+      name: "Türkiye"
+  temporal:
+    start: "2016-01-01"
+    end: "ongoing"
+  note: >
+    The freedom model includes surveillance months from 2016 onward (year floor in the
+    corrected model).
+
+content:
+  diseases: [FMD, PPR, LSD, SGP]
+  species_groups:
+    - "all species (all_sp)"
+    - "large ruminants (lr = cattle + buffalo)"
+    - "small ruminants (sr = sheep + goat)"
+    - "cattle, buffalo, sheep, goat, pig (individually)"
+  outputs:
+    - "monthly system sensitivity (FSSe)"
+    - "monthly probability of freedom (Bayesian, with positive-case reset)"
+    - "monthly probability of introduction (disease-specific)"
+    - "early detection surveillance sensitivity (EDSSe)"
+    - "animals tested (serology / clinical)"
+
+data_sources:
+  surveillance:
+    description: "Field activity records (real surveillance data)"
+    location: "thrace.factivities (live MySQL)"
+    ingest: "Excel upload -> validation -> direct insert (POST /api/thrace/upload-data)"
+  geography:
+    description: "Epiunit -> district/province/nation resolution"
+    location: "thrace.epiunits_view; nationID mapped to country code (100->BGR, 300->GRC, 792->TUR)"
+  reference_configuration:
+    description: "Corrected model parameters and denominators (version-controlled, not from the live DB)"
+    files:
+      - backend/data/thrace/params.csv          # FSSe/EDSSe parameters per disease/region
+      - backend/data/thrace/monthly_pintro.csv  # disease-specific monthly P(introduction)
+      - backend/data/thrace/tot_n_epiunits.csv  # EDSSe denominators (epiunit counts)
+      - backend/data/thrace/risk_levels.json    # high/low risk assignment lists
+
+lineage:
+  methodology: >
+    Faithful Python port of update_database_R_corrected.R (Ausvet/EuFMD corrected model).
+    Corrections implemented: R1 (sequential/overlap-corrected herd sensitivity),
+    R4/R16 (risk levels), R7 (dual FSSe/EDSSe parameters), R8 (pseudo-species),
+    R11/R12 (disease-specific and year-specific P(intro)), R13-R15 (updated priors/RR),
+    R17 (positive-case reset), R18 (EDSSe).
+  reference_implementation: "Thrace/New items/THRACE R version/update_database_R_corrected.R (gitignored)"
+  validation: >
+    Automated R-vs-Python parity tests (backend/tests/test_thrace_parity.py) assert equality
+    (abs tol 1e-6) against base-R reference fixtures for FMD/BOV/GR, PPR/SR/GR, LSD/LR/BG.
+  key_code:
+    - backend/routers/thrace.py            # API endpoints
+    - backend/routers/thrace_calculator.py # corrected model
+    - frontend/src/pages/Thrace.tsx        # UI
+  documentation: docs/Thrace.md
+
+metadata:
+  standard: "Simple product metadata (no formal standard)"
+  language: "eng"
+  metadata_date: "2026-07-14"
+  maintainer: "FAO / EuFMD"

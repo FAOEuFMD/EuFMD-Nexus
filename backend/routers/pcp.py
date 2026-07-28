@@ -6,6 +6,20 @@ from database import db_helper
 
 router = APIRouter(prefix="/api/pcp", tags=["pcp"])
 
+@router.get("/pcp-fmd-2026")
+async def get_pcp_fmd_2026():
+    """Get PCP-FMD data for 2026 for map visualization"""
+    try:
+        result = await db_helper.execute_pcp_query(
+            "SELECT Country, PCP_Stage FROM PCP.PCP_DB WHERE Year = 2026"
+        )
+        if result["error"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return {"data": result["data"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/", response_model=List[PCPEntry])
 async def get_pcp_data(current_user: dict = Depends(get_current_user)):
     """Get all PCP data"""

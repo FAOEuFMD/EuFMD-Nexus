@@ -1,11 +1,146 @@
 
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List
-from models import Country, DiseaseStatus, MitigationMeasure
+from fastapi.responses import Response
+from typing import List, Optional, Any, Dict
+from models import Country, DiseaseStatus, MitigationMeasure, DiseaseStatusCreate, MitigationMeasureCreate
 from auth import get_current_user, get_current_user_optional
 from database import db_helper
 
 router = APIRouter(prefix="/api/rmt", tags=["rmt"])
+
+
+@router.get("/metadata")
+async def get_rmt_metadata():
+    """Return the RMT-FAST simple product metadata as raw YAML.
+
+    Public product documentation, served as-is from backend/data/rmt/metadata.yaml so users
+    can view or download it. The frontend displays the text and offers a client-side download.
+    """
+    path = Path(__file__).resolve().parents[1] / "data" / "rmt" / "metadata.yaml"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Metadata file not found")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading metadata: {str(e)}")
+    return Response(content=content, media_type="application/x-yaml")
+
+
+def _require_admin(user: Dict[str, Any]) -> None:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+async def _find_latest_row_id(table: str, country_id: int, user_id: Optional[int]) -> Optional[int]:
+    """Return the id of the latest row for a country/user scope."""
+    if user_id is None:
+        query = f"""
+            SELECT id
+            FROM {table}
+            WHERE country_id = %s AND user_id IS NULL
+            ORDER BY date DESC, id DESC
+            LIMIT 1
+        """
+        params = (country_id,)
+    else:
+        query = f"""
+            SELECT id
+            FROM {table}
+            WHERE country_id = %s AND user_id = %s
+            ORDER BY date DESC, id DESC
+            LIMIT 1
+        """
+        params = (country_id, user_id)
+
+    result = await db_helper.execute_main_query(query, params)
+    if result["error"]:
+        raise HTTPException(status_code=500, detail=result["error"])
+    rows = result["data"] or []
+    return rows[0]["id"] if rows else None
+
+
+async def _upsert_score_row(
+    table: str,
+    country_id: int,
+    scores: Dict[str, Any],
+    date: str,
+    user_id: Optional[int],
+) -> None:
+    """Update the latest row for this country/user scope, or insert if none exists."""
+    row_id = await _find_latest_row_id(table, country_id, user_id)
+    if row_id is not None:
+        update_query = f"""
+            UPDATE {table}
+            SET FMD = %s, PPR = %s, LSD = %s, RVF = %s, SPGP = %s, date = %s
+            WHERE id = %s
+        """
+        params = (
+            scores["FMD"],
+            scores["PPR"],
+            scores["LSD"],
+            scores["RVF"],
+            scores["SPGP"],
+            date,
+            row_id,
+        )
+        result = await db_helper.execute_main_query(update_query, params)
+    else:
+        insert_query = f"""
+            INSERT INTO {table} (country_id, FMD, PPR, LSD, RVF, SPGP, date, user_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        params = (
+            country_id,
+            scores["FMD"],
+            scores["PPR"],
+            scores["LSD"],
+            scores["RVF"],
+            scores["SPGP"],
+            date,
+            user_id,
+        )
+        result = await db_helper.execute_main_query(insert_query, params)
+
+    if result["error"]:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+
+_LATEST_DEFAULT_PER_COUNTRY_SQL = """
+    SELECT ds.id, ds.country_id, ds.FMD, ds.PPR, ds.LSD, ds.RVF, ds.SPGP,
+           DATE_FORMAT(ds.date, '%Y-%m-%d') as date
+    FROM disease_status ds
+    INNER JOIN (
+        SELECT d1.country_id, MAX(d1.id) AS latest_id
+        FROM disease_status d1
+        WHERE d1.user_id IS NULL
+          AND d1.date = (
+              SELECT MAX(d2.date)
+              FROM disease_status d2
+              WHERE d2.country_id = d1.country_id AND d2.user_id IS NULL
+          )
+        GROUP BY d1.country_id
+    ) latest ON ds.id = latest.latest_id
+    ORDER BY ds.country_id
+"""
+
+_LATEST_DEFAULT_MITIGATION_PER_COUNTRY_SQL = """
+    SELECT mm.id, mm.country_id, mm.FMD, mm.PPR, mm.LSD, mm.RVF, mm.SPGP,
+           DATE_FORMAT(mm.date, '%Y-%m-%d') as date
+    FROM mitigation_measures mm
+    INNER JOIN (
+        SELECT m1.country_id, MAX(m1.id) AS latest_id
+        FROM mitigation_measures m1
+        WHERE m1.user_id IS NULL
+          AND m1.date = (
+              SELECT MAX(m2.date)
+              FROM mitigation_measures m2
+              WHERE m2.country_id = m1.country_id AND m2.user_id IS NULL
+          )
+        GROUP BY m1.country_id
+    ) latest ON mm.id = latest.latest_id
+    ORDER BY mm.country_id
+"""
 
 @router.get("/")
 async def rmt_root():
@@ -493,62 +628,140 @@ async def get_mitigation_measures_by_country(country_id: int, user=Depends(get_c
 
 # Risk scores calculation is handled on the frontend based on disease status and mitigation measures
 
+@router.get("/admin/disease-status")
+async def get_admin_disease_status(user=Depends(get_current_user)):
+    """Latest default (system) disease status — one row per country for admin data entry."""
+    _require_admin(user)
+    try:
+        result = await db_helper.execute_main_query(_LATEST_DEFAULT_PER_COUNTRY_SQL)
+        if result["error"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result["data"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/admin/mitigation-measures")
+async def get_admin_mitigation_measures(user=Depends(get_current_user)):
+    """Latest default (system) mitigation measures — one row per country for admin data entry."""
+    _require_admin(user)
+    try:
+        result = await db_helper.execute_main_query(_LATEST_DEFAULT_MITIGATION_PER_COUNTRY_SQL)
+        if result["error"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result["data"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/disease-status")
+async def save_admin_disease_status(
+    records: List[DiseaseStatusCreate],
+    user=Depends(get_current_user),
+):
+    """Upsert default disease status for each country (no duplicate rows per save)."""
+    _require_admin(user)
+    try:
+        for item in records:
+            await _upsert_score_row(
+                "disease_status",
+                item.country_id,
+                {
+                    "FMD": item.FMD,
+                    "PPR": item.PPR,
+                    "LSD": item.LSD,
+                    "RVF": item.RVF,
+                    "SPGP": item.SPGP,
+                },
+                item.date,
+                None,
+            )
+        return {"message": f"Saved {len(records)} disease status records", "success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/mitigation-measures")
+async def save_admin_mitigation_measures(
+    records: List[MitigationMeasureCreate],
+    user=Depends(get_current_user),
+):
+    """Upsert default mitigation measures for each country (no duplicate rows per save)."""
+    _require_admin(user)
+    try:
+        for item in records:
+            await _upsert_score_row(
+                "mitigation_measures",
+                item.country_id,
+                {
+                    "FMD": item.FMD,
+                    "PPR": item.PPR,
+                    "LSD": item.LSD,
+                    "RVF": item.RVF,
+                    "SPGP": item.SPGP,
+                },
+                item.date,
+                None,
+            )
+        return {"message": f"Saved {len(records)} mitigation measure records", "success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # POST ENDPOINTS FOR DISEASE STATUS
 @router.post("/disease-status")
 async def create_disease_status(disease_status: DiseaseStatus, user=Depends(get_current_user)):
-    """Create new disease status record"""
+    """Upsert disease status for the current user (or system default for admin)."""
     try:
-        user_id = user["id"] if user else None
-        query = """
-        INSERT INTO disease_status (country_id, FMD, PPR, LSD, RVF, SPGP, date, user_id)
-        VALUES (:country_id, :FMD, :PPR, :LSD, :RVF, :SPGP, :date, :user_id)
-        """
-        params = {
-            "country_id": disease_status.country_id,
-            "FMD": disease_status.FMD,
-            "PPR": disease_status.PPR,
-            "LSD": disease_status.LSD,
-            "RVF": disease_status.RVF,
-            "SPGP": disease_status.SPGP,
-            "date": disease_status.date,
-            "user_id": user_id
-        }
-        result = await db_helper.execute_main_query(query, params)
-        
-        if result["error"]:
-            raise HTTPException(status_code=500, detail=f"Database error: {result['error']}")
-        
-        return {"message": "Disease status created successfully", "success": True}
-        
+        user_id = None if user.get("role") == "admin" else user["id"]
+        await _upsert_score_row(
+            "disease_status",
+            disease_status.country_id,
+            {
+                "FMD": disease_status.FMD,
+                "PPR": disease_status.PPR,
+                "LSD": disease_status.LSD,
+                "RVF": disease_status.RVF,
+                "SPGP": disease_status.SPGP,
+            },
+            disease_status.date,
+            user_id,
+        )
+        return {"message": "Disease status saved successfully", "success": True}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating disease status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error saving disease status: {str(e)}")
 
 # POST ENDPOINTS FOR MITIGATION MEASURES
 @router.post("/mitigation-measures")
 async def create_mitigation_measures(mitigation_measure: MitigationMeasure, user=Depends(get_current_user)):
-    """Create new mitigation measures record"""
+    """Upsert mitigation measures for the current user (or system default for admin)."""
     try:
-        user_id = user["id"] if user else None
-        query = """
-        INSERT INTO mitigation_measures (country_id, FMD, PPR, LSD, RVF, SPGP, date, user_id)
-        VALUES (:country_id, :FMD, :PPR, :LSD, :RVF, :SPGP, :date, :user_id)
-        """
-        params = {
-            "country_id": mitigation_measure.country_id,
-            "FMD": mitigation_measure.FMD,
-            "PPR": mitigation_measure.PPR,
-            "LSD": mitigation_measure.LSD,
-            "RVF": mitigation_measure.RVF,
-            "SPGP": mitigation_measure.SPGP,
-            "date": mitigation_measure.date,
-            "user_id": user_id
-        }
-        result = await db_helper.execute_main_query(query, params)
-        
-        if result["error"]:
-            raise HTTPException(status_code=500, detail=f"Database error: {result['error']}")
-        
-        return {"message": "Mitigation measures created successfully", "success": True}
-        
+        user_id = None if user.get("role") == "admin" else user["id"]
+        await _upsert_score_row(
+            "mitigation_measures",
+            mitigation_measure.country_id,
+            {
+                "FMD": mitigation_measure.FMD,
+                "PPR": mitigation_measure.PPR,
+                "LSD": mitigation_measure.LSD,
+                "RVF": mitigation_measure.RVF,
+                "SPGP": mitigation_measure.SPGP,
+            },
+            mitigation_measure.date,
+            user_id,
+        )
+        return {"message": "Mitigation measures saved successfully", "success": True}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating mitigation measures: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error saving mitigation measures: {str(e)}")

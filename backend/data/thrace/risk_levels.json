@@ -1,0 +1,43 @@
+{
+  "_source": "update_database_R_corrected.R lines 168-209",
+  "bgr_high_epiunit_ids": [
+    2145,
+    2153,
+    2150,
+    2159,
+    2162,
+    2147,
+    2156,
+    2149,
+    2164,
+    2160,
+    2152,
+    2155,
+    2158,
+    2157,
+    2154,
+    2148,
+    2151,
+    2163,
+    2146,
+    2161
+  ],
+  "grc_high_districts": [
+    "ORESTIADA",
+    "DIDYMOTEICHO",
+    "FERES",
+    "ALEXANDROUPOLI"
+  ],
+  "grc_low_districts": [
+    "SOUFLI"
+  ],
+  "tur_high_provinces": [
+    "ISTANBUL"
+  ],
+  "tur_low_provinces": [
+    "CANAKKALE",
+    "EDIRNE",
+    "KIRKLARELI",
+    "TEKIRDAG"
+  ]
+}

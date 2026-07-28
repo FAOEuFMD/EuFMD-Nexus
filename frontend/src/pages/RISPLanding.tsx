@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -6,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '../stores/authStore';
+import { isSeenRispUser, SEEN_RISP_PORTAL_PATH } from '../utils/seenUser';
 
 // MapDisabler removed to allow full map interaction
 
@@ -137,34 +137,27 @@ const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredD
 
 const RISPLanding: React.FC = () => {
   const { user } = useAuthStore();
+  const showPortalLink = isSeenRispUser(user);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FastReportData[]>([]);
+  const [surveillanceData, setSurveillanceData] = useState<any>({});
+  const [vaccinationData, setVaccinationData] = useState<any>({});
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
   const [selectedDisease, setSelectedDisease] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewModeType>('default');
   const [selectedCountryData, setSelectedCountryData] = useState<any>(null);
 
-  // Debug user information
-  useEffect(() => {
-    console.log('Current user object:', user);
-    console.log('User country from auth:', user?.country);
-  }, [user]);
-
   // Get user's region based on their country
   const userRegion = useMemo(() => {
     if (!user?.country) return null;
-    const region = countryToRegion[user.country] || null;
-    console.log('User country:', user?.country, 'User region:', region);
-    return region;
+    return countryToRegion[user.country] || null;
   }, [user?.country]);
 
   // Get list of countries in user's region
   const userRegionCountries = useMemo(() => {
     if (!userRegion) return [];
-    const countries = Object.keys(countryToRegion).filter(country => countryToRegion[country] === userRegion);
-    console.log('User region countries:', countries);
-    return countries;
+    return Object.keys(countryToRegion).filter(country => countryToRegion[country] === userRegion);
   }, [userRegion]);
 
   // Get map settings based on user's region
@@ -192,29 +185,36 @@ const RISPLanding: React.FC = () => {
   }, [data]);
 
 
-  // Find the most recent year and quarter in the data (for all visualizations)
+  // Calculate the last COMPLETED quarter (quarters are reported after they end)
   const { mostRecentYear, mostRecentQuarter } = useMemo(() => {
-    if (!data.length) {
-      const now = new Date();
-      return {
-        mostRecentYear: now.getFullYear(),
-        mostRecentQuarter: Math.ceil((now.getMonth() + 1) / 3)
-      };
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentQuarter = Math.ceil((now.getMonth() + 1) / 3);
+    
+    // Show the PREVIOUS quarter since current quarter isn't reported yet
+    // (reports are submitted after the quarter ends)
+    let lastReportedQuarter = currentQuarter - 1;
+    let lastReportedYear = currentYear;
+    
+    // If we're in Q1, the last reported quarter is Q4 of previous year
+    if (lastReportedQuarter === 0) {
+      lastReportedQuarter = 4;
+      lastReportedYear = currentYear - 1;
     }
-    // Sort descending by year, then quarter
-    const sorted = [...data].sort((a, b) => {
-      if (a.Year !== b.Year) return b.Year - a.Year;
-      return b.Quarter - a.Quarter;
-    });
+    
     return {
-      mostRecentYear: sorted[0].Year,
-      mostRecentQuarter: sorted[0].Quarter
+      mostRecentYear: lastReportedYear,
+      mostRecentQuarter: lastReportedQuarter
     };
-  }, [data]);
+  }, []);
 
   // Only use data from the most recent quarter for all visualizations
   const lastQuarterData = useMemo(() => {
-    return data.filter(item => item.Year === mostRecentYear && item.Quarter === mostRecentQuarter && (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country)));
+    return data.filter(item => 
+      item.Year === mostRecentYear && 
+      item.Quarter === mostRecentQuarter && 
+      (userRegionCountries.length === 0 || userRegionCountries.includes(item.Country))
+    );
   }, [data, mostRecentYear, mostRecentQuarter, userRegionCountries]);
 
   // Group last quarter data by country for info boxes
@@ -222,6 +222,18 @@ const RISPLanding: React.FC = () => {
     const countryDataWithReports = lastQuarterData.reduce((acc, item) => {
       const country = item.Country;
       if (!acc[country]) {
+        // Count surveillance records for this country/year/quarter
+        const surveillanceCount = Object.keys(surveillanceData).filter(key => {
+          const [c, y, q] = key.split('-');
+          return c === country && parseInt(y) === mostRecentYear && parseInt(q) === mostRecentQuarter;
+        }).length;
+        
+        // Count vaccination records for this country/year/quarter
+        const vaccinationCount = Object.keys(vaccinationData).filter(key => {
+          const [c, y, q] = key.split('-');
+          return c === country && parseInt(y) === mostRecentYear && parseInt(q) === mostRecentQuarter;
+        }).length;
+        
         acc[country] = {
           country,
           year: mostRecentYear,
@@ -230,8 +242,8 @@ const RISPLanding: React.FC = () => {
           diseases: [],
           reports: [],
           outbreakReports: [],
-          vaccinationReports: [],
-          surveillanceReports: [],
+          vaccinationCount: vaccinationCount,
+          surveillanceCount: surveillanceCount,
           hasData: true,
           lastReported: `Q${mostRecentQuarter} ${mostRecentYear}`
         };
@@ -247,19 +259,25 @@ const RISPLanding: React.FC = () => {
       if (outbreaks > 0) {
         acc[country].outbreakReports.push(item);
       }
-      if (item.Vaccination === 1 || item.Vaccination === '1') {
-        acc[country].vaccinationReports.push(item);
-      }
-      if (item.Surveillance === 1 || item.Surveillance === '1') {
-        acc[country].surveillanceReports.push(item);
-      }
       return acc;
     }, {} as Record<string, any>);
+    
     // Add countries with no data for the most recent quarter
     const allCountryData = userRegionCountries.map(country => {
       if (countryDataWithReports[country]) {
         return countryDataWithReports[country];
       } else {
+        // Count surveillance/vaccination for countries with no outbreak data
+        const surveillanceCount = Object.keys(surveillanceData).filter(key => {
+          const [c, y, q] = key.split('-');
+          return c === country && parseInt(y) === mostRecentYear && parseInt(q) === mostRecentQuarter;
+        }).length;
+        
+        const vaccinationCount = Object.keys(vaccinationData).filter(key => {
+          const [c, y, q] = key.split('-');
+          return c === country && parseInt(y) === mostRecentYear && parseInt(q) === mostRecentQuarter;
+        }).length;
+        
         return {
           country,
           year: mostRecentYear,
@@ -268,14 +286,14 @@ const RISPLanding: React.FC = () => {
           diseases: [],
           reports: [],
           outbreakReports: [],
-          vaccinationReports: [],
-          surveillanceReports: [],
+          vaccinationCount: vaccinationCount,
+          surveillanceCount: surveillanceCount,
           hasData: false
         };
       }
     });
     return allCountryData;
-  }, [lastQuarterData, userRegionCountries, mostRecentYear, mostRecentQuarter]);
+  }, [lastQuarterData, userRegionCountries, mostRecentYear, mostRecentQuarter, surveillanceData, vaccinationData]);
 
   // For all map and info visualizations, use only lastQuarterData
 
@@ -311,8 +329,8 @@ const RISPLanding: React.FC = () => {
         const controller = new AbortController();
         const fetchTimeoutId = setTimeout(() => controller.abort(), 10000);
         
-        // Simple API call without country filtering - we'll filter client-side
-        const response = await fetch('/api/fast-report/create-dashboard', {
+        // Use the new RISP dashboard endpoint instead of FAST_Report
+        const response = await fetch('/api/risp/dashboard', {
           signal: controller.signal
         });
         clearTimeout(fetchTimeoutId);
@@ -324,19 +342,20 @@ const RISPLanding: React.FC = () => {
         const dashboardData = await response.json();
         
         if (dashboardData && dashboardData.data && Array.isArray(dashboardData.data)) {
-          console.log("API data loaded:", dashboardData.data.length, "records");
-          console.log("Sample data record:", dashboardData.data[0]);
-          console.log("Vaccination records (===1):", dashboardData.data.filter((item: any) => item.Vaccination === 1).length);
-          console.log("Vaccination records (==='1'):", dashboardData.data.filter((item: any) => item.Vaccination === '1').length);
-          console.log("Surveillance records (===1):", dashboardData.data.filter((item: any) => item.Surveillance === 1).length);
-          console.log("Surveillance records (==='1'):", dashboardData.data.filter((item: any) => item.Surveillance === '1').length);
           setData(dashboardData.data);
+          
+          // Store surveillance and vaccination summaries
+          if (dashboardData.surveillance_summary) {
+            setSurveillanceData(dashboardData.surveillance_summary);
+          }
+          if (dashboardData.vaccination_summary) {
+            setVaccinationData(dashboardData.vaccination_summary);
+          }
         } else {
           console.warn("Invalid API data format:", dashboardData);
           setData([]);
         }
 
-        // No need for separate vaccination/surveillance data - they come from the same table
       } catch (err: any) {
         console.warn('API fetch error:', err.message);
         setData([]);
@@ -427,6 +446,11 @@ const RISPLanding: React.FC = () => {
         
         {/* Share Information Button - Moved to the right */}
         <div className="flex justify-end space-x-2">
+          {showPortalLink && (
+            <Link to={SEEN_RISP_PORTAL_PATH} className="nav-btn">
+              Choose report type
+            </Link>
+          )}
           <a
             href="/RISP_Template.xlsx"
             download
@@ -705,7 +729,7 @@ const RISPLanding: React.FC = () => {
                     // Different styling for countries with/without data
                     const bubbleStyle = hasData 
                       ? "background: linear-gradient(135deg, #015039 0%, #10b981 100%);"
-                      : "background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);";
+                      : "background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);"
                     
                     return (
                       <Marker
@@ -885,40 +909,23 @@ const RISPLanding: React.FC = () => {
 
               {/* Vaccination Data */}
               <div className="p-3 bg-green-50 rounded">
-                <h4 className="font-medium text-green-800 mb-2">Vaccination Data</h4>
-                <div className="text-2xl font-bold text-green-600">{selectedCountryData.vaccinationReports.length}</div>
-                <div className="text-sm text-gray-600">vaccination reports</div>
-                {selectedCountryData.vaccinationReports.length > 0 && (
-                  <div className="mt-2">
-                    <div className="text-sm font-medium text-gray-700">Diseases:</div>
-                    <div className="text-sm text-gray-600">
-                      {Array.from(new Set(selectedCountryData.vaccinationReports.map((r: any) => r.Disease).filter(Boolean))).join(', ')}
-                    </div>
-                  </div>
-                )}
+                <h4 className="font-medium text-green-800 mb-2">Vaccination Campaigns</h4>
+                <div className="text-2xl font-bold text-green-600">{selectedCountryData.vaccinationCount || 0}</div>
+                <div className="text-sm text-gray-600">vaccination campaigns</div>
               </div>
 
               {/* Surveillance Data */}
               <div className="p-3 bg-blue-50 rounded">
-                <h4 className="font-medium text-blue-800 mb-2">Surveillance Data</h4>
-                <div className="text-2xl font-bold text-blue-600">{selectedCountryData.surveillanceReports.length}</div>
-                <div className="text-sm text-gray-600">surveillance reports</div>
-                {selectedCountryData.surveillanceReports.length > 0 && (
-                  <div className="mt-2">
-                    <div className="text-sm font-medium text-gray-700">Diseases:</div>
-                    <div className="text-sm text-gray-600">
-                      {Array.from(new Set(selectedCountryData.surveillanceReports.map((r: any) => r.Disease).filter(Boolean))).slice(0, 3).join(', ')}
-                      {Array.from(new Set(selectedCountryData.surveillanceReports.map((r: any) => r.Disease).filter(Boolean))).length > 3 && '...'}
-                    </div>
-                  </div>
-                )}
+                <h4 className="font-medium text-blue-800 mb-2">Passive Surveillance</h4>
+                <div className="text-2xl font-bold text-blue-600">{selectedCountryData.surveillanceCount || 0}</div>
+                <div className="text-sm text-gray-600">surveillance activities</div>
               </div>
 
               {/* Summary */}
               <div className="p-3 bg-gray-50 rounded">
                 <h4 className="font-medium text-gray-800 mb-2">Quarter Summary</h4>
                 <div className="text-sm text-gray-600">
-                  <div>Total Reports: {selectedCountryData.outbreakReports.length + selectedCountryData.vaccinationReports.length + selectedCountryData.surveillanceReports.length}</div>
+                  <div>Total Activities: {selectedCountryData.outbreakReports.length + (selectedCountryData.vaccinationCount || 0) + (selectedCountryData.surveillanceCount || 0)}</div>
                   <div>Last Updated: {selectedCountryData.lastReported}</div>
                 </div>
               </div>
@@ -936,6 +943,18 @@ const RISPLanding: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Map Disclaimer */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+            <p className="text-sm text-gray-700 italic">
+              The boundaries and names shown and the designations used on this map do not imply the 
+              expression of any opinion whatsoever on the part of FAO concerning the legal status of any country, 
+              territory, city or area or of its authorities, or concerning the delimitation of its frontiers and 
+              boundaries.
+            </p>
+          </div>
+        </div>
 
         {/* Summary Statistics */}
         {filteredData.length > 0 && (

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import BarChart from '../components/BarChart';
+import DiagnosticSupportMap from '../components/DiagnosticSupportMap';
+import ProductTimeline from '../components/ProductTimeline';
 import LOAModal from '../components/LOAModal';
 import StockModal from '../components/StockModal';
-import MapModal from '../components/MapModal';
 
 interface Country {
   id: number;
@@ -47,7 +48,6 @@ const DiagnosticSupport: React.FC = () => {
   const [selectedPO, setSelectedPO] = useState<string>('');
   
   // UI states
-  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
   const [isStockModalVisible, setIsStockModalVisible] = useState(false);
   const [isLOAModalVisible, setIsLOAModalVisible] = useState(false);
   const [isConfirmDeleteModalVisible, setIsConfirmDeleteModalVisible] = useState(false);
@@ -139,14 +139,6 @@ const DiagnosticSupport: React.FC = () => {
     }
   };
 
-  const showMapModal = () => {
-    setIsMapModalVisible(true);
-  };
-
-  const closeMapModal = () => {
-    setIsMapModalVisible(false);
-  };
-
   const showStockModal = () => {
     setIsStockModalVisible(true);
   };
@@ -227,27 +219,22 @@ const DiagnosticSupport: React.FC = () => {
   };
 
   // Computed values - ensure procurements is always an array
-  const filteredProcurements = selectedPO 
-    ? (procurements || []).filter(proc => proc.PO === selectedPO)
-    : (procurements || []);
+  const filteredProcurements = useMemo(
+    () => (selectedPO ? (procurements || []).filter((proc) => proc.PO === selectedPO) : procurements || []),
+    [procurements, selectedPO],
+  );
 
   const uniqueCountries = Array.from(new Set(filteredProcurements.map(item => item.country_id)));
 
   const totalQuantitiesByPO = filteredProcurements.reduce((total, proc) => total + proc.quantity, 0);
 
-  // Generate matched countries for map modal integration
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const matchedCountries = countries.filter(country => 
-    (procurements || []).some(proc => proc.country_id === country.id)
-  );
-
-  const uniqueProductsArray: UniqueProduct[] = (() => {
+  const uniqueProductsArray: UniqueProduct[] = useMemo(() => {
     const uniqueProducts: { [key: string]: UniqueProduct } = {};
     const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
     const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
     let letterIndex = 0;
 
-    (filteredProcurements || []).forEach(item => {
+    filteredProcurements.forEach((item) => {
       if (!uniqueProducts[item.product]) {
         uniqueProducts[item.product] = {
           product: item.product,
@@ -261,7 +248,12 @@ const DiagnosticSupport: React.FC = () => {
     });
 
     return Object.values(uniqueProducts);
-  })();
+  }, [filteredProcurements]);
+
+  const productColorMap = useMemo(
+    () => Object.fromEntries(uniqueProductsArray.map((item) => [item.product, item.color])),
+    [uniqueProductsArray],
+  );
 
   if (loading) {
     return (
@@ -272,7 +264,7 @@ const DiagnosticSupport: React.FC = () => {
   }
 
   return (
-    <div className="container py-5 text-gray-800">
+    <div className="diagnostic-page w-full max-w-[100rem] mx-auto px-2 sm:px-3 py-5 text-gray-800">
       <h1 className="font-black capitalize text-2xl my-3">
         Diagnostic Support
       </h1>
@@ -292,71 +284,59 @@ const DiagnosticSupport: React.FC = () => {
         {/* Left Section - Graph Component */}
         <div className="component" id="graph-component">
           {/* Bar Graph */}
-          <div className="graph mt-4">
-            <div className="flex flex-row m-4 gap-4 rounded-xl bg-white border border-gray-300 shadow-md p-4">
-              {/* Chart */}
-              <div className="w-3/5 text-center text-xlg font-black border border-gray-300 rounded-lg p-4" style={{marginRight: '20px'}}>
-                <BarChart uniqueProductsArray={uniqueProductsArray} />
-              </div>
-
-              {/* Color Legends */}
-              <div className="w-2/5 mt-4 ml-4" style={{marginLeft: '20px'}}>
-                <div className="mt-4">
-                  {uniqueProductsArray.map((item, index) => (
-                    <div key={index} className="flex items-center mb-2">
-                      <div 
-                        className="w-4 h-4 mr-2 rounded" 
-                        style={{backgroundColor: item.color}}
-                      ></div>
-                      <span className="text-sm">{item.letter}. {item.product} ({item.totalQuantity})</span>
-                    </div>
-                  ))}
+          <div className="graph mt-2 h-full w-full">
+            <div className="flex flex-col w-full h-full min-h-0 m-2 gap-3 rounded-xl bg-white border border-gray-300 shadow-md p-3 overflow-hidden">
+              <div className="grid grid-cols-2 gap-3 w-full shrink-0">
+                <div className="flex flex-col items-center justify-center text-center px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+                  <div
+                    className="text-base font-black pb-1 border-b-2 w-full"
+                    style={{ borderColor: '#72aba7' }}
+                  >
+                    Countries
+                  </div>
+                  <div className="text-3xl font-extrabold mt-1 text-[#15736d]">
+                    {uniqueCountries.length}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center justify-center text-center px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+                  <div
+                    className="text-base font-black pb-1 border-b-2 w-full"
+                    style={{ borderColor: '#72aba7' }}
+                  >
+                    Products sent
+                  </div>
+                  <div className="text-3xl font-extrabold mt-1 text-[#15736d]">
+                    {totalQuantitiesByPO}
+                  </div>
                 </div>
               </div>
 
-              <div className="w-1/5 mt-4 mr-4">
-                <div className="grid grid-rows-2 h-full">
-                  <div className="flex flex-col items-center justify-center">
-                    <div 
-                      className="text-center text-lg font-black pb-2 border-b-2 border-gray-300"
-                      style={{borderColor: '#72aba7'}}
-                    >
-                      Countries
-                    </div>
-                    <div className="text-center text-4xl font-extrabold mt-2">
-                      {uniqueCountries.length}
-                    </div>
+              <div className="grid grid-cols-2 gap-3 flex-1 min-h-0 w-full overflow-hidden">
+                <div className="w-full min-w-0 border border-gray-200 rounded-lg p-2 flex flex-col min-h-0 overflow-hidden">
+                  <h3 className="text-xs font-bold text-gray-700 mb-1 px-1 shrink-0">Products by quantity</h3>
+                  <div className="flex-1 min-h-0 w-full overflow-hidden">
+                    <BarChart uniqueProductsArray={uniqueProductsArray} compact />
                   </div>
-                  <div className="flex flex-col items-center justify-center mt-2">
-                    <div 
-                      className="text-center text-lg font-black pb-2 border-b-2 border-gray-300"
-                      style={{borderColor: '#72aba7'}}
-                    >
-                      Products sent
-                    </div>
-                    <div className="text-center text-4xl font-extrabold mt-1">
-                      {totalQuantitiesByPO}
-                    </div>
-                  </div>
+                </div>
+                <div className="w-full min-w-0 border border-gray-200 rounded-lg p-2 flex flex-col min-h-0 overflow-hidden h-full">
+                  <ProductTimeline
+                    procurements={filteredProcurements}
+                    productColors={productColorMap}
+                  />
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Section - Map Component */}
-        <div className="component" id="map-component">
-          <img
-            className="natural-map"
-            src="/natural-map.png"
-            alt="World map natural landscape"
-          />
-          <button
-            className="stock-btn nav-btn absolute top-1/2 left-1/2 py-2 px-4 transform -translate-x-1/2 -translate-y-1/2"
-            onClick={showMapModal}
-          >
-            View Full Map
-          </button>
+        {/* Right Section - Map */}
+        <div className="component diagnostic-map-panel" id="map-component">
+          <div className="h-full w-full p-2">
+            <DiagnosticSupportMap
+              procurements={filteredProcurements}
+              countries={countries}
+            />
+          </div>
         </div>
       </div>
 
@@ -469,15 +449,6 @@ const DiagnosticSupport: React.FC = () => {
       </div>
 
       {/* Modals */}
-      {isMapModalVisible && (
-        <MapModal
-          isVisible={isMapModalVisible}
-          procurements={filteredProcurements}
-          matchedCountries={matchedCountries}
-          onClose={closeMapModal}
-        />
-      )}
-
       {isStockModalVisible && (
         <StockModal
           isVisible={isStockModalVisible}

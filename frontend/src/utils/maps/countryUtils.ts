@@ -97,11 +97,6 @@ export const normalizeCountryName = (name: string): string => {
 };
 
 /**
- * Calculates a risk color based on a score value
+ * Calculates a risk color based on a score value (0–3 scale).
  */
-export const getRiskColor = (score: number): string => {
-  if (score === 0) return '#4CAF50'; // Low risk (green)
-  if (score <= 1) return '#FFEB3B'; // Low-medium risk (yellow)
-  if (score <= 2) return '#FF9800'; // Medium-high risk (orange)
-  return '#F44336'; // High risk (red)
-};
+export { getRiskColorHex as getRiskColor } from '../riskScoreColors';

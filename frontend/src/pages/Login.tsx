@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { isSeenRispUser, SEEN_RISP_PORTAL_PATH } from '../utils/seenUser';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 
@@ -36,7 +37,7 @@ const Login: React.FC = () => {
           navigate('/rmt');
           break;
         case 'risp':
-          navigate('/risp');
+          navigate(isSeenRispUser(user) ? SEEN_RISP_PORTAL_PATH : '/risp');
           break;
         default:
           navigate('/');

@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
+import {
+  getMaxRiskScore,
+  getRiskBgClass,
+  getRiskTextClass,
+  normalizeRiskScore,
+} from '../utils/riskScoreColors';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { calculateRiskScores, Connections } from '../utils/calculateRiskScores';
@@ -79,6 +86,70 @@ interface PathwayScores {
   };
 }
 
+interface CollapsibleSectionProps {
+  title: string;
+  variant?: 'main' | 'sub';
+  defaultOpen?: boolean;
+  description?: string;
+  children: React.ReactNode;
+}
+
+const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
+  title,
+  variant = 'sub',
+  defaultOpen = true,
+  description,
+  children,
+}) => {
+  const [open, setOpen] = useState<boolean>(defaultOpen);
+
+  // When a section is expanded, notify any embedded maps/charts (e.g. Leaflet)
+  // so they re-measure their container and render correctly.
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
+  const isMain = variant === 'main';
+
+  return (
+    <div className={isMain ? 'rmt-collapsible rmt-collapsible-main mb-6' : 'rmt-collapsible rmt-collapsible-sub mb-4'}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={
+          isMain
+            ? 'w-full flex items-center justify-between text-left px-4 py-3 bg-[#15736d] text-white rounded-t hover:bg-[#0f5a54] transition-colors'
+            : 'w-full flex items-center justify-between text-left px-4 py-2 bg-gray-100 text-gray-800 rounded-t hover:bg-gray-200 transition-colors border-b border-gray-200'
+        }
+      >
+        <span className={isMain ? 'text-lg font-bold' : 'text-base font-semibold'}>{title}</span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+        >
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+      <div className={`rmt-collapsible-body ${open ? '' : 'rmt-collapsible-collapsed'} border border-t-0 border-gray-200 rounded-b px-4 py-4`}>
+        {description && <p className="text-gray-600 mb-4">{description}</p>}
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const RMTResults: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -89,10 +160,16 @@ const RMTResults: React.FC = () => {
   const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
   const [sourceCountries, setSourceCountries] = useState<Country[]>([]);
   const [receiverCountry, setReceiverCountry] = useState<string>('');
+  const [receiverCountryInfo, setReceiverCountryInfo] = useState<Country | null>(null);
+  const [receiverIsCustom, setReceiverIsCustom] = useState(false);
   
   // Data for visualization
   const [diseaseStatus, setDiseaseStatus] = useState<Array<{ name_un: string; [key: string]: any }>>([]);
   const [pathwayScores, setPathwayScores] = useState<PathwayScores[]>([]);
+
+  // Input data retained for the Inputs section and the "download all" export
+  const [mitigationMeasures, setMitigationMeasures] = useState<Record<number, MitigationMeasure>>({});
+  const [connectionsByCountry, setConnectionsByCountry] = useState<Record<number, Connections>>({});
   
   // Disease names
   const diseases = useMemo(() => ['FMD', 'PPR', 'LSD', 'RVF', 'SPGP'], []);
@@ -117,7 +194,9 @@ const RMTResults: React.FC = () => {
         const { 
           connections, 
           selectedCountries, 
+          receiverCountry: stateReceiverCountry,
           receiverCountryName,
+          receiverIsCustom: stateReceiverIsCustom,
           diseaseStatusData: stateDisease,
           mitigationMeasuresData: stateMitigation,
           sourceCountriesData
@@ -129,7 +208,11 @@ const RMTResults: React.FC = () => {
           return;
         }
         
-        setReceiverCountry(receiverCountryName || 'Unknown Country');
+        setReceiverCountry(receiverCountryName || stateReceiverCountry?.name_un || 'Unknown Country');
+        setReceiverIsCustom(Boolean(stateReceiverIsCustom));
+        if (!stateReceiverIsCustom && stateReceiverCountry?.iso3) {
+          setReceiverCountryInfo(stateReceiverCountry);
+        }
         
         // Initialize data structures
         let diseaseStatusData: Record<number, DiseaseStatus> = {};
@@ -188,8 +271,17 @@ const RMTResults: React.FC = () => {
             }
           });
         }
+
+        if (!stateReceiverIsCustom && !stateReceiverCountry?.iso3 && receiverCountryName) {
+          const allCountriesResponse = await apiService.countries.getAll();
+          const match = allCountriesResponse.data?.find(
+            (c: Country) => c.name_un === receiverCountryName,
+          );
+          if (match) setReceiverCountryInfo(match);
+        }
         
         setSourceCountries(countriesData);
+        setMitigationMeasures(mitigationMeasuresData);
         
         // Transform connections array to be indexed by country ID
         const connectionsPerCountry: Record<number, Connections> = {};
@@ -219,6 +311,8 @@ const RMTResults: React.FC = () => {
             };
           });
         }
+
+        setConnectionsByCountry(connectionsPerCountry);
 
         console.log('Original connections:', connections);
         console.log('Connections per country:', connectionsPerCountry);
@@ -336,18 +430,8 @@ const RMTResults: React.FC = () => {
   }, [location, diseases, pathwaysData]);
   
   // Format risk scores for the map visualization
-  const formatRiskScoresForMap = () => {
+  const formatRiskScoresForMap = (maxRiskScore: number) => {
     const countryRiskScores: Record<string, Record<string, number>> = {};
-    
-    // Find maximum risk score for normalization
-    let maxRiskScore = 0;
-    riskScores.forEach(score => {
-      if (score.riskScore > maxRiskScore) {
-        maxRiskScore = score.riskScore;
-      }
-    });
-    
-    // Use a safe normalization factor (ensure we don't divide by zero)
     const normalizationFactor = maxRiskScore > 0 ? maxRiskScore / 3 : 1;
     
     // Normalize and collect scores
@@ -355,7 +439,6 @@ const RMTResults: React.FC = () => {
       if (!countryRiskScores[score.sourceCountry]) {
         countryRiskScores[score.sourceCountry] = {};
       }
-      // Normalize score to 0-3 range
       const normalizedScore = Math.min(3, score.riskScore / normalizationFactor);
       countryRiskScores[score.sourceCountry][score.disease] = normalizedScore;
     });
@@ -397,23 +480,19 @@ const RMTResults: React.FC = () => {
       return {
         id: country.id,
         name_un: country.name_un,
+        iso3: country.iso3,
         riskScores
       };
     });
   };
 
-  // Get color based on risk level
-  const getRiskColor = (score: number): string => {
-    if (score === 0) return 'bg-green-500'; // Low risk
-    if (score <= 1) return 'bg-yellow-500'; // Low-medium risk
-    if (score <= 2) return 'bg-orange-500'; // Medium-high risk
-    return 'bg-red-500'; // High risk
+  // Get color based on normalized risk level (same scale as map)
+  const getCellColor = (rawScore: number, maxRiskScore: number): string => {
+    return getRiskBgClass(normalizeRiskScore(rawScore, maxRiskScore));
   };
 
-  // Get text color for risk score cells
-  const getTextColor = (score: number): string => {
-    if (score > 2) return 'text-white'; // White text on dark backgrounds
-    return 'text-gray-900'; // Dark text on light backgrounds
+  const getCellTextColor = (rawScore: number, maxRiskScore: number): string => {
+    return getRiskTextClass(normalizeRiskScore(rawScore, maxRiskScore));
   };
 
   // Handle going back to previous step (Connections page)
@@ -422,6 +501,10 @@ const RMTResults: React.FC = () => {
       connections, 
       selectedCountries, 
       receiverCountryName,
+      receiverIsCustom,
+      receiverMode,
+      customReceiverName,
+      receiverCountry: stateReceiverCountry,
       diseaseStatusData,
       mitigationMeasuresData,
       sourceCountriesData
@@ -433,6 +516,10 @@ const RMTResults: React.FC = () => {
         connections,
         selectedCountries,
         receiverCountryName,
+        receiverIsCustom,
+        receiverMode,
+        customReceiverName,
+        receiverCountry: stateReceiverCountry,
         diseaseStatusData,
         mitigationMeasuresData,
         sourceCountriesData,
@@ -443,10 +530,95 @@ const RMTResults: React.FC = () => {
 
   // Handle starting a new assessment (clear all stored data)
   const handleStartNewAssessment = () => {
-    // Clear stored RMT state
     sessionStorage.removeItem('rmtState');
-    // Navigate to the main RMT page
-    navigate('/rmt');
+    navigate('/rmt/risk-scores', { replace: true });
+  };
+
+  // Human-readable headers for the connections export/table
+  const connectionColumns: Array<{ key: keyof Connections; label: string }> = [
+    { key: 'liveAnimalContact', label: 'Live animal contact/trade' },
+    { key: 'legalImport', label: 'Legal import of animal products' },
+    { key: 'proximity', label: 'Geographic proximity' },
+    { key: 'illegalImport', label: 'Illegal import of animal products' },
+    { key: 'connection', label: 'Connection (land/air/sea)' },
+    { key: 'livestockDensity', label: 'Livestock density near border' },
+  ];
+
+  const pathwayColumns: Array<{ key: keyof PathwayScores['scores']; label: string }> = [
+    { key: 'airborne', label: 'Airborne' },
+    { key: 'vectorborne', label: 'Vector-borne' },
+    { key: 'wildAnimals', label: 'Wild Animals' },
+    { key: 'animalProduct', label: 'Animal Product' },
+    { key: 'liveAnimal', label: 'Live Animal' },
+    { key: 'fomite', label: 'Fomite' },
+  ];
+
+  // Build and download a single Excel workbook with one sheet per table.
+  // Everything is exported regardless of which sections are expanded.
+  const handleDownloadExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // 1. Risk scores (outputs)
+    const riskRows = sourceCountries.map((country) => {
+      const scoresByDisease = riskScores
+        .filter((s) => s.sourceCountry === country.name_un)
+        .reduce((acc, s) => {
+          acc[s.disease] = s.riskScore;
+          return acc;
+        }, {} as Record<string, number>);
+      const row: Record<string, any> = { 'Source Country': country.name_un };
+      diseases.forEach((d) => {
+        row[d] = Math.round(scoresByDisease[d] || 0);
+      });
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(riskRows), 'Risk Scores');
+
+    // 2. Risk pathway contributions (outputs)
+    const pathwayRows = pathwayScores.map((p) => {
+      const row: Record<string, any> = { 'Source Country': p.name_un };
+      pathwayColumns.forEach(({ key, label }) => {
+        row[label] = Math.round((p.scores[key] || 0) * 100) / 100;
+      });
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pathwayRows), 'Pathway Contributions');
+
+    // 3. Disease status (inputs)
+    const diseaseRows = diseaseStatus.map((d) => {
+      const row: Record<string, any> = { 'Source Country': d.name_un };
+      diseases.forEach((dis) => {
+        row[dis] = d[dis] ?? 0;
+      });
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diseaseRows), 'Disease Status');
+
+    // 4. Mitigation measures (inputs)
+    const mitigationRows = sourceCountries.map((country) => {
+      const mm = mitigationMeasures[country.id];
+      const row: Record<string, any> = { 'Source Country': country.name_un };
+      diseases.forEach((d) => {
+        const val = mm?.[`m${d}` as keyof MitigationMeasure];
+        row[d] = val ?? 'N/A';
+      });
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mitigationRows), 'Mitigation Measures');
+
+    // 5. Connections (inputs)
+    const connectionRows = sourceCountries.map((country) => {
+      const conn = connectionsByCountry[country.id];
+      const row: Record<string, any> = { 'Source Country': country.name_un };
+      connectionColumns.forEach(({ key, label }) => {
+        row[label] = conn?.[key] ?? 0;
+      });
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(connectionRows), 'Connections');
+
+    const safeName = (receiverCountry || 'assessment').replace(/[^a-z0-9]+/gi, '_');
+    XLSX.writeFile(wb, `RMT_Risk_Assessment_${safeName}.xlsx`);
   };
 
   if (loading) {
@@ -460,7 +632,8 @@ const RMTResults: React.FC = () => {
     );
   }
 
-  const mapData = formatRiskScoresForMap();
+  const maxRiskScore = getMaxRiskScore(riskScores);
+  const mapData = formatRiskScoresForMap(maxRiskScore);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -480,130 +653,212 @@ const RMTResults: React.FC = () => {
         </div>
       )}
 
-      {/* Map visualization */}
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold mb-2">Risk Map Visualization</h3>
-        <p className="text-gray-600 mb-4">
-          This map shows the overall risk level for each source country relative to {receiverCountry}. Countries with a similar level of risk are colored with the same color, on a scale from green (lower risk score) to red (higher risk score). The target country is highlighted in gray.
-        </p>
-        <div className="mb-3">
-          <label className="mr-2 font-medium text-sm sm:text-base">Select Disease: </label>
-          <select 
-            value={selectedDisease} 
-            onChange={(e) => setSelectedDisease(e.target.value)}
-            className="border rounded px-2 py-1 bg-white min-w-[120px] sm:min-w-[150px] text-sm sm:text-base"
-            style={{ 
-              paddingRight: '2rem',
-              backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 0.7rem center',
-              backgroundSize: '0.65em',
-              appearance: 'none'
-            }}
-          >
-            {diseases.map(disease => (
-              <option key={disease} value={disease}>{disease}</option>
-            ))}
-          </select>
-        </div>
-        <RiskScoreMap 
-          countryData={mapData}
-          targetCountryName={receiverCountry}
-          selectedDisease={selectedDisease}
-        />
-      </div>
-
-      {/* Risk scores table */}
-      <div className="mb-10">
-        <h3 className="text-xl font-semibold mb-2">Risk Scores Summary</h3>
-        <p className="text-gray-600 mb-4">
-          This table presents the risk scores for each disease across all source countries. Higher scores indicate a higher risk of entry of the pathogen. The scores should be used to compare the risk of entry of a pathogen among source countries, but should not be compared among different diseases.
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse rmt-table min-w-[600px]">
-            <thead>
-              <tr className="bg-[#15736d] text-white">
-                <th className="px-4 py-2 text-left">Source Country</th>
-                {diseases.map(disease => (
-                  <th key={disease} className="px-4 py-2 text-center">{disease}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sourceCountries.map(country => {
-                const countryScores = riskScores
-                  .filter(score => score.sourceCountry === country.name_un)
-                  .reduce((acc, score) => {
-                    acc[score.disease] = score.riskScore;
-                    return acc;
-                  }, {} as Record<string, number>);
-                
-                return (
-                  <tr key={country.id} className="border-b">
-                    <td className="px-4 py-2 font-medium">{country.name_un}</td>
-                    {diseases.map(disease => {
-                      const score = countryScores[disease] || 0;
-                      return (
-                        <td 
-                          key={`${country.id}-${disease}`} 
-                          className="px-4 py-2 text-center"
-                        >
-                          <span className={`inline-block w-8 h-8 rounded-full ${getRiskColor(score)} ${getTextColor(score)} text-center leading-8`}>
-                            {score}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Disease Status Heatmap */}
-      <div className="mb-10">
-        <h3 className="text-xl font-semibold mb-2">Disease Status by Country</h3>
-        <p className="text-gray-600 mb-4">
-          This heatmap shows the disease status for each disease across all source countries.
-          Darker colors indicate higher disease prevalence.
-        </p>
-        <div className="flex justify-center">
-          <div className="w-full">
-            <SimpleHeatmap 
-              diseaseStatusData={diseaseStatus} 
-            />
+      {/* ============================= OUTPUTS ============================= */}
+      <CollapsibleSection title="1 — Outputs" variant="main" defaultOpen={true}>
+        {/* Map visualization */}
+        <CollapsibleSection
+          title="Risk Map Visualization"
+          defaultOpen={true}
+          description={
+            `This map shows the overall risk level for each source country relative to ${receiverCountry}. Countries with a similar level of risk are colored with the same color, on a scale from green (lower risk score) to red (higher risk score).` +
+            (receiverIsCustom
+              ? ' No target area is shown on the map because a custom evaluation name was used.'
+              : ' The target country is highlighted in gray.')
+          }
+        >
+          <div className="mb-3">
+            <label className="mr-2 font-medium text-sm sm:text-base">Select Disease: </label>
+            <select 
+              value={selectedDisease} 
+              onChange={(e) => setSelectedDisease(e.target.value)}
+              className="border rounded px-2 py-1 bg-white min-w-[120px] sm:min-w-[150px] text-sm sm:text-base"
+              style={{ 
+                paddingRight: '2rem',
+                backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23131313%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 0.7rem center',
+                backgroundSize: '0.65em',
+                appearance: 'none'
+              }}
+            >
+              {diseases.map(disease => (
+                <option key={disease} value={disease}>{disease}</option>
+              ))}
+            </select>
           </div>
-        </div>
-      </div>
+          <RiskScoreMap 
+            countryData={mapData}
+            targetCountryName={receiverCountry}
+            targetCountryIso3={receiverIsCustom ? undefined : receiverCountryInfo?.iso3}
+            selectedDisease={selectedDisease}
+          />
+        </CollapsibleSection>
 
-      {/* Pathway Effectiveness Radar */}
-      <div className="mb-10">
-        <h3 className="text-xl font-semibold mb-2">Pathway Effectiveness by Disease</h3>
-        <p className="text-gray-600 mb-4">
-          This radar chart shows how effective each pathway is for the transmission of each disease.
-          A higher score indicates the pathway is more effective for disease transmission.
-        </p>
-        <PathwayEffectivenessRadar 
-          pathwaysData={pathwaysData} 
-        />
-      </div>
+        {/* Risk scores table */}
+        <CollapsibleSection
+          title="Risk Scores Summary"
+          defaultOpen={true}
+          description="This table presents the risk scores for each disease across all source countries. Higher scores indicate a higher risk of entry of the pathogen. The scores should be used to compare the risk of entry of a pathogen among source countries, but should not be compared among different diseases."
+        >
+          <div className="rmt-table-container rmt-table-scroll-y">
+            <table className="w-full rmt-table min-w-[600px]">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 text-left">Source Country</th>
+                  {diseases.map(disease => (
+                    <th key={disease} className="px-4 py-2 text-center">{disease}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sourceCountries.map(country => {
+                  const countryScores = riskScores
+                    .filter(score => score.sourceCountry === country.name_un)
+                    .reduce((acc, score) => {
+                      acc[score.disease] = score.riskScore;
+                      return acc;
+                    }, {} as Record<string, number>);
+                  
+                  return (
+                    <tr key={country.id} className="border-b">
+                      <td className="px-4 py-2 font-medium">{country.name_un}</td>
+                      {diseases.map(disease => {
+                        const score = countryScores[disease] || 0;
+                        const displayScore = Math.round(score);
+                        return (
+                          <td 
+                            key={`${country.id}-${disease}`} 
+                            className="px-4 py-2 text-center"
+                          >
+                            <span className={`inline-block w-8 h-8 rounded-full ${getCellColor(score, maxRiskScore)} ${getCellTextColor(score, maxRiskScore)} text-center leading-8 font-semibold`}>
+                              {displayScore}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
 
-      {/* Enhanced Risk Pathway Chart */}
-      <div className="mb-10">
-        <h3 className="text-xl font-semibold mb-2">Risk Pathway Contributions</h3>
-        <p className="text-gray-600 mb-4">
-          This chart shows the contribution of each pathway to the overall risk for each source country.
-          Use the disease selector to view pathway contributions for a specific disease.
-        </p>
-        <SimpleBarChart 
-          pathwayScores={pathwayScores} 
-        />
-      </div>
+        {/* Enhanced Risk Pathway Chart */}
+        <CollapsibleSection
+          title="Risk Pathway Contributions"
+          defaultOpen={true}
+          description="This chart shows the contribution of each pathway to the overall risk for each source country. Use the disease selector to view pathway contributions for a specific disease."
+        >
+          <SimpleBarChart 
+            pathwayScores={pathwayScores} 
+          />
+        </CollapsibleSection>
+      </CollapsibleSection>
+
+      {/* ============================= INPUTS ============================= */}
+      <CollapsibleSection title="2 — Inputs" variant="main" defaultOpen={true}>
+        {/* Pathway Effectiveness Radar */}
+        <CollapsibleSection
+          title="Pathway Effectiveness by Disease"
+          defaultOpen={true}
+          description="This radar chart shows how effective each pathway is for the transmission of each disease. A higher score indicates the pathway is more effective for disease transmission."
+        >
+          <PathwayEffectivenessRadar 
+            pathwaysData={pathwaysData} 
+          />
+        </CollapsibleSection>
+
+        {/* Disease Status */}
+        <CollapsibleSection
+          title="Disease Status by Country"
+          defaultOpen={true}
+          description="Disease status score for each disease across all source countries. Darker colors indicate higher disease prevalence."
+        >
+          <SimpleHeatmap 
+            diseaseStatusData={diseaseStatus} 
+          />
+        </CollapsibleSection>
+
+        {/* Mitigation Measures (read-only) */}
+        <CollapsibleSection
+          title="Mitigation Measures"
+          defaultOpen={true}
+          description="Effectiveness of mitigation measures in each source country per disease (0 = uncontrolled risk, 4 = all risks mitigated)."
+        >
+          <div className="rmt-table-container rmt-table-scroll-y">
+            <table className="w-full rmt-table min-w-[600px]">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 text-left">Source Country</th>
+                  {diseases.map(disease => (
+                    <th key={disease} className="px-4 py-2 text-center">{disease}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sourceCountries.map(country => {
+                  const mm = mitigationMeasures[country.id];
+                  return (
+                    <tr key={country.id} className="border-b">
+                      <td className="px-4 py-2 font-medium">{country.name_un}</td>
+                      {diseases.map(disease => {
+                        const val = mm?.[`m${disease}` as keyof MitigationMeasure];
+                        return (
+                          <td key={`${country.id}-m-${disease}`} className="px-4 py-2 text-center">
+                            {val === null || val === undefined ? 'N/A' : val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
+
+        {/* Connections (read-only) */}
+        <CollapsibleSection
+          title="Connections"
+          defaultOpen={true}
+          description={`Connection scores between ${receiverCountry} and each source country, per pathway component (0 = no connection, 3 = highly connected; livestock density is 0 or 1).`}
+        >
+          <div className="rmt-table-container rmt-table-scroll-y">
+            <table className="w-full rmt-table min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 text-left">Source Country</th>
+                  {connectionColumns.map(col => (
+                    <th key={col.key} className="px-4 py-2 text-center">{col.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sourceCountries.map(country => {
+                  const conn = connectionsByCountry[country.id];
+                  return (
+                    <tr key={country.id} className="border-b">
+                      <td className="px-4 py-2 font-medium">{country.name_un}</td>
+                      {connectionColumns.map(col => {
+                        const val = conn?.[col.key];
+                        return (
+                          <td key={`${country.id}-c-${col.key}`} className="px-4 py-2 text-center">
+                            {val === null || val === undefined ? '-' : val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CollapsibleSection>
+      </CollapsibleSection>
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row justify-between mt-10 gap-4">
+      <div className="rmt-no-print flex flex-col sm:flex-row justify-between mt-10 gap-4">
         <button 
           onClick={handleStartNewAssessment}
           className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded transition-colors text-center"
@@ -618,10 +873,16 @@ const RMTResults: React.FC = () => {
             Previous
           </button>
           <button
+            onClick={handleDownloadExcel}
+            className="px-4 py-2 bg-[#15736d] text-white hover:bg-[#0f5a54] rounded transition-colors"
+          >
+            Download Excel
+          </button>
+          <button
             onClick={() => window.print()}
             className="px-4 py-2 bg-[#15736d] text-white hover:bg-[#0f5a54] rounded transition-colors"
           >
-            Print Results
+            Download PDF
           </button>
         </div>
       </div>

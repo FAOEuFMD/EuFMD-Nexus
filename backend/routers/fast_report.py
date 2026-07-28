@@ -257,7 +257,9 @@ async def create_dashboard():
                 'Year': year,
                 'Quarter': quarter,
                 'ISO3CD': row.get('Country', ''),  # Map country name to ISO3 if needed
-                'Vaccination': 'Vaccinated' if row.get('Vaccination') == 1 else 'Not Vaccinated',
+                'Vaccination': row.get('Vaccination', 0),
+                'Vaccination_Doses': row.get('Vaccination_Doses', 0),
+                'Vaccination_Description': row.get('Vaccination_Description', ''),
                 'Outbreaks': row.get('Outbreaks', 0)
             }
             
