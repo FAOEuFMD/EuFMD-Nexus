@@ -328,6 +328,12 @@ export const apiService = {
         params: { species, disease, region }
       }),
 
+    getMapDistricts: () =>
+      api.get('/api/thrace/map-districts'),
+
+    getMapData: (params: { start_date?: string; end_date?: string; district_ids: string }) =>
+      api.get('/api/thrace/map-data', { params }),
+
     getMetadata: () =>
       api.get('/api/thrace/metadata', { responseType: 'text', transformResponse: [(d) => d] }),
   },

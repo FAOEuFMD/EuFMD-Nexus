@@ -162,6 +162,9 @@ Response `data`: `labels`, `pfree`, `sens` (FSSe), `edsse`, `pintro`, `animals`,
 | `/api/thrace/upload-data` | POST | Validate + direct import into `factivities` |
 | `/api/thrace/cycle-report` | GET | Quarterly report JSON (frontend Excel export) |
 | `/api/thrace/inspectors` | GET | Inspector list |
+| `/api/thrace/map-districts` | GET | Countries → districts for map filter |
+| `/api/thrace/map-data` | GET | Epiunit points + visit counts (`district_ids`, `start_date`, `end_date`) |
+| `/api/thrace/metadata` | GET | Simple product metadata (YAML) |
 
 ---
 
@@ -265,7 +268,8 @@ Legacy stored routines (`create_data_summary`, `get_freedom_data`, `get_param`) 
 | Legacy feature | Nexus status |
 |----------------|--------------|
 | User registration / password reset, grant/ungrant | Uses Nexus global auth; grants not built |
-| Epiunit CRUD + map, manual field-activity entry, monitoring dashboard | Not built |
+| Epiunit CRUD, manual field-activity entry | Not built |
+| Surveillance map (locations / visited / intensity) | Built — Map button; district filter; epiunit points from `epiunits_view` + visit counts from `factivities` |
 | Activities list/export, inventory UI, delete-activities tool | Not built |
 | CVO country-scoped data filter | Not implemented |
 | Multi-language | English only |

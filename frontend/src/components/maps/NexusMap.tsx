@@ -1,7 +1,7 @@
 import React from 'react';
 import { MapContainer, TileLayer, MapContainerProps } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MAP_DISCLAIMER, UN_MAP_ATTRIBUTION, UN_MAP_TILE_URL } from './mapConstants';
+import { MAP_DISCLAIMER, UN_MAP_ATTRIBUTION, UN_MAP_MAX_NATIVE_ZOOM, UN_MAP_TILE_URL } from './mapConstants';
 
 type NexusMapProps = {
   center?: [number, number];
@@ -48,7 +48,12 @@ const NexusMap: React.FC<NexusMapProps> = ({
         className={mapClassName}
         style={{ height: '100%', width: '100%' }}
       >
-        <TileLayer url={UN_MAP_TILE_URL} attribution={UN_MAP_ATTRIBUTION} maxZoom={maxZoom} />
+        <TileLayer
+          url={UN_MAP_TILE_URL}
+          attribution={UN_MAP_ATTRIBUTION}
+          maxNativeZoom={UN_MAP_MAX_NATIVE_ZOOM}
+          maxZoom={maxZoom}
+        />
         {children}
       </MapContainer>
     </div>
