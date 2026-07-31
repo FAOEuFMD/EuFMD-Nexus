@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import Response
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from database import DatabaseHelper, thrace_engine
 from auth import get_current_user
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 import openpyxl
 from io import BytesIO
@@ -13,28 +13,115 @@ from .thrace_calculator import ThraceCalculator
 router = APIRouter(prefix="/api/thrace", tags=["thrace"])
 
 # Global cache for epiunits mapping - loaded once at startup
+# Keys are uppercased strings: epiunitcountrycode, str(epiunitID), and unique villagenames.
 _epiunits_cache: Dict[str, int] = {}
+_epiunit_ids: set = set()
 _cache_loaded = False
 
+_EXCEL_ERROR_TOKENS = {
+    "#N/A", "#NA", "#REF!", "#VALUE!", "#NAME?", "#DIV/0!", "#NULL!", "#NUM!", "#GETTING_DATA"
+}
+
+
+def _normalize_excel_value(value) -> Any:
+    """Turn Excel empty / error / whitespace values into None."""
+    if value is None:
+        return None
+    # openpyxl may return error codes as strings when data_only=True
+    text = str(value).strip()
+    if text == "" or text.upper() in _EXCEL_ERROR_TOKENS:
+        return None
+    return value
+
+
+def is_blank_value(value) -> bool:
+    return _normalize_excel_value(value) is None
+
+
 async def load_epiunits_cache():
-    """Load epiunits mapping cache at startup (called once)"""
-    global _epiunits_cache, _cache_loaded
+    """Load epiunits mapping cache at startup (called once)."""
+    global _epiunits_cache, _epiunit_ids, _cache_loaded
     if _cache_loaded:
         return
-    
+
     print("Loading epiunits cache at startup...")
-    epiunits_query = "SELECT epiunitID, epiunitcountrycode FROM thrace.epiunits"
+    epiunits_query = (
+        "SELECT epiunitID, epiunitcountrycode, villagename FROM thrace.epiunits"
+    )
     epiunits_result = await DatabaseHelper.execute_thrace_query(epiunits_query)
-    
+
+    code_map: Dict[str, int] = {}
+    name_counts: Dict[str, int] = {}
+    name_to_id: Dict[str, int] = {}
+    ids: set = set()
+
     if epiunits_result.get("data"):
         for row in epiunits_result["data"]:
-            code = row.get("epiunitcountrycode")
             uid = row.get("epiunitID")
-            if code and uid:
-                _epiunits_cache[code] = uid
-    
+            if uid is None:
+                continue
+            uid = int(uid)
+            ids.add(uid)
+            code_map[str(uid)] = uid
+
+            code = row.get("epiunitcountrycode")
+            if code is not None and str(code).strip() != "":
+                code_map[str(code).strip().upper()] = uid
+
+            name = row.get("villagename")
+            if name is not None and str(name).strip() != "":
+                key = str(name).strip().upper()
+                name_counts[key] = name_counts.get(key, 0) + 1
+                name_to_id[key] = uid
+
+        # Only index names that map to a single epiunit (ambiguous villages excluded)
+        for key, count in name_counts.items():
+            if count == 1:
+                code_map[key] = name_to_id[key]
+
+    _epiunits_cache = code_map
+    _epiunit_ids = ids
     _cache_loaded = True
-    print(f"Epiunits cache loaded with {len(_epiunits_cache)} mappings")
+    print(
+        f"Epiunits cache loaded with {len(_epiunits_cache)} keys "
+        f"({len(_epiunit_ids)} epiunit IDs)"
+    )
+
+
+def resolve_epiunit_id(farm_id_value, village_code_value) -> int:
+    """Resolve an epiunitID from Farm ID and/or Village/Epiunit code cells.
+
+    Templates VLOOKUP into Farm ID the numeric epiunitID. Village/Epiunit code is what
+    the user typed (country code for GR/TR, village name for some BG templates).
+    """
+    candidates = []
+    for raw in (farm_id_value, village_code_value):
+        normalized = _normalize_excel_value(raw)
+        if normalized is None:
+            continue
+        candidates.append(normalized)
+
+    for candidate in candidates:
+        # Prefer direct numeric epiunitID (Farm ID after Excel calculation)
+        if is_numeric(candidate):
+            uid = int(float(candidate))
+            if uid in _epiunit_ids:
+                return uid
+        key = str(candidate).strip().upper()
+        if key in _epiunits_cache:
+            return _epiunits_cache[key]
+
+    return 0
+
+
+def is_numeric(value) -> bool:
+    try:
+        if value is None:
+            return False
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 @router.get("/inspectors")
 async def get_inspectors(current_user: dict = Depends(get_current_user)):
@@ -112,6 +199,7 @@ async def upload_thrace_data(
         
         # Map Excel column headers to database field names
         header_to_field = {
+            'Farm ID': 'farmID',
             'InspectorID': 'inspectorID',
             'Village/Epiunit code': 'epiunitcountrycode',
             'Year': 'year',
@@ -169,6 +257,43 @@ async def upload_thrace_data(
                 column_map[header_to_field[header_value]] = col_idx
         
         print(f"Mapped {len(column_map)} columns from Excel header")
+
+        # Fail fast if required date columns are missing from the header
+        required_headers = {
+            'year': 'Year',
+            'month': 'Month',
+            'day': 'Day',
+            'epiunitcountrycode': 'Village/Epiunit code',
+            'inspectorID': 'InspectorID',
+        }
+        missing_headers = [
+            label for field, label in required_headers.items() if field not in column_map
+        ]
+        if missing_headers:
+            return {
+                "success": False,
+                "has_errors": True,
+                "message": (
+                    "Required column(s) not found in the Excel header: "
+                    + ", ".join(missing_headers)
+                    + ". Use the official THRACE template without renaming header cells."
+                ),
+                "total_rows": 0,
+                "clean_rows": 0,
+                "error_rows": len(missing_headers),
+                "error_count": len(missing_headers),
+                "error_rows_detail": [
+                    {
+                        "rowId": 1,
+                        "village": "",
+                        "country": "",
+                        "date": None,
+                        "error": f"Missing required header column: {label}",
+                    }
+                    for label in missing_headers
+                ],
+                "inserted_count": 0,
+            }
         
         user_id = current_user.get('user_id')
         
@@ -180,7 +305,7 @@ async def upload_thrace_data(
         
         # Use cached epiunits mapping
         epiunits_map = _epiunits_cache
-        print(f"Using cached epiunits mapping with {len(epiunits_map)} entries")
+        print(f"Using cached epiunits mapping with {len(epiunits_map)} keys / {len(_epiunit_ids)} IDs")
         
         clean_rows = 0
         error_rows = 0
@@ -188,27 +313,60 @@ async def upload_thrace_data(
         inserted_data = []
         error_messages = []
         error_details = []
+
+        def is_row_blank(row_cells) -> bool:
+            return all(is_blank_value(cell.value) for cell in row_cells)
         
-        # Process rows 2 to 401 (400 data rows max, row 1 is header)
+        # Process rows 2 to 401 (400 data rows max, row 1 is header).
+        # Stop at the first blank row (end of data) — do not keep scanning the rest
+        # of the template's empty formatted rows.
         for row_idx in range(2, min(402, worksheet.max_row + 1)):
             row = worksheet[row_idx]
             
             # Helper function to get cell value by field name
             def get_value(field_name):
                 if field_name in column_map:
-                    return row[column_map[field_name]].value
+                    return _normalize_excel_value(row[column_map[field_name]].value)
                 return None
             
-            # Check if row is completely empty
-            if all(cell.value is None for cell in row):
-                continue
-            
-            # PHP code checks if year is empty to stop processing
+            # Entirely empty/whitespace/#N/A row => end of data, stop reading
+            if is_row_blank(row):
+                print(f"Row {row_idx}: blank row — stopping upload parse")
+                break
+
+            # Empty Year normally means end of the data block (legacy PHP behaviour).
+            # Only treat it as a validation error when the row already has identity data
+            # (village / epiunit / inspector / farm id) — i.e. the user started a row but forgot Year.
             year_value = get_value('year')
-            if year_value is None or str(year_value).strip() == '':
-                if row_idx <= 10:
-                    print(f"Row {row_idx} skipped: Year is empty or None")
-                continue
+            if is_blank_value(year_value):
+                village_hint = str(row[1].value).strip() if not is_blank_value(row[1].value) else ""
+                if village_hint.upper() in _EXCEL_ERROR_TOKENS:
+                    village_hint = ""
+                country_hint = str(get_value('epiunitcountrycode') or get_value('farmID') or "").strip().upper()
+                inspector_hint = get_value('inspectorID')
+                farm_hint = get_value('farmID')
+                row_started = bool(
+                    village_hint
+                    or country_hint
+                    or not is_blank_value(inspector_hint)
+                    or not is_blank_value(farm_hint)
+                )
+                if row_started:
+                    total_rows += 1
+                    error_rows += 1
+                    error_msg = "Year is empty or missing"
+                    error_messages.append(f"Row {row_idx}: {error_msg}")
+                    error_details.append({
+                        "rowId": row_idx,
+                        "village": village_hint,
+                        "country": country_hint,
+                        "date": None,
+                        "error": error_msg,
+                    })
+                    print(f"Row {row_idx}: {error_msg} — stopping upload parse")
+                else:
+                    print(f"Row {row_idx}: Year empty with no identity data — end of data, stopping")
+                break
             
             total_rows += 1
             if row_idx <= 6:
@@ -216,14 +374,30 @@ async def upload_thrace_data(
             
             # Extract core data using column mapping
             try:
-                villagename = str(row[1].value).strip() if row[1].value else ""  # Column 1 is always Name/villagename
+                farm_id_value = get_value('farmID')
+                # Column B (index 1) is the village/farm name (VLOOKUP result in the template)
+                villagename = (
+                    str(row[1].value).strip()
+                    if not is_blank_value(row[1].value)
+                    else ""
+                )
+                if villagename.upper() in _EXCEL_ERROR_TOKENS:
+                    villagename = ""
+
                 inspectorID = int(float(get_value('inspectorID'))) if is_numeric(get_value('inspectorID')) else 0
-                epiunitcountrycode_from_excel = str(get_value('epiunitcountrycode')).strip().upper() if get_value('epiunitcountrycode') else ""
-                
-                # Look up epiunitID from the epiunitcountrycode
-                epiunitID = epiunits_map.get(epiunitcountrycode_from_excel)
-                if not epiunitID:
-                    epiunitID = 0
+                epiunitcountrycode_from_excel = (
+                    str(get_value('epiunitcountrycode')).strip().upper()
+                    if get_value('epiunitcountrycode') is not None
+                    else ""
+                )
+
+                # Resolve epiunitID from Farm ID (preferred) and/or Village/Epiunit code
+                epiunitID = resolve_epiunit_id(farm_id_value, get_value('epiunitcountrycode'))
+                display_code = (
+                    str(farm_id_value).strip()
+                    if farm_id_value is not None
+                    else epiunitcountrycode_from_excel
+                )
                 
                 # Build date from year/month/day columns
                 year = int(float(get_value('year'))) if is_numeric(get_value('year')) else None
@@ -240,15 +414,13 @@ async def upload_thrace_data(
                 # Validate required fields and build error message
                 error_msg = None
                 
-                # Foreign key validation - check if epiunitcountrycode exists in epiunits
-                if epiunitcountrycode_from_excel and epiunitcountrycode_from_excel not in epiunits_map:
-                    error_msg = f"Invalid Village/Epiunit code ({epiunitcountrycode_from_excel}) - not found in epiunits table; "
-                
-                # Required field validation
+                # Foreign key / identity validation
                 if not epiunitID or epiunitID == 0:
-                    error_msg = (error_msg or "") + "Missing or invalid Village/Epiunit code; "
-                if not villagename:
-                    error_msg = (error_msg or "") + "Missing Name/villagename; "
+                    typed = display_code or epiunitcountrycode_from_excel or villagename or "(empty)"
+                    error_msg = (
+                        f"Invalid Farm ID / Village/Epiunit code ({typed}) - "
+                        f"not found in epiunits table; "
+                    )
                 if not inspectorID or inspectorID == 0:
                     error_msg = (error_msg or "") + "Missing InspectorID; "
                 if not dt_insp:
@@ -430,7 +602,7 @@ async def upload_thrace_data(
                     error_details.append({
                         "rowId": row_idx,
                         "village": villagename,
-                        "country": epiunitcountrycode_from_excel,
+                        "country": display_code or epiunitcountrycode_from_excel,
                         "date": str(dt_insp) if dt_insp else None,
                         "error": error_msg,
                     })
@@ -538,16 +710,6 @@ async def upload_thrace_data(
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
-
-def is_numeric(value):
-    """Check if value can be converted to a number"""
-    if value is None:
-        return False
-    try:
-        float(value)
-        return True
-    except (ValueError, TypeError):
-        return False
 
 
 @router.get("/cycle-report")
@@ -721,6 +883,179 @@ async def generate_cycle_report(
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error generating cycle report: {str(e)}")
+
+@router.get("/map-districts")
+async def get_map_districts(current_user: dict = Depends(get_current_user)):
+    """Districts grouped by country for the Thrace map filter (hierarchical multi-select)."""
+    query = """
+        SELECT DISTINCT
+            e.nationID,
+            e.country,
+            e.districtID,
+            e.district_name
+        FROM thrace.epiunits_view e
+        WHERE e.districtID IS NOT NULL
+          AND e.district_name IS NOT NULL
+          AND e.district_name != ''
+        ORDER BY e.country, e.district_name
+    """
+    result = await DatabaseHelper.execute_thrace_query(query)
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    NATION_LABELS = {
+        100: "Bulgaria",
+        300: "Greece",
+        792: "Türkiye",
+    }
+
+    grouped: Dict[str, Any] = {}
+    for row in result.get("data") or []:
+        nation_id = int(row["nationID"]) if row.get("nationID") is not None else None
+        country_label = NATION_LABELS.get(nation_id) or row.get("country") or "Unknown"
+        key = str(nation_id) if nation_id is not None else country_label
+        if key not in grouped:
+            grouped[key] = {
+                "nationID": nation_id,
+                "country": country_label,
+                "districts": [],
+            }
+        grouped[key]["districts"].append({
+            "districtID": row["districtID"],
+            "district_name": row["district_name"],
+        })
+
+    # Stable order: Bulgaria, Greece, Türkiye, then others
+    order = {100: 0, 300: 1, 792: 2}
+    countries = sorted(
+        grouped.values(),
+        key=lambda c: order.get(c["nationID"], 99),
+    )
+    return {"success": True, "countries": countries}
+
+
+@router.get("/map-data")
+async def get_map_data(
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    district_ids: Optional[str] = Query(
+        None,
+        description="Comma-separated district IDs",
+    ),
+    current_user: dict = Depends(get_current_user),
+):
+    """Epiunit points for the Thrace map, with visit counts in the selected period.
+
+    Visits are counted from thrace.factivities (epiunit-level). Districts only filter
+    which epiunits are included. Epiunits without coordinates are omitted.
+    """
+    if not district_ids or not str(district_ids).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Select at least one district",
+        )
+
+    try:
+        ids = [int(x.strip()) for x in str(district_ids).split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid district_ids")
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="Select at least one district")
+
+    # Default period: last 90 days if not provided
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="end_date must be YYYY-MM-DD")
+    else:
+        end_dt = date.today()
+
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="start_date must be YYYY-MM-DD")
+    else:
+        start_dt = date.fromordinal(end_dt.toordinal() - 90)
+
+    placeholders = ", ".join(["%s"] * len(ids))
+    query = f"""
+        SELECT
+            e.epiunitID,
+            e.epiunitname,
+            e.epiunitcountrycode,
+            e.villagename,
+            e.latit,
+            e.longi,
+            e.districtID,
+            e.district_name,
+            e.nationID,
+            e.country,
+            COALESCE(v.visits, 0) AS visits
+        FROM thrace.epiunits_view e
+        LEFT JOIN (
+            SELECT f.epiunitID, COUNT(*) AS visits
+            FROM thrace.factivities f
+            WHERE f.dt_insp >= %s
+              AND f.dt_insp <= %s
+            GROUP BY f.epiunitID
+        ) v ON v.epiunitID = e.epiunitID
+        WHERE e.districtID IN ({placeholders})
+          AND e.latit IS NOT NULL
+          AND e.longi IS NOT NULL
+          AND TRIM(CAST(e.latit AS CHAR)) != ''
+          AND TRIM(CAST(e.longi AS CHAR)) != ''
+    """
+    params = (start_dt, end_dt, *ids)
+    result = await DatabaseHelper.execute_thrace_query(query, params)
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    NATION_LABELS = {
+        100: "Bulgaria",
+        300: "Greece",
+        792: "Türkiye",
+    }
+
+    points = []
+    for row in result.get("data") or []:
+        try:
+            lat = float(row["latit"])
+            lon = float(row["longi"])
+        except (TypeError, ValueError):
+            continue
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            continue
+        if lat == 0 and lon == 0:
+            continue
+
+        visits = int(row["visits"] or 0)
+        nation_id = int(row["nationID"]) if row.get("nationID") is not None else None
+        points.append({
+            "epiunitID": row["epiunitID"],
+            "epiunitname": row.get("epiunitname") or "",
+            "epiunitcountrycode": row.get("epiunitcountrycode") or "",
+            "villagename": row.get("villagename") or "",
+            "lat": lat,
+            "lon": lon,
+            "districtID": row.get("districtID"),
+            "district_name": row.get("district_name") or "",
+            "nationID": nation_id,
+            "country": NATION_LABELS.get(nation_id) or row.get("country") or "",
+            "visits": visits,
+            "visited": visits > 0,
+        })
+
+    return {
+        "success": True,
+        "start_date": start_dt.isoformat(),
+        "end_date": end_dt.isoformat(),
+        "point_count": len(points),
+        "points": points,
+    }
+
 
 @router.get("/freedom-data")
 async def get_freedom_analysis(

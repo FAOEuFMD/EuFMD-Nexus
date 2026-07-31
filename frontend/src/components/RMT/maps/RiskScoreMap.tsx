@@ -151,6 +151,7 @@ const RiskScoreMap: React.FC<RiskScoreMapProps> = ({
         <TileLayer
           url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
           attribution="&copy; United Nations Geospatial Information Section"
+          maxNativeZoom={6}
           maxZoom={18}
         />
         {countriesGeoJSON && (

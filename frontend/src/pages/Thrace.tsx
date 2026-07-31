@@ -3,6 +3,8 @@ import { apiService } from '../services/api';
 import * as XLSX from 'xlsx';
 // @ts-ignore
 import Plotly from 'plotly.js-dist-min';
+import ThraceMapPanel from '../components/Thrace/ThraceMapPanel';
+import 'leaflet/dist/leaflet.css';
 
 interface Template {
   id: string;
@@ -75,6 +77,7 @@ const Thrace: React.FC = () => {
   const [dataValidationErrors, setDataValidationErrors] = useState<ErrorRow[]>([]);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [showReportSection, setShowReportSection] = useState(false);
+  const [showMapSection, setShowMapSection] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportData, setReportData] = useState<CycleReportData | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<number>(300); // Default to Greece
@@ -125,10 +128,19 @@ const Thrace: React.FC = () => {
     setShowTemplateModal(false);
   };
 
-  const handleUploadClick = () => {
+  const clearUploadState = () => {
     setUploadErrors([]);
     setUploadMessage('');
     setUploadSuccess(false);
+    setDataValidationErrors([]);
+    setShowErrorDetails(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadClick = () => {
+    clearUploadState();
     setShowUploadModal(true);
   };
 
@@ -177,11 +189,19 @@ const Thrace: React.FC = () => {
         }, 3000);
       } else if (response.data.has_errors) {
         // Validation failed - nothing imported. Show the error report to fix & re-upload.
-        setDataValidationErrors(response.data.error_rows_detail || []);
+        const details = response.data.error_rows_detail || [];
+        setDataValidationErrors(details);
         setShowErrorDetails(true);
         setUploadMessage(
+          response.data.message ||
           `⚠️ ${response.data.error_count} of ${response.data.total_rows} rows have validation errors. ` +
           `Nothing was imported. Fix the rows below and re-upload.`
+        );
+        // Also surface specific row errors in the main error list (not only the expandable table)
+        setUploadErrors(
+          details.length > 0
+            ? details.map((e: any) => `Row ${e.rowId}: ${e.error}`)
+            : [response.data.message || 'Validation failed']
         );
         setUploadSuccess(false);
       } else {
@@ -217,7 +237,16 @@ const Thrace: React.FC = () => {
   const handleReportClick = () => {
     setShowReportSection(true);
     setShowFreedomSection(false);
+    setShowEarlySection(false);
+    setShowMapSection(false);
     setReportData(null);
+  };
+
+  const handleMapClick = () => {
+    setShowMapSection(true);
+    setShowReportSection(false);
+    setShowFreedomSection(false);
+    setShowEarlySection(false);
   };
 
   const handleGenerateReport = async () => {
@@ -243,6 +272,7 @@ const Thrace: React.FC = () => {
     setShowFreedomSection(true);
     setShowReportSection(false);
     setShowEarlySection(false);
+    setShowMapSection(false);
     // Don't auto-fetch - let user set filters first
   };
 
@@ -250,6 +280,7 @@ const Thrace: React.FC = () => {
     setShowEarlySection(true);
     setShowFreedomSection(false);
     setShowReportSection(false);
+    setShowMapSection(false);
   };
 
   const handleMetadataClick = async () => {
@@ -782,6 +813,12 @@ const Thrace: React.FC = () => {
           </button>
           <button 
             className="nav-btn"
+            onClick={handleMapClick}
+          >
+            Map
+          </button>
+          <button 
+            className="nav-btn"
             onClick={handleMetadataClick}
           >
             About / Metadata
@@ -1176,6 +1213,13 @@ const Thrace: React.FC = () => {
         </section>
       )}
 
+      {/* Map Section */}
+      {showMapSection && (
+        <section className="mb-6">
+          <ThraceMapPanel onClose={() => setShowMapSection(false)} />
+        </section>
+      )}
+
       {/* Metadata Modal */}
       {showMetadataModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1354,7 +1398,10 @@ const Thrace: React.FC = () => {
             )}
 
             <button
-              onClick={() => setShowUploadModal(false)}
+              onClick={() => {
+                clearUploadState();
+                setShowUploadModal(false);
+              }}
               disabled={uploadLoading}
               className="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50"
             >
