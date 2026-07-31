@@ -172,6 +172,14 @@ The CircleCI configuration (`.circleci/config.yml`) handles automated deployment
 4. Configures Nginx and systemd service
 5. Restarts necessary services
 
+### How a deploy is triggered
+
+- **Only the `main` branch** runs the `build-and-deploy` workflow (`build-and-test` → `deploy-to-aws`).
+- A **merge or push to `main`** on GitHub fires the pipeline (via the CircleCI GitHub trigger / webhook).
+- Other branches do **not** deploy to production.
+- This uses a normal CircleCI **pipeline** from `.circleci/config.yml`. It is **not** the separate CircleCI “Deploys” product UI — reconnecting the project means restoring the pipeline trigger plus project **environment variables** and the **SSH deploy key**.
+- After a failed frontend build (e.g. ESLint with `CI=true`), the deploy job does not run; fix lint on the branch and push again.
+
 Key environment variables are stored securely in CircleCI project settings:
 - Database credentials
 - Security keys and tokens
@@ -199,6 +207,41 @@ To set these environment variables in CircleCI:
 2. Navigate to Environment Variables
 3. Add each variable with its respective value
 4. Make sure to use the exact names as listed above
+
+## Server-only assets (not in git)
+
+### GADM admin-1 GeoJSON (`gadm.geojson`)
+
+SOI and Fast Report maps load admin-level-1 polygons from a large GeoJSON file served as a static asset:
+
+- **Browser URL:** `https://nexus.eufmd-tom.com/gadm.geojson`
+- **On the server:** `/var/www/eufmd-nexus/frontend/gadm.geojson`
+- **Locally (dev):** `frontend/public/gadm.geojson` (copied into the CRA build’s public root)
+
+This file is **gitignored** (see `.gitignore`: `frontend/public/gadm.GeoJSON`) because it is large (~14 MB). CircleCI never includes it in the build artifact.
+
+**It must be placed on the EC2 instance once** (or again if deleted). CircleCI `scp` of `frontend/build/*` overwrites matching build files but does **not** delete extra files already in `/var/www/eufmd-nexus/frontend/`, so a correctly named `gadm.geojson` normally **survives** redeploys.
+
+#### How to upload (typical path)
+
+1. Keep a local copy at `frontend/public/gadm.geojson`.
+2. Upload it to a temporary S3 location (or use `scp` if you have an SSH key to the instance).
+3. On the instance (EC2 Instance Connect), download into the frontend root, e.g. with a short-lived S3 presigned URL:
+
+```bash
+# Example: curl with a presigned URL (wrap the URL in single quotes so & is not split by the shell)
+curl -L -o /var/www/eufmd-nexus/frontend/gadm.geojson 'PRESIGNED_URL_HERE'
+
+ls -lh /var/www/eufmd-nexus/frontend/gadm.geojson
+head -c 80 /var/www/eufmd-nexus/frontend/gadm.geojson; echo
+```
+
+Expect ~14M and a start like `{"type": "FeatureCollection", ...}`.
+
+4. Verify in the browser: `https://nexus.eufmd-tom.com/gadm.geojson`
+5. You may delete the temporary copy from S3 afterward; **do not** delete the file from `/var/www/eufmd-nexus/frontend/` unless you intend to break admin-1 maps.
+
+**Note:** Linux paths are case-sensitive. The app fetches `/gadm.geojson` (lowercase). The name on the server must match.
 
 ## Deployment Process
 
@@ -258,11 +301,15 @@ To set these environment variables in CircleCI:
    sudo chmod 640 /etc/eufmd-nexus/env
    ```
 
+7. Place `gadm.geojson` on the server (see [Server-only assets](#server-only-assets-not-in-git) above).
+
 ### Automated Deployment (CircleCI)
 
-1. Push changes to GitHub main branch (or staging)
-2. CircleCI automatically builds, tests, and deploys to EC2
-3. Access the application at `https://nexus.eufmd-tom.com`
+1. Merge or push to GitHub **`main`** (this is the only branch that deploys).
+2. CircleCI runs `build-and-test` (frontend production build with `REACT_APP_API_URL=https://nexus.eufmd-tom.com`), then `deploy-to-aws` (SCP to EC2, restart API + nginx).
+3. Watch the pipeline in the CircleCI UI until both jobs are green.
+4. Access the application at `https://nexus.eufmd-tom.com`.
+5. Confirm `gadm.geojson` is still present if you rely on SOI / Fast Report admin-1 maps (`ls` on the server or open the URL above).
 
 **Note:** All traffic is automatically secured:
 - HTTP requests to port 80 are redirected to HTTPS on port 443

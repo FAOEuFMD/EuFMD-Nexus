@@ -12,6 +12,10 @@ A modern web application for the European Commission for the Control of Foot-and
 
 For detailed deployment instructions, please refer to the [deployment documentation](./deployment/README.md).
 
+**Quick facts:**
+- Production deploys automatically when code is merged/pushed to the **`main`** branch (CircleCI pipeline).
+- The large GADM admin-1 GeoJSON file is **not** in git; it must already be on the EC2 server (see `deployment/README.md`).
+
 ## Installation
 
 ### Prerequisites

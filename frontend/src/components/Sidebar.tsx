@@ -16,7 +16,7 @@ import {
   faMapLocationDot
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuthStore } from '../stores/authStore';
-import { isSeenCountry } from '../utils/seenUser';
+import { isSeenRispUser } from '../utils/seenUser';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -28,8 +28,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user } = useAuthStore();
   const [showRispDropdown, setShowRispDropdown] = useState(false);
   const userRole = user?.role?.toLowerCase();
-  const userCountry = user?.country;
-  const isSeenUser = isSeenCountry(userCountry);
+  // Admins and SEEN risp users get SOI + FAST Report branching
+  const showRispBranching = isSeenRispUser(user);
   
   // Check if user is admin (role === "admin" like in Vue app)
   const isAdmin = userRole === 'admin';
@@ -114,7 +114,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           {(isAdmin || isRispUser) && (
             <div>
               <div className="relative">
-                {isSeenUser ? (
+                {showRispBranching ? (
                   <>
                     <button
                       className="flex gap-3 items-center px-1 py-2 bg-transparent rounded-lg md:mt-0 md:ml-4 hover:text-gray-900 focus:text-gray-900 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:shadow-outline w-full text-left"

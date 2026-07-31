@@ -20,7 +20,10 @@ export function isSeenCountry(country?: string | null): boolean {
 }
 
 export function isSeenRispUser(user?: Pick<User, 'role' | 'country'> | null): boolean {
-  return user?.role?.toLowerCase() === 'risp' && isSeenCountry(user.country);
+  const role = user?.role?.toLowerCase();
+  // Admins see the same RISP branching (SOI + FAST Report) as SEEN users
+  if (role === 'admin') return true;
+  return role === 'risp' && isSeenCountry(user?.country);
 }
 
 export const SEEN_RISP_PORTAL_PATH = '/risp/portal';
