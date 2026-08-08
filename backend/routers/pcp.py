@@ -11,12 +11,16 @@ async def get_pcp_fmd_2026():
     """Get PCP-FMD data for 2026 for map visualization"""
     try:
         result = await db_helper.execute_pcp_query(
-            "SELECT Country, PCP_Stage FROM PCP.PCP_DB WHERE Year = 2026"
+            """
+            SELECT Country, TRIM(PCP_Stage) AS PCP_Stage, Year
+            FROM PCP.PCP_DB
+            WHERE Year = 2026
+            """
         )
         if result["error"]:
             raise HTTPException(status_code=500, detail=result["error"])
-        
-        return {"data": result["data"]}
+
+        return {"data": result["data"], "year": 2026}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

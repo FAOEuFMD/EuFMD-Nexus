@@ -110,6 +110,44 @@ The application will be available at:
 - **Emergency Response**: Emergency toolbox and fast reporting
 - **User Authentication**: JWT-based authentication system
 
+## Fast Report dashboard (`/fast-report`)
+
+Public map dashboard over EuFMD FAST reporting. The UI has two modes:
+
+### Now (default)
+
+Shows the **current situation**, not the full archive.
+
+| Source | Geography | What is shown |
+|---|---|---|
+| **FAST_Report** | Neighbourhood regions (SEEN, Near East, North Africa) | Last **two published** FAST quarters (e.g. in Aug 2026 → 2026-Q1 + 2026-Q2 when both exist). Vaccination choropleth uses **UN ClearMap layer 109** country polygons (not the SEEN-only GADM file). Countries with `Vaccination=1` but no dose numbers get a distinct dotted pattern; dose totals use denser hatch bands. |
+| **WAHIS-INFUR** | **Europe** only | Immediate notifications as **map dots** (lat/long) for On-going events and outbreaks starting in the current semester. Hover shows cases, killed, susceptible, deaths, species, etc. |
+
+- Year/Quarter filters are hidden in Now mode (period is fixed by the rule above and summarised in the header chip).
+- Region filter can restrict to one neighbourhood region, **Europe (WAHIS-INFUR)**, or all.
+- Selecting **Europe** shows only the WAHIS-INFUR point layer.
+- Selecting a FAST region shows only that region’s FAST data (no Europe layer).
+- **BEF** is excluded from diseases on both Now and Historical views.
+- Disease layers (outbreaks, vaccination, status, PCP-FMD) work as before; FMD starts expanded. INFUR dots follow the outbreak layer toggles.
+
+### Historical
+
+Browse the full **FAST_Report** archive with Year / Quarter / Region filters (previous behaviour). Europe is not part of the FAST archive; use Now for WAHIS-INFUR.
+
+### Planned later (not in UI yet)
+
+- **WAHIS SMR** (six-month reports) for Europe — more complete than immediate notifications, but published later. Intended precedence once added: SMR > WAHIS-INFUR for a closed semester; WAHIS-INFUR fills the open semester and gaps.
+- WAHIS-INFUR / SMR stay **Europe-only**; other regions continue to use FAST.
+
+### Key files
+
+- `frontend/src/pages/FastReport.tsx` — map UI, Now/Historical toggle, filters
+- `frontend/src/components/FastReport/InfurOutbreakLayer.tsx` — WAHIS-INFUR CircleMarkers + hover popup
+- `frontend/src/components/FastReport/BeaconNewsPanel.tsx` — scrollable BEACON news under the map
+- `frontend/src/utils/fastReport/currentSituation.ts` — last-two-quarters helpers, Europe region constant, BEF exclusion, INFUR types
+- `backend/routers/fast_report.py` — `FAST_Report` + INFUR + UN boundaries + `GET /api/fast-report/beacon-news`
+- `backend/services/beacon_client.py` — BEACON public API client (region/disease filters)
+
 ## Design System - FAO Official Colors
 
 ### Main Colors

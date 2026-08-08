@@ -73,6 +73,17 @@
   z-index: 1 !important;
 }
 
+/* Fast Report country outbreak info boxes (divIcon) */
+.country-outbreak-info-box {
+  background: transparent !important;
+  border: none !important;
+}
+
+.country-outbreak-info-box .leaflet-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 /* Vue app CSS classes for consistency */
 .nav-btn {
   padding: 6px;

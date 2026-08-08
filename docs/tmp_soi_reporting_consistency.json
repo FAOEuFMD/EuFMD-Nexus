@@ -1,0 +1,2767 @@
+{
+  "generated": "2026-07-31",
+  "expectations": {
+    "outbreaks": "monthly",
+    "vaccination": "every 3 months (quarterly)",
+    "marketprice": "every 3 months (quarterly)",
+    "countries": [
+      "Azerbaijan, Republic of",
+      "Armenia, Republic of",
+      "Georgia",
+      "Iran, Islamic, Republic of",
+      "Iraq, Republic of",
+      "Pakistan, Islamic, Republic of",
+      "Russian Federation",
+      "Turkey, Republic of"
+    ]
+  },
+  "methodology": {
+    "outbreak_country": "Prefer outbreaks.nationID when >0; else districts\u2192provinces.nationID; else users.nationID",
+    "outbreak_month": "COALESCE(dt_susp, dt_conf, dt_inival)",
+    "vacc_quarter": "month_vacc + year from dt_vacci/dt_inival, else dt_vacci/dt_inival",
+    "market_quarter": "marketprice_period.dt_from",
+    "recent_windows": {
+      "outbreaks": "last 24 calendar months through today",
+      "vaccination": "last 8 calendar quarters through today",
+      "marketprice": "last 8 due market periods (dt_from <= today)"
+    },
+    "staff_user_ids": [
+      0,
+      92,
+      156
+    ]
+  },
+  "orphan_user_91": {
+    "outbreak_rows": 385,
+    "rows_by_resolved_country": {
+      "Iraq, Republic of": 329,
+      "Turkey, Republic of": 48,
+      "(unresolved \u2014 orphan userID 91)": 6,
+      "Iran, Islamic, Republic of": 1,
+      "Armenia, Republic of": 1
+    },
+    "note": "Not in users table; 329/385 rows are district IRAQ-DISTRICTS \u2192 Iraq; remaining mix of Turkey/Iran/Armenia via province"
+  },
+  "outbreak_nation_resolution": {
+    "district\u2192province": 736,
+    "orphan_unresolved": 6,
+    "user.nationID": 9,
+    "row_nationID": 25
+  },
+  "windows": {
+    "recent_outbreak_months": [
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07"
+    ],
+    "recent_quarters": [
+      "2024-Q4",
+      "2025-Q1",
+      "2025-Q2",
+      "2025-Q3",
+      "2025-Q4",
+      "2026-Q1",
+      "2026-Q2",
+      "2026-Q3"
+    ],
+    "recent_market_quarters": [
+      "2024-Q4",
+      "2025-Q1",
+      "2025-Q2",
+      "2025-Q3",
+      "2025-Q4",
+      "2026-Q1",
+      "2026-Q2"
+    ],
+    "full_outbreak_months": [
+      "2016-01",
+      "2025-10",
+      118
+    ],
+    "full_vacc_quarters": [
+      "2019-Q1",
+      "2019-Q2",
+      "2019-Q3",
+      "2019-Q4",
+      "2020-Q1",
+      "2020-Q2",
+      "2020-Q3",
+      "2020-Q4",
+      "2021-Q1",
+      "2021-Q2",
+      "2021-Q3",
+      "2021-Q4"
+    ],
+    "full_market_quarters": [
+      "2021-Q1",
+      "2021-Q2",
+      "2021-Q3",
+      "2021-Q4",
+      "2022-Q1",
+      "2022-Q2",
+      "2022-Q3",
+      "2022-Q4",
+      "2023-Q1",
+      "2023-Q2",
+      "2023-Q3",
+      "2023-Q4",
+      "2024-Q1",
+      "2024-Q2",
+      "2024-Q3",
+      "2024-Q4",
+      "2025-Q1",
+      "2025-Q2",
+      "2025-Q3",
+      "2025-Q4",
+      "2026-Q1",
+      "2026-Q2"
+    ]
+  },
+  "totals": {
+    "outbreak_rows": 776,
+    "vaccination_rows": 1224,
+    "marketprice_rows": 97,
+    "reporters": 13,
+    "users_total": 31,
+    "silent_users_in_expected_countries": 9
+  },
+  "country_summary": [
+    {
+      "country": "Azerbaijan, Republic of",
+      "short": "Azerbaijan",
+      "nationID": 31,
+      "reporters_national": [
+        {
+          "userID": 133,
+          "display_name": "TAMILLA ALIYEVA",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 17,
+          "outbreak_months": [
+            "2025-10"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2022-Q2",
+            "2022-Q3",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 0,
+          "display_name": "(missing user 0)",
+          "outbreaks": 0,
+          "vaccinations": 136,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q2"
+          ],
+          "market_quarters": [],
+          "note": "userID not found in users"
+        },
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 0,
+          "vaccinations": 73,
+          "marketprice": 4,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2020-Q3"
+          ],
+          "market_quarters": [
+            "2021-Q1",
+            "2021-Q2",
+            "2021-Q3",
+            "2021-Q4"
+          ],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 1,
+      "vaccination_rows": 209,
+      "market_rows": 21,
+      "outbreak_months_all": [
+        "2025-10"
+      ],
+      "vacc_quarters_all": [
+        "2019-Q2",
+        "2020-Q3"
+      ],
+      "market_quarters_all": [
+        "2021-Q1",
+        "2021-Q2",
+        "2021-Q3",
+        "2021-Q4",
+        "2022-Q2",
+        "2022-Q3",
+        "2022-Q4",
+        "2023-Q1",
+        "2023-Q2",
+        "2023-Q3",
+        "2023-Q4",
+        "2024-Q1",
+        "2024-Q2",
+        "2024-Q3",
+        "2024-Q4",
+        "2025-Q1",
+        "2025-Q2",
+        "2025-Q3",
+        "2025-Q4",
+        "2026-Q1",
+        "2026-Q2"
+      ],
+      "market_period_labels": [
+        "2021-Q1 (21-I Q)",
+        "2021-Q2 (21-II Q)",
+        "2021-Q3 (21-III Q)",
+        "2021-Q4 (21-IV Q)",
+        "2022-Q2 (22-II Q)",
+        "2022-Q3 (22-III Q)",
+        "2022-Q4 (22-IV Q)",
+        "2023-Q1 (23-I Q)",
+        "2023-Q2 (23-II Q)",
+        "2023-Q3 (23-III Q)",
+        "2023-Q4 (23-IV Q)",
+        "2024-Q1 (24-I Q)",
+        "2024-Q2 (24-II Q)",
+        "2024-Q3 (24-III Q)",
+        "2024-Q4 (24-IV Q)",
+        "2025-Q1 (25-I Q)",
+        "2025-Q2 (25-II Q)",
+        "2025-Q3 (25-III Q)",
+        "2025-Q4 (25-IV Q)",
+        "2026-Q1 (26-I Q)",
+        "2026-Q2 (26 II Q)"
+      ],
+      "last_outbreak_month": "2025-10",
+      "last_vacc_quarter": "2020-Q3",
+      "last_market_quarter": "2026-Q2",
+      "recent_24m": {
+        "outbreak_coverage_pct": 4.2,
+        "outbreak_reported": [
+          "2025-10"
+        ],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 100.0,
+        "market_reported": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ],
+        "market_missing": []
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 0.8,
+        "outbreak_missing_count": 117,
+        "vacc_coverage_pct": 16.7,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q3",
+          "2019-Q4",
+          "2020-Q1",
+          "2020-Q2",
+          "2020-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 95.5,
+        "market_missing": [
+          "2022-Q1"
+        ]
+      }
+    },
+    {
+      "country": "Armenia, Republic of",
+      "short": "Armenia",
+      "nationID": 51,
+      "reporters_national": [
+        {
+          "userID": 91,
+          "display_name": "(orphan \u2014 not in users table)",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2016-01"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": "userID 91 missing from users; most rows resolve to Iraq via district IRAQ-DISTRICTS \u2192 IRAQ-PROVINCE"
+        },
+        {
+          "userID": 134,
+          "display_name": "Satenik Kharatyan",
+          "outbreaks": 0,
+          "vaccinations": 386,
+          "marketprice": 22,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q3",
+            "2019-Q4",
+            "2020-Q2",
+            "2020-Q3",
+            "2020-Q4",
+            "2021-Q3",
+            "2021-Q4"
+          ],
+          "market_quarters": [
+            "2021-Q1",
+            "2021-Q2",
+            "2021-Q3",
+            "2021-Q4",
+            "2022-Q1",
+            "2022-Q2",
+            "2022-Q3",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 0,
+          "vaccinations": 201,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2020-Q1",
+            "2020-Q2",
+            "2020-Q3"
+          ],
+          "market_quarters": [],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 1,
+      "vaccination_rows": 587,
+      "market_rows": 22,
+      "outbreak_months_all": [
+        "2016-01"
+      ],
+      "vacc_quarters_all": [
+        "2019-Q3",
+        "2019-Q4",
+        "2020-Q1",
+        "2020-Q2",
+        "2020-Q3",
+        "2020-Q4",
+        "2021-Q3",
+        "2021-Q4"
+      ],
+      "market_quarters_all": [
+        "2021-Q1",
+        "2021-Q2",
+        "2021-Q3",
+        "2021-Q4",
+        "2022-Q1",
+        "2022-Q2",
+        "2022-Q3",
+        "2022-Q4",
+        "2023-Q1",
+        "2023-Q2",
+        "2023-Q3",
+        "2023-Q4",
+        "2024-Q1",
+        "2024-Q2",
+        "2024-Q3",
+        "2024-Q4",
+        "2025-Q1",
+        "2025-Q2",
+        "2025-Q3",
+        "2025-Q4",
+        "2026-Q1",
+        "2026-Q2"
+      ],
+      "market_period_labels": [
+        "2021-Q1 (21-I Q)",
+        "2021-Q2 (21-II Q)",
+        "2021-Q3 (21-III Q)",
+        "2021-Q4 (21-IV Q)",
+        "2022-Q1 (22-I Q)",
+        "2022-Q2 (22-II Q)",
+        "2022-Q3 (22-III Q)",
+        "2022-Q4 (22-IV Q)",
+        "2023-Q1 (23-I Q)",
+        "2023-Q2 (23-II Q)",
+        "2023-Q3 (23-III Q)",
+        "2023-Q4 (23-IV Q)",
+        "2024-Q1 (24-I Q)",
+        "2024-Q2 (24-II Q)",
+        "2024-Q3 (24-III Q)",
+        "2024-Q4 (24-IV Q)",
+        "2025-Q1 (25-I Q)",
+        "2025-Q2 (25-II Q)",
+        "2025-Q3 (25-III Q)",
+        "2025-Q4 (25-IV Q)",
+        "2026-Q1 (26-I Q)",
+        "2026-Q2 (26 II Q)"
+      ],
+      "last_outbreak_month": "2016-01",
+      "last_vacc_quarter": "2021-Q4",
+      "last_market_quarter": "2026-Q2",
+      "recent_24m": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_reported": [],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 100.0,
+        "market_reported": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ],
+        "market_missing": []
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 0.8,
+        "outbreak_missing_count": 117,
+        "vacc_coverage_pct": 66.7,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q2",
+          "2021-Q1",
+          "2021-Q2"
+        ],
+        "market_coverage_pct": 100.0,
+        "market_missing": []
+      }
+    },
+    {
+      "country": "Georgia",
+      "short": "Georgia",
+      "nationID": 268,
+      "reporters_national": [
+        {
+          "userID": 132,
+          "display_name": "TENGIZ CHALIGAVA",
+          "outbreaks": 0,
+          "vaccinations": 0,
+          "marketprice": 16,
+          "outbreak_months": [],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2022-Q3",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 0,
+          "display_name": "(missing user 0)",
+          "outbreaks": 0,
+          "vaccinations": 130,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q2"
+          ],
+          "market_quarters": [],
+          "note": "userID not found in users"
+        },
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 0,
+          "vaccinations": 65,
+          "marketprice": 2,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2020-Q2"
+          ],
+          "market_quarters": [
+            "2021-Q1",
+            "2022-Q4"
+          ],
+          "note": null
+        },
+        {
+          "userID": 156,
+          "display_name": "ROBERTO CONDOLEO",
+          "outbreaks": 0,
+          "vaccinations": 1,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q3"
+          ],
+          "market_quarters": [],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 0,
+      "vaccination_rows": 196,
+      "market_rows": 18,
+      "outbreak_months_all": [],
+      "vacc_quarters_all": [
+        "2019-Q2",
+        "2019-Q3",
+        "2020-Q2"
+      ],
+      "market_quarters_all": [
+        "2021-Q1",
+        "2022-Q3",
+        "2022-Q4",
+        "2023-Q1",
+        "2023-Q2",
+        "2023-Q3",
+        "2023-Q4",
+        "2024-Q1",
+        "2024-Q2",
+        "2024-Q3",
+        "2024-Q4",
+        "2025-Q1",
+        "2025-Q2",
+        "2025-Q3",
+        "2025-Q4",
+        "2026-Q1",
+        "2026-Q2"
+      ],
+      "market_period_labels": [
+        "2021-Q1 (21-I Q)",
+        "2022-Q3 (22-III Q)",
+        "2022-Q4 (22-IV Q)",
+        "2023-Q1 (23-I Q)",
+        "2023-Q2 (23-II Q)",
+        "2023-Q3 (23-III Q)",
+        "2023-Q4 (23-IV Q)",
+        "2024-Q1 (24-I Q)",
+        "2024-Q2 (24-II Q)",
+        "2024-Q3 (24-III Q)",
+        "2024-Q4 (24-IV Q)",
+        "2025-Q1 (25-I Q)",
+        "2025-Q2 (25-II Q)",
+        "2025-Q3 (25-III Q)",
+        "2025-Q4 (25-IV Q)",
+        "2026-Q1 (26-I Q)",
+        "2026-Q2 (26 II Q)"
+      ],
+      "last_outbreak_month": null,
+      "last_vacc_quarter": "2020-Q2",
+      "last_market_quarter": "2026-Q2",
+      "recent_24m": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_reported": [],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 100.0,
+        "market_reported": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ],
+        "market_missing": []
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_missing_count": 118,
+        "vacc_coverage_pct": 25.0,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q4",
+          "2020-Q1",
+          "2020-Q3",
+          "2020-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 77.3,
+        "market_missing": [
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4",
+          "2022-Q1",
+          "2022-Q2"
+        ]
+      }
+    },
+    {
+      "country": "Iran, Islamic, Republic of",
+      "short": "Iran",
+      "nationID": 364,
+      "reporters_national": [
+        {
+          "userID": 91,
+          "display_name": "(orphan \u2014 not in users table)",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2017-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": "userID 91 missing from users; most rows resolve to Iraq via district IRAQ-DISTRICTS \u2192 IRAQ-PROVINCE"
+        },
+        {
+          "userID": 147,
+          "display_name": "AMIR JAVADI",
+          "outbreaks": 129,
+          "vaccinations": 0,
+          "marketprice": 2,
+          "outbreak_months": [
+            "2021-02",
+            "2021-03",
+            "2021-04",
+            "2021-05",
+            "2021-06",
+            "2021-07",
+            "2021-08",
+            "2021-09",
+            "2021-10",
+            "2021-11",
+            "2021-12",
+            "2022-01",
+            "2022-02",
+            "2022-05",
+            "2022-06",
+            "2022-07",
+            "2022-08",
+            "2022-09",
+            "2022-10",
+            "2022-11",
+            "2023-02",
+            "2023-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2021-Q2",
+            "2022-Q1"
+          ],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2021-02"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 131,
+      "vaccination_rows": 0,
+      "market_rows": 2,
+      "outbreak_months_all": [
+        "2017-03",
+        "2021-02",
+        "2021-03",
+        "2021-04",
+        "2021-05",
+        "2021-06",
+        "2021-07",
+        "2021-08",
+        "2021-09",
+        "2021-10",
+        "2021-11",
+        "2021-12",
+        "2022-01",
+        "2022-02",
+        "2022-05",
+        "2022-06",
+        "2022-07",
+        "2022-08",
+        "2022-09",
+        "2022-10",
+        "2022-11",
+        "2023-02",
+        "2023-03"
+      ],
+      "vacc_quarters_all": [],
+      "market_quarters_all": [
+        "2021-Q2",
+        "2022-Q1"
+      ],
+      "market_period_labels": [
+        "2021-Q2 (21-II Q)",
+        "2022-Q1 (22-I Q)"
+      ],
+      "last_outbreak_month": "2023-03",
+      "last_vacc_quarter": null,
+      "last_market_quarter": "2022-Q1",
+      "recent_24m": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_reported": [],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 0.0,
+        "market_reported": [],
+        "market_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ]
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 19.5,
+        "outbreak_missing_count": 95,
+        "vacc_coverage_pct": 0.0,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q2",
+          "2019-Q3",
+          "2019-Q4",
+          "2020-Q1",
+          "2020-Q2",
+          "2020-Q3",
+          "2020-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 9.1,
+        "market_missing": [
+          "2021-Q1",
+          "2021-Q3",
+          "2021-Q4",
+          "2022-Q2",
+          "2022-Q3",
+          "2022-Q4",
+          "2023-Q1",
+          "2023-Q2",
+          "2023-Q3",
+          "2023-Q4",
+          "2024-Q1",
+          "2024-Q2",
+          "2024-Q3",
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ]
+      }
+    },
+    {
+      "country": "Iraq, Republic of",
+      "short": "Iraq",
+      "nationID": 368,
+      "reporters_national": [
+        {
+          "userID": 91,
+          "display_name": "(orphan \u2014 not in users table)",
+          "outbreaks": 329,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2023-01",
+            "2023-02",
+            "2023-03",
+            "2023-04",
+            "2023-05",
+            "2023-06",
+            "2023-07",
+            "2023-08",
+            "2023-09"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": "userID 91 missing from users; most rows resolve to Iraq via district IRAQ-DISTRICTS \u2192 IRAQ-PROVINCE"
+        },
+        {
+          "userID": 153,
+          "display_name": "HUDHAIFA HADI",
+          "outbreaks": 2,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2022-07"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": null
+        },
+        {
+          "userID": 159,
+          "display_name": "SAMIR AL-JABIR",
+          "outbreaks": 0,
+          "vaccinations": 0,
+          "marketprice": 2,
+          "outbreak_months": [],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2026-Q1",
+            "2026-Q2"
+          ],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 148,
+          "vaccinations": 0,
+          "marketprice": 10,
+          "outbreak_months": [
+            "2020-01",
+            "2020-02",
+            "2020-03",
+            "2020-04",
+            "2020-05",
+            "2022-07",
+            "2023-02",
+            "2023-08",
+            "2023-11",
+            "2023-12",
+            "2024-01",
+            "2024-02",
+            "2024-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2022-Q2",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3"
+          ],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 479,
+      "vaccination_rows": 0,
+      "market_rows": 12,
+      "outbreak_months_all": [
+        "2020-01",
+        "2020-02",
+        "2020-03",
+        "2020-04",
+        "2020-05",
+        "2022-07",
+        "2023-01",
+        "2023-02",
+        "2023-03",
+        "2023-04",
+        "2023-05",
+        "2023-06",
+        "2023-07",
+        "2023-08",
+        "2023-09",
+        "2023-11",
+        "2023-12",
+        "2024-01",
+        "2024-02",
+        "2024-03"
+      ],
+      "vacc_quarters_all": [],
+      "market_quarters_all": [
+        "2022-Q2",
+        "2022-Q4",
+        "2023-Q1",
+        "2023-Q2",
+        "2023-Q3",
+        "2023-Q4",
+        "2024-Q1",
+        "2025-Q1",
+        "2025-Q2",
+        "2025-Q3",
+        "2026-Q1",
+        "2026-Q2"
+      ],
+      "market_period_labels": [
+        "2022-Q2 (22-II Q)",
+        "2022-Q4 (22-IV Q)",
+        "2023-Q1 (23-I Q)",
+        "2023-Q2 (23-II Q)",
+        "2023-Q3 (23-III Q)",
+        "2023-Q4 (23-IV Q)",
+        "2024-Q1 (24-I Q)",
+        "2025-Q1 (25-I Q)",
+        "2025-Q2 (25-II Q)",
+        "2025-Q3 (25-III Q)",
+        "2026-Q1 (26-I Q)",
+        "2026-Q2 (26 II Q)"
+      ],
+      "last_outbreak_month": "2024-03",
+      "last_vacc_quarter": null,
+      "last_market_quarter": "2026-Q2",
+      "recent_24m": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_reported": [],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 71.4,
+        "market_reported": [
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2026-Q1",
+          "2026-Q2"
+        ],
+        "market_missing": [
+          "2024-Q4",
+          "2025-Q4"
+        ]
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 16.9,
+        "outbreak_missing_count": 98,
+        "vacc_coverage_pct": 0.0,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q2",
+          "2019-Q3",
+          "2019-Q4",
+          "2020-Q1",
+          "2020-Q2",
+          "2020-Q3",
+          "2020-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 54.5,
+        "market_missing": [
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4",
+          "2022-Q1",
+          "2022-Q3",
+          "2024-Q2",
+          "2024-Q3",
+          "2024-Q4",
+          "2025-Q4"
+        ]
+      }
+    },
+    {
+      "country": "Pakistan, Islamic, Republic of",
+      "short": "Pakistan",
+      "nationID": 586,
+      "reporters_national": [],
+      "reporters_staff": [],
+      "outbreak_rows": 0,
+      "vaccination_rows": 0,
+      "market_rows": 0,
+      "outbreak_months_all": [],
+      "vacc_quarters_all": [],
+      "market_quarters_all": [],
+      "market_period_labels": [],
+      "last_outbreak_month": null,
+      "last_vacc_quarter": null,
+      "last_market_quarter": null,
+      "recent_24m": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_reported": [],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 0.0,
+        "market_reported": [],
+        "market_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ]
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_missing_count": 118,
+        "vacc_coverage_pct": 0.0,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q2",
+          "2019-Q3",
+          "2019-Q4",
+          "2020-Q1",
+          "2020-Q2",
+          "2020-Q3",
+          "2020-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 0.0,
+        "market_missing": [
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4",
+          "2022-Q1",
+          "2022-Q2",
+          "2022-Q3",
+          "2022-Q4",
+          "2023-Q1",
+          "2023-Q2",
+          "2023-Q3",
+          "2023-Q4",
+          "2024-Q1",
+          "2024-Q2",
+          "2024-Q3",
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ]
+      }
+    },
+    {
+      "country": "Russian Federation",
+      "short": "Russian Federation",
+      "nationID": 643,
+      "reporters_national": [
+        {
+          "userID": 135,
+          "display_name": "Carsten Potzsch",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2019-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": null
+        },
+        {
+          "userID": 140,
+          "display_name": "ANTON KARAULOV",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2020-01"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 20,
+          "vaccinations": 26,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2019-01",
+            "2019-02",
+            "2019-03"
+          ],
+          "vacc_quarters": [
+            "2019-Q1",
+            "2020-Q2"
+          ],
+          "market_quarters": [],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 22,
+      "vaccination_rows": 26,
+      "market_rows": 0,
+      "outbreak_months_all": [
+        "2019-01",
+        "2019-02",
+        "2019-03",
+        "2020-01"
+      ],
+      "vacc_quarters_all": [
+        "2019-Q1",
+        "2020-Q2"
+      ],
+      "market_quarters_all": [],
+      "market_period_labels": [],
+      "last_outbreak_month": "2020-01",
+      "last_vacc_quarter": "2020-Q2",
+      "last_market_quarter": null,
+      "recent_24m": {
+        "outbreak_coverage_pct": 0.0,
+        "outbreak_reported": [],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-11",
+          "2024-12",
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 0.0,
+        "market_reported": [],
+        "market_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ]
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 3.4,
+        "outbreak_missing_count": 114,
+        "vacc_coverage_pct": 16.7,
+        "vacc_missing": [
+          "2019-Q2",
+          "2019-Q3",
+          "2019-Q4",
+          "2020-Q1",
+          "2020-Q3",
+          "2020-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 0.0,
+        "market_missing": [
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4",
+          "2022-Q1",
+          "2022-Q2",
+          "2022-Q3",
+          "2022-Q4",
+          "2023-Q1",
+          "2023-Q2",
+          "2023-Q3",
+          "2023-Q4",
+          "2024-Q1",
+          "2024-Q2",
+          "2024-Q3",
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ]
+      }
+    },
+    {
+      "country": "Turkey, Republic of",
+      "short": "Turkey",
+      "nationID": 792,
+      "reporters_national": [
+        {
+          "userID": 91,
+          "display_name": "(orphan \u2014 not in users table)",
+          "outbreaks": 48,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2017-01",
+            "2017-02",
+            "2017-03",
+            "2017-05",
+            "2017-06",
+            "2017-07",
+            "2017-08",
+            "2017-09",
+            "2017-10",
+            "2017-11",
+            "2017-12",
+            "2018-01",
+            "2018-02",
+            "2018-08",
+            "2018-10",
+            "2019-02",
+            "2019-03",
+            "2019-05",
+            "2019-06",
+            "2019-09"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": "userID 91 missing from users; most rows resolve to Iraq via district IRAQ-DISTRICTS \u2192 IRAQ-PROVINCE"
+        },
+        {
+          "userID": 131,
+          "display_name": "ABDULNACI BULUT",
+          "outbreaks": 83,
+          "vaccinations": 106,
+          "marketprice": 21,
+          "outbreak_months": [
+            "2019-12",
+            "2020-01",
+            "2020-03",
+            "2020-06",
+            "2020-09",
+            "2020-10",
+            "2020-11",
+            "2020-12",
+            "2021-09",
+            "2022-02",
+            "2022-08",
+            "2023-02",
+            "2023-03",
+            "2023-04",
+            "2023-05",
+            "2023-06",
+            "2023-07",
+            "2023-08",
+            "2024-02",
+            "2024-03",
+            "2024-04",
+            "2024-11",
+            "2025-01",
+            "2025-05",
+            "2025-07",
+            "2025-08"
+          ],
+          "vacc_quarters": [
+            "2020-Q1",
+            "2020-Q2",
+            "2020-Q3",
+            "2020-Q4"
+          ],
+          "market_quarters": [
+            "2021-Q2",
+            "2021-Q3",
+            "2021-Q4",
+            "2022-Q1",
+            "2022-Q2",
+            "2022-Q3",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ],
+          "note": null
+        }
+      ],
+      "reporters_staff": [
+        {
+          "userID": 0,
+          "display_name": "(missing user 0)",
+          "outbreaks": 0,
+          "vaccinations": 100,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [],
+          "market_quarters": [],
+          "note": "userID not found in users"
+        },
+        {
+          "userID": 92,
+          "display_name": "andrea vitelli",
+          "outbreaks": 5,
+          "vaccinations": 0,
+          "marketprice": 1,
+          "outbreak_months": [
+            "2017-06",
+            "2019-11",
+            "2023-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2021-Q1"
+          ],
+          "note": null
+        }
+      ],
+      "outbreak_rows": 136,
+      "vaccination_rows": 206,
+      "market_rows": 22,
+      "outbreak_months_all": [
+        "2017-01",
+        "2017-02",
+        "2017-03",
+        "2017-05",
+        "2017-06",
+        "2017-07",
+        "2017-08",
+        "2017-09",
+        "2017-10",
+        "2017-11",
+        "2017-12",
+        "2018-01",
+        "2018-02",
+        "2018-08",
+        "2018-10",
+        "2019-02",
+        "2019-03",
+        "2019-05",
+        "2019-06",
+        "2019-09",
+        "2019-11",
+        "2019-12",
+        "2020-01",
+        "2020-03",
+        "2020-06",
+        "2020-09",
+        "2020-10",
+        "2020-11",
+        "2020-12",
+        "2021-09",
+        "2022-02",
+        "2022-08",
+        "2023-02",
+        "2023-03",
+        "2023-04",
+        "2023-05",
+        "2023-06",
+        "2023-07",
+        "2023-08",
+        "2024-02",
+        "2024-03",
+        "2024-04",
+        "2024-11",
+        "2025-01",
+        "2025-05",
+        "2025-07",
+        "2025-08"
+      ],
+      "vacc_quarters_all": [
+        "2020-Q1",
+        "2020-Q2",
+        "2020-Q3",
+        "2020-Q4"
+      ],
+      "market_quarters_all": [
+        "2021-Q1",
+        "2021-Q2",
+        "2021-Q3",
+        "2021-Q4",
+        "2022-Q1",
+        "2022-Q2",
+        "2022-Q3",
+        "2022-Q4",
+        "2023-Q1",
+        "2023-Q2",
+        "2023-Q3",
+        "2023-Q4",
+        "2024-Q1",
+        "2024-Q2",
+        "2024-Q3",
+        "2024-Q4",
+        "2025-Q1",
+        "2025-Q2",
+        "2025-Q3",
+        "2025-Q4",
+        "2026-Q1",
+        "2026-Q2"
+      ],
+      "market_period_labels": [
+        "2021-Q1 (21-I Q)",
+        "2021-Q2 (21-II Q)",
+        "2021-Q3 (21-III Q)",
+        "2021-Q4 (21-IV Q)",
+        "2022-Q1 (22-I Q)",
+        "2022-Q2 (22-II Q)",
+        "2022-Q3 (22-III Q)",
+        "2022-Q4 (22-IV Q)",
+        "2023-Q1 (23-I Q)",
+        "2023-Q2 (23-II Q)",
+        "2023-Q3 (23-III Q)",
+        "2023-Q4 (23-IV Q)",
+        "2024-Q1 (24-I Q)",
+        "2024-Q2 (24-II Q)",
+        "2024-Q3 (24-III Q)",
+        "2024-Q4 (24-IV Q)",
+        "2025-Q1 (25-I Q)",
+        "2025-Q2 (25-II Q)",
+        "2025-Q3 (25-III Q)",
+        "2025-Q4 (25-IV Q)",
+        "2026-Q1 (26-I Q)",
+        "2026-Q2 (26 II Q)"
+      ],
+      "last_outbreak_month": "2025-08",
+      "last_vacc_quarter": "2020-Q4",
+      "last_market_quarter": "2026-Q2",
+      "recent_24m": {
+        "outbreak_coverage_pct": 20.8,
+        "outbreak_reported": [
+          "2024-11",
+          "2025-01",
+          "2025-05",
+          "2025-07",
+          "2025-08"
+        ],
+        "outbreak_missing": [
+          "2024-08",
+          "2024-09",
+          "2024-10",
+          "2024-12",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-06",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "vacc_coverage_pct": 0.0,
+        "vacc_reported": [],
+        "vacc_missing": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2",
+          "2026-Q3"
+        ],
+        "market_coverage_pct": 100.0,
+        "market_reported": [
+          "2024-Q4",
+          "2025-Q1",
+          "2025-Q2",
+          "2025-Q3",
+          "2025-Q4",
+          "2026-Q1",
+          "2026-Q2"
+        ],
+        "market_missing": []
+      },
+      "full_history": {
+        "outbreak_coverage_pct": 39.8,
+        "outbreak_missing_count": 71,
+        "vacc_coverage_pct": 33.3,
+        "vacc_missing": [
+          "2019-Q1",
+          "2019-Q2",
+          "2019-Q3",
+          "2019-Q4",
+          "2021-Q1",
+          "2021-Q2",
+          "2021-Q3",
+          "2021-Q4"
+        ],
+        "market_coverage_pct": 100.0,
+        "market_missing": []
+      }
+    }
+  ],
+  "reporters": [
+    {
+      "userID": 0,
+      "display_name": "(missing user 0)",
+      "user_nationID": null,
+      "user_country": null,
+      "staff_or_orphan": true,
+      "note": "userID not found in users",
+      "outbreaks": 0,
+      "vaccinations": 366,
+      "marketprice": 0,
+      "countries_touched": [
+        "Azerbaijan, Republic of",
+        "Georgia",
+        "Turkey, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Azerbaijan, Republic of",
+          "outbreaks": 0,
+          "vaccinations": 136,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q2"
+          ],
+          "market_quarters": []
+        },
+        {
+          "country": "Georgia",
+          "outbreaks": 0,
+          "vaccinations": 130,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q2"
+          ],
+          "market_quarters": []
+        },
+        {
+          "country": "Turkey, Republic of",
+          "outbreaks": 0,
+          "vaccinations": 100,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [],
+          "market_quarters": []
+        }
+      ],
+      "first_activity": "2019-04-04",
+      "last_activity": "2019-05-15"
+    },
+    {
+      "userID": 91,
+      "display_name": "(orphan \u2014 not in users table)",
+      "user_nationID": null,
+      "user_country": null,
+      "staff_or_orphan": true,
+      "note": "userID 91 missing from users; most rows resolve to Iraq via district IRAQ-DISTRICTS \u2192 IRAQ-PROVINCE",
+      "outbreaks": 385,
+      "vaccinations": 0,
+      "marketprice": 0,
+      "countries_touched": [
+        "(unresolved \u2014 orphan userID 91)",
+        "Armenia, Republic of",
+        "Iran, Islamic, Republic of",
+        "Iraq, Republic of",
+        "Turkey, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "(unresolved \u2014 orphan userID 91)",
+          "outbreaks": 6,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2017-02",
+            "2017-03",
+            "2017-04"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        },
+        {
+          "country": "Armenia, Republic of",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2016-01"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        },
+        {
+          "country": "Iran, Islamic, Republic of",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2017-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        },
+        {
+          "country": "Iraq, Republic of",
+          "outbreaks": 329,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2023-01",
+            "2023-02",
+            "2023-03",
+            "2023-04",
+            "2023-05",
+            "2023-06",
+            "2023-07",
+            "2023-08",
+            "2023-09"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        },
+        {
+          "country": "Turkey, Republic of",
+          "outbreaks": 48,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2017-01",
+            "2017-02",
+            "2017-03",
+            "2017-05",
+            "2017-06",
+            "2017-07",
+            "2017-08",
+            "2017-09",
+            "2017-10",
+            "2017-11",
+            "2017-12",
+            "2018-01",
+            "2018-02",
+            "2018-08",
+            "2018-10",
+            "2019-02",
+            "2019-03",
+            "2019-05",
+            "2019-06",
+            "2019-09"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        }
+      ],
+      "first_activity": "2016-01-15",
+      "last_activity": "2023-09-28"
+    },
+    {
+      "userID": 134,
+      "display_name": "Satenik Kharatyan",
+      "user_nationID": 51,
+      "user_country": "Armenia, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 0,
+      "vaccinations": 386,
+      "marketprice": 22,
+      "countries_touched": [
+        "Armenia, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Armenia, Republic of",
+          "outbreaks": 0,
+          "vaccinations": 386,
+          "marketprice": 22,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q3",
+            "2019-Q4",
+            "2020-Q2",
+            "2020-Q3",
+            "2020-Q4",
+            "2021-Q3",
+            "2021-Q4"
+          ],
+          "market_quarters": [
+            "2021-Q1",
+            "2021-Q2",
+            "2021-Q3",
+            "2021-Q4",
+            "2022-Q1",
+            "2022-Q2",
+            "2022-Q3",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ]
+        }
+      ],
+      "first_activity": "2019-09-15",
+      "last_activity": "2026-06-30"
+    },
+    {
+      "userID": 92,
+      "display_name": "andrea vitelli",
+      "user_nationID": 31,
+      "user_country": "Azerbaijan, Republic of",
+      "staff_or_orphan": true,
+      "note": null,
+      "outbreaks": 174,
+      "vaccinations": 365,
+      "marketprice": 17,
+      "countries_touched": [
+        "Armenia, Republic of",
+        "Azerbaijan, Republic of",
+        "Georgia",
+        "Iran, Islamic, Republic of",
+        "Iraq, Republic of",
+        "Russian Federation",
+        "Turkey, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Armenia, Republic of",
+          "outbreaks": 0,
+          "vaccinations": 201,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2020-Q1",
+            "2020-Q2",
+            "2020-Q3"
+          ],
+          "market_quarters": []
+        },
+        {
+          "country": "Azerbaijan, Republic of",
+          "outbreaks": 0,
+          "vaccinations": 73,
+          "marketprice": 4,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2020-Q3"
+          ],
+          "market_quarters": [
+            "2021-Q1",
+            "2021-Q2",
+            "2021-Q3",
+            "2021-Q4"
+          ]
+        },
+        {
+          "country": "Georgia",
+          "outbreaks": 0,
+          "vaccinations": 65,
+          "marketprice": 2,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2020-Q2"
+          ],
+          "market_quarters": [
+            "2021-Q1",
+            "2022-Q4"
+          ]
+        },
+        {
+          "country": "Iran, Islamic, Republic of",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2021-02"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        },
+        {
+          "country": "Iraq, Republic of",
+          "outbreaks": 148,
+          "vaccinations": 0,
+          "marketprice": 10,
+          "outbreak_months": [
+            "2020-01",
+            "2020-02",
+            "2020-03",
+            "2020-04",
+            "2020-05",
+            "2022-07",
+            "2023-02",
+            "2023-08",
+            "2023-11",
+            "2023-12",
+            "2024-01",
+            "2024-02",
+            "2024-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2022-Q2",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3"
+          ]
+        },
+        {
+          "country": "Russian Federation",
+          "outbreaks": 20,
+          "vaccinations": 26,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2019-01",
+            "2019-02",
+            "2019-03"
+          ],
+          "vacc_quarters": [
+            "2019-Q1",
+            "2020-Q2"
+          ],
+          "market_quarters": []
+        },
+        {
+          "country": "Turkey, Republic of",
+          "outbreaks": 5,
+          "vaccinations": 0,
+          "marketprice": 1,
+          "outbreak_months": [
+            "2017-06",
+            "2019-11",
+            "2023-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2021-Q1"
+          ]
+        }
+      ],
+      "first_activity": "2017-06-19",
+      "last_activity": "2025-09-30"
+    },
+    {
+      "userID": 133,
+      "display_name": "TAMILLA ALIYEVA",
+      "user_nationID": 31,
+      "user_country": "Azerbaijan, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 1,
+      "vaccinations": 0,
+      "marketprice": 17,
+      "countries_touched": [
+        "Azerbaijan, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Azerbaijan, Republic of",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 17,
+          "outbreak_months": [
+            "2025-10"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2022-Q2",
+            "2022-Q3",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ]
+        }
+      ],
+      "first_activity": "2022-06-30",
+      "last_activity": "2026-06-30"
+    },
+    {
+      "userID": 132,
+      "display_name": "TENGIZ CHALIGAVA",
+      "user_nationID": 268,
+      "user_country": "Georgia",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 0,
+      "vaccinations": 0,
+      "marketprice": 16,
+      "countries_touched": [
+        "Georgia"
+      ],
+      "by_country": [
+        {
+          "country": "Georgia",
+          "outbreaks": 0,
+          "vaccinations": 0,
+          "marketprice": 16,
+          "outbreak_months": [],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2022-Q3",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ]
+        }
+      ],
+      "first_activity": "2022-09-30",
+      "last_activity": "2026-06-30"
+    },
+    {
+      "userID": 135,
+      "display_name": "Carsten Potzsch",
+      "user_nationID": 276,
+      "user_country": "Germany, Federal, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 1,
+      "vaccinations": 0,
+      "marketprice": 0,
+      "countries_touched": [
+        "Russian Federation"
+      ],
+      "by_country": [
+        {
+          "country": "Russian Federation",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2019-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        }
+      ],
+      "first_activity": "2019-03-08",
+      "last_activity": "2019-03-08"
+    },
+    {
+      "userID": 147,
+      "display_name": "AMIR JAVADI",
+      "user_nationID": 364,
+      "user_country": "Iran, Islamic, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 129,
+      "vaccinations": 0,
+      "marketprice": 2,
+      "countries_touched": [
+        "Iran, Islamic, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Iran, Islamic, Republic of",
+          "outbreaks": 129,
+          "vaccinations": 0,
+          "marketprice": 2,
+          "outbreak_months": [
+            "2021-02",
+            "2021-03",
+            "2021-04",
+            "2021-05",
+            "2021-06",
+            "2021-07",
+            "2021-08",
+            "2021-09",
+            "2021-10",
+            "2021-11",
+            "2021-12",
+            "2022-01",
+            "2022-02",
+            "2022-05",
+            "2022-06",
+            "2022-07",
+            "2022-08",
+            "2022-09",
+            "2022-10",
+            "2022-11",
+            "2023-02",
+            "2023-03"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2021-Q2",
+            "2022-Q1"
+          ]
+        }
+      ],
+      "first_activity": "2021-02-01",
+      "last_activity": "2023-03-26"
+    },
+    {
+      "userID": 153,
+      "display_name": "HUDHAIFA HADI",
+      "user_nationID": 368,
+      "user_country": "Iraq, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 2,
+      "vaccinations": 0,
+      "marketprice": 0,
+      "countries_touched": [
+        "Iraq, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Iraq, Republic of",
+          "outbreaks": 2,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2022-07"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        }
+      ],
+      "first_activity": "2022-07-30",
+      "last_activity": "2022-07-30"
+    },
+    {
+      "userID": 159,
+      "display_name": "SAMIR AL-JABIR",
+      "user_nationID": 368,
+      "user_country": "Iraq, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 0,
+      "vaccinations": 0,
+      "marketprice": 2,
+      "countries_touched": [
+        "Iraq, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Iraq, Republic of",
+          "outbreaks": 0,
+          "vaccinations": 0,
+          "marketprice": 2,
+          "outbreak_months": [],
+          "vacc_quarters": [],
+          "market_quarters": [
+            "2026-Q1",
+            "2026-Q2"
+          ]
+        }
+      ],
+      "first_activity": "2026-03-31",
+      "last_activity": "2026-06-30"
+    },
+    {
+      "userID": 156,
+      "display_name": "ROBERTO CONDOLEO",
+      "user_nationID": 380,
+      "user_country": "Italy",
+      "staff_or_orphan": true,
+      "note": null,
+      "outbreaks": 0,
+      "vaccinations": 1,
+      "marketprice": 0,
+      "countries_touched": [
+        "Georgia"
+      ],
+      "by_country": [
+        {
+          "country": "Georgia",
+          "outbreaks": 0,
+          "vaccinations": 1,
+          "marketprice": 0,
+          "outbreak_months": [],
+          "vacc_quarters": [
+            "2019-Q3"
+          ],
+          "market_quarters": []
+        }
+      ],
+      "first_activity": "2019-09-20",
+      "last_activity": "2019-09-20"
+    },
+    {
+      "userID": 140,
+      "display_name": "ANTON KARAULOV",
+      "user_nationID": 643,
+      "user_country": "Russian Federation",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 1,
+      "vaccinations": 0,
+      "marketprice": 0,
+      "countries_touched": [
+        "Russian Federation"
+      ],
+      "by_country": [
+        {
+          "country": "Russian Federation",
+          "outbreaks": 1,
+          "vaccinations": 0,
+          "marketprice": 0,
+          "outbreak_months": [
+            "2020-01"
+          ],
+          "vacc_quarters": [],
+          "market_quarters": []
+        }
+      ],
+      "first_activity": "2020-01-27",
+      "last_activity": "2020-01-27"
+    },
+    {
+      "userID": 131,
+      "display_name": "ABDULNACI BULUT",
+      "user_nationID": 792,
+      "user_country": "Turkey, Republic of",
+      "staff_or_orphan": false,
+      "note": null,
+      "outbreaks": 83,
+      "vaccinations": 106,
+      "marketprice": 21,
+      "countries_touched": [
+        "Turkey, Republic of"
+      ],
+      "by_country": [
+        {
+          "country": "Turkey, Republic of",
+          "outbreaks": 83,
+          "vaccinations": 106,
+          "marketprice": 21,
+          "outbreak_months": [
+            "2019-12",
+            "2020-01",
+            "2020-03",
+            "2020-06",
+            "2020-09",
+            "2020-10",
+            "2020-11",
+            "2020-12",
+            "2021-09",
+            "2022-02",
+            "2022-08",
+            "2023-02",
+            "2023-03",
+            "2023-04",
+            "2023-05",
+            "2023-06",
+            "2023-07",
+            "2023-08",
+            "2024-02",
+            "2024-03",
+            "2024-04",
+            "2024-11",
+            "2025-01",
+            "2025-05",
+            "2025-07",
+            "2025-08"
+          ],
+          "vacc_quarters": [
+            "2020-Q1",
+            "2020-Q2",
+            "2020-Q3",
+            "2020-Q4"
+          ],
+          "market_quarters": [
+            "2021-Q2",
+            "2021-Q3",
+            "2021-Q4",
+            "2022-Q1",
+            "2022-Q2",
+            "2022-Q3",
+            "2022-Q4",
+            "2023-Q1",
+            "2023-Q2",
+            "2023-Q3",
+            "2023-Q4",
+            "2024-Q1",
+            "2024-Q2",
+            "2024-Q3",
+            "2024-Q4",
+            "2025-Q1",
+            "2025-Q2",
+            "2025-Q3",
+            "2025-Q4",
+            "2026-Q1",
+            "2026-Q2"
+          ]
+        }
+      ],
+      "first_activity": "2019-04-08",
+      "last_activity": "2026-06-30"
+    }
+  ],
+  "silent_users": [
+    {
+      "userID": 142,
+      "display_name": "SHAKIR NEZAL",
+      "username": "SHAKIRNEZAL@GMAIL.COM",
+      "nationID": 368,
+      "country": "Iraq, Republic of",
+      "role": 1,
+      "institution": "A",
+      "dt_lastlogin": null
+    },
+    {
+      "userID": 143,
+      "display_name": "RIASAT WASEE ULLAH",
+      "username": "RIASATWASEE@GMAIL.COM",
+      "nationID": 586,
+      "country": "Pakistan, Islamic, Republic of",
+      "role": 1,
+      "institution": "MINISTRY OF NATIONAL FOOD SECURITY &amp; RESEARCH",
+      "dt_lastlogin": "2021-10-20"
+    },
+    {
+      "userID": 144,
+      "display_name": "ALIREZA AKBARSHAHI",
+      "username": "A.AKBARSHAHI@IVO.IR",
+      "nationID": 364,
+      "country": "Iran, Islamic, Republic of",
+      "role": null,
+      "institution": "IRAN VETERINARY ORGANIZATION",
+      "dt_lastlogin": null
+    },
+    {
+      "userID": 145,
+      "display_name": "ALIREZA AKBARSHAHI",
+      "username": "A-AKBARSHAHI@IVO.IR",
+      "nationID": 364,
+      "country": "Iran, Islamic, Republic of",
+      "role": null,
+      "institution": "IRAN VETERINARY ORGANIZATION",
+      "dt_lastlogin": null
+    },
+    {
+      "userID": 150,
+      "display_name": "ALI ALKHALILI",
+      "username": "DRHAJIALI03@YAHOO.COM",
+      "nationID": 368,
+      "country": "Iraq, Republic of",
+      "role": 1,
+      "institution": "VETERINARY DIRECTORATE",
+      "dt_lastlogin": null
+    },
+    {
+      "userID": 151,
+      "display_name": "JAVAD EMAMI",
+      "username": "EMAMI202010@GMAIL.COM",
+      "nationID": 364,
+      "country": "Iran, Islamic, Republic of",
+      "role": 1,
+      "institution": "IVO",
+      "dt_lastlogin": "2021-03-15"
+    },
+    {
+      "userID": 152,
+      "display_name": "MOHAMMAD KHAJEH",
+      "username": "M.KHAJEH@IVO.IR",
+      "nationID": 364,
+      "country": "Iran, Islamic, Republic of",
+      "role": 1,
+      "institution": "IRAN VETERINARY ORGANIZATION",
+      "dt_lastlogin": "2021-04-20"
+    },
+    {
+      "userID": 157,
+      "display_name": "KAMBIZ AMJADI GOLPAYGANI",
+      "username": "KAMBIZVET@GMAIL.COM",
+      "nationID": 364,
+      "country": "Iran, Islamic, Republic of",
+      "role": 1,
+      "institution": "IVO",
+      "dt_lastlogin": "2025-07-26"
+    },
+    {
+      "userID": 160,
+      "display_name": "PILAR RIUS",
+      "username": "PILAR.RIUSMUNOZ@FAO.ORG",
+      "nationID": 51,
+      "country": "Armenia, Republic of",
+      "role": 1,
+      "institution": "FAO",
+      "dt_lastlogin": "2026-06-08"
+    }
+  ],
+  "extra_countries_in_data": [],
+  "market_period_catalog_due": [
+    {
+      "periodID": 2,
+      "descrizione": "21-I Q",
+      "dt_from": "2021-03-31",
+      "quarter": "2021-Q1"
+    },
+    {
+      "periodID": 3,
+      "descrizione": "21-II Q",
+      "dt_from": "2021-06-30",
+      "quarter": "2021-Q2"
+    },
+    {
+      "periodID": 4,
+      "descrizione": "21-III Q",
+      "dt_from": "2021-09-30",
+      "quarter": "2021-Q3"
+    },
+    {
+      "periodID": 5,
+      "descrizione": "21-IV Q",
+      "dt_from": "2021-12-31",
+      "quarter": "2021-Q4"
+    },
+    {
+      "periodID": 6,
+      "descrizione": "22-I Q",
+      "dt_from": "2022-03-31",
+      "quarter": "2022-Q1"
+    },
+    {
+      "periodID": 7,
+      "descrizione": "22-II Q",
+      "dt_from": "2022-06-30",
+      "quarter": "2022-Q2"
+    },
+    {
+      "periodID": 8,
+      "descrizione": "22-III Q",
+      "dt_from": "2022-09-30",
+      "quarter": "2022-Q3"
+    },
+    {
+      "periodID": 9,
+      "descrizione": "22-IV Q",
+      "dt_from": "2022-12-31",
+      "quarter": "2022-Q4"
+    },
+    {
+      "periodID": 10,
+      "descrizione": "23-I Q",
+      "dt_from": "2023-03-31",
+      "quarter": "2023-Q1"
+    },
+    {
+      "periodID": 11,
+      "descrizione": "23-II Q",
+      "dt_from": "2023-06-30",
+      "quarter": "2023-Q2"
+    },
+    {
+      "periodID": 12,
+      "descrizione": "23-III Q",
+      "dt_from": "2023-09-30",
+      "quarter": "2023-Q3"
+    },
+    {
+      "periodID": 13,
+      "descrizione": "23-IV Q",
+      "dt_from": "2023-12-31",
+      "quarter": "2023-Q4"
+    },
+    {
+      "periodID": 14,
+      "descrizione": "24-I Q",
+      "dt_from": "2024-03-31",
+      "quarter": "2024-Q1"
+    },
+    {
+      "periodID": 15,
+      "descrizione": "24-II Q",
+      "dt_from": "2024-06-30",
+      "quarter": "2024-Q2"
+    },
+    {
+      "periodID": 16,
+      "descrizione": "24-III Q",
+      "dt_from": "2024-09-30",
+      "quarter": "2024-Q3"
+    },
+    {
+      "periodID": 17,
+      "descrizione": "24-IV Q",
+      "dt_from": "2024-12-31",
+      "quarter": "2024-Q4"
+    },
+    {
+      "periodID": 18,
+      "descrizione": "25-I Q",
+      "dt_from": "2025-03-31",
+      "quarter": "2025-Q1"
+    },
+    {
+      "periodID": 19,
+      "descrizione": "25-II Q",
+      "dt_from": "2025-06-30",
+      "quarter": "2025-Q2"
+    },
+    {
+      "periodID": 20,
+      "descrizione": "25-III Q",
+      "dt_from": "2025-09-30",
+      "quarter": "2025-Q3"
+    },
+    {
+      "periodID": 21,
+      "descrizione": "25-IV Q",
+      "dt_from": "2025-12-31",
+      "quarter": "2025-Q4"
+    },
+    {
+      "periodID": 22,
+      "descrizione": "26-I Q",
+      "dt_from": "2026-03-31",
+      "quarter": "2026-Q1"
+    },
+    {
+      "periodID": 23,
+      "descrizione": "26 II Q",
+      "dt_from": "2026-06-30",
+      "quarter": "2026-Q2"
+    }
+  ]
+}
