@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RispNavBar from '../components/RISP/RispNavBar';
+import RispEntryIntro from '../components/RISP/RispEntryIntro';
 import MultipleSelectOptions from '../components/RISP/MultipleSelectOptions';
 import HierarchicalSpeciesSelector from '../components/RISP/HierarchicalSpeciesSelector';
 import { apiService } from '../services/api';
@@ -96,7 +97,11 @@ const RISPVaccination: React.FC = () => {
           status: campaign.status || '',
           vaccinationType: campaign.vaccination_type || '',
           strategy: campaign.vaccination_type || '',
-          geographicalAreas: Array.isArray(campaign.geographical_areas) ? campaign.geographical_areas : [],
+          geographicalAreas: (() => {
+            const areas = Array.isArray(campaign.geographical_areas) ? campaign.geographical_areas : [];
+            if (campaign.location) return [campaign.location];
+            return areas.slice(0, 1);
+          })(),
           regionDetails: campaign.regionDetails || '',
           species: Array.isArray(campaign.species) ? campaign.species : [],
           speciesTargeted: Array.isArray(campaign.species) ? campaign.species : [],
@@ -198,7 +203,8 @@ const RISPVaccination: React.FC = () => {
         country: userCountry,
         status: campaign.status,
         vaccination_type: campaign.vaccinationType,
-        geographical_areas: campaign.geographicalAreas,
+        location: (campaign.geographicalAreas || [])[0] || null,
+        geographical_areas: (campaign.geographicalAreas || []).slice(0, 1),
         species: campaign.species,
         vaccine_details: campaign.vaccineDetails,
         q1: Number(campaign.q1) || 0,
@@ -284,10 +290,8 @@ const RISPVaccination: React.FC = () => {
         
         if (field === 'diseaseName') {
           campaign.diseaseName = value;
-          // Note: Species are no longer filtered by disease with hierarchical selector
         } else if (['q1', 'q2', 'q3', 'q4', 'coverage'].includes(field)) {
           const num = Number(value);
-          // Validate number input
           if (isNaN(num) || num < 0) {
             if (field === 'q1') campaign.q1 = 0;
             else if (field === 'q2') campaign.q2 = 0;
@@ -297,7 +301,6 @@ const RISPVaccination: React.FC = () => {
           } else if (field === 'coverage' && num > 100) {
             campaign.coverage = 100;
           } else {
-            // Apply the value with proper typing
             if (field === 'q1') campaign.q1 = Math.floor(num);
             else if (field === 'q2') campaign.q2 = Math.floor(num);
             else if (field === 'q3') campaign.q3 = Math.floor(num);
@@ -305,16 +308,14 @@ const RISPVaccination: React.FC = () => {
             else if (field === 'coverage') campaign.coverage = Math.floor(num);
           }
           
-          // Update total after Q changes
           if (['q1', 'q2', 'q3', 'q4'].includes(field)) {
             campaign.total = calculateTotal(campaign);
           }
         } else if (field === 'species') {
           campaign.species = value;
         } else if (field === 'geographicalAreas') {
-          campaign.geographicalAreas = value;
-        } else if (field === 'diseaseName') {
-          campaign.diseaseName = value;
+          // One location per row (National or a single region/district)
+          campaign.geographicalAreas = Array.isArray(value) ? value.slice(-1) : [];
         } else if (field === 'year') {
           campaign.year = value;
         } else if (field === 'status') {
@@ -380,7 +381,8 @@ const RISPVaccination: React.FC = () => {
           country: userCountry,
           status: campaign.status,
           vaccination_type: campaign.vaccinationType,
-          geographical_areas: campaign.geographicalAreas,
+          location: (campaign.geographicalAreas || [])[0] || null,
+          geographical_areas: (campaign.geographicalAreas || []).slice(0, 1),
           species: campaign.species,
           vaccine_details: campaign.vaccineDetails,
           q1: Number(campaign.q1) || 0,
@@ -418,13 +420,13 @@ const RISPVaccination: React.FC = () => {
   return (
     <div>
       <RispNavBar />
-      <h1 className="text-2xl font-bold text-center mb-2">Vaccination Campaigns</h1>
-      <p className="text-left text-gray-600 mb-4">
-        Hereunder you can find the information from the past vaccination campaigns. Please update the information from previous campaigns when relevant (for example, if new information are available, you can modify the data from the previous quarter to update it or add information for the current quarter for an ongoing vaccination campaign), or use the “add vaccination” button. Please note that one vaccination table should be use per vaccination strategy (e.g. if mass vaccination performed for cattle, and risk-based strategy used for small ruminants).
-      </p>
+      <div className="w-full overflow-x-auto px-4">
+        <RispEntryIntro
+          bulkCategory="vaccination"
+          pageHint="Update past vaccination campaigns when new information is available, or add a new line. Use one vaccination table per strategy (e.g. mass for cattle vs risk-based for small ruminants), and one location per line (National is fine for a country-wide campaign)."
+        />
 
       {/* Main Content */}
-      <div className="w-full overflow-x-auto px-4">
         <form onSubmit={submitForm}>
           {campaigns.map((campaign, index) => (
             <div key={index} className="bg-white rounded-lg mb-8 p-6 border-2 border-green-greenMain">
@@ -564,7 +566,7 @@ const RISPVaccination: React.FC = () => {
                 <table className="min-w-full border border-white bg-white text-center tracking-wider text-sm">
                   <thead>
                     <tr className="bg-gray-200 text-gray-700 text-sm font-medium capitalize whitespace-nowrap">
-                      <th className="py-3 border border-white min-w-[180px]">Geographical Areas</th>
+                      <th className="py-3 border border-white min-w-[180px]">Location</th>
                       <th className="py-3 border border-white w-32 relative">
                         <div 
                           className="flex items-center justify-center gap-1"
@@ -641,7 +643,7 @@ const RISPVaccination: React.FC = () => {
                         <textarea
                           readOnly 
                           className="w-full min-h-[38px] py-2 px-3 text-left border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm hover:bg-gray-50 cursor-pointer resize-y"
-                          value={formatList(campaign.geographicalAreas || [], 'Select areas...')}
+                          value={formatList(campaign.geographicalAreas || [], 'Select location...')}
                           onFocus={(e) => e.target.blur()}
                           onClick={(e) => {
                             e.preventDefault();
@@ -657,6 +659,7 @@ const RISPVaccination: React.FC = () => {
                             onClose={() => closeDropdown(index, 'areas')}
                             onChange={(options) => handleFieldUpdate(index, 'geographicalAreas', options)}
                             country={userCountry}
+                            singleSelect
                           />
                         )}
                         {(campaign.geographicalAreas || []).includes('Specify region') && (

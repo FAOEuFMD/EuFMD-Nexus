@@ -290,9 +290,21 @@ export const apiService = {
     updateRISPVaccination: (id: number, formData: any) =>
       api.put(`/api/risp/vaccinations/${id}`, formData),
     
-    deleteRISPVaccination: (id: number) =>
-      api.delete(`/api/risp/vaccinations/${id}`),
+    removeRISPVaccination: (id: number) =>
+      api.put(`/api/risp/vaccinations/${id}/remove`),
+
+    getProgramContext: () => api.get('/api/risp/program-context'),
+
+    getMarketPrices: (year: string, quarter: string) =>
+      api.get(`/api/risp/marketprice?year=${year}&quarter=${quarter}`),
+
+    saveMarketPrices: (payload: any) =>
+      api.post('/api/risp/marketprice', payload),
+
+    removeMarketPrice: (id: number) =>
+      api.put(`/api/risp/marketprice/${id}/remove`),
   },
+
 
   // THRACE endpoints
   thrace: {

@@ -3,6 +3,10 @@
 ../Vue/
 /Thrace/
 
+# Old TCC PHP app archive (local reference only — do not commit)
+/TCC/
+*.tar
+
 # Large GeoJSON files (GADM boundaries)
 frontend/public/gadm.GeoJSON
 

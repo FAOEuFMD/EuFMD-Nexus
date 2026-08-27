@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout, RouteGuard } from './components';
 
 // Import pages
@@ -19,11 +19,11 @@ import {
   GetPrepared,
   Monitoring,
   RISPLanding,
-  SeenPortal,
   RISPSOI,
   RISPOutbreak,
   RISPVaccination,
   RISPSurveillance,
+  RISPMarketPrice,
   RISPSummary,
   PCPMap,
   GetPreparedWall,
@@ -229,14 +229,14 @@ const AppRouter: React.FC = () => {
           
 
 
-          {/* Authenticated Routes (RISP) */}
-          <Route 
-            path="risp/portal" 
+          {/* Authenticated Routes (RISP) — old portal redirects to unified RISP landing */}
+          <Route
+            path="risp/portal"
             element={
               <RouteGuard requiresAuth={true}>
-                <SeenPortal />
+                <Navigate to="/risp" replace />
               </RouteGuard>
-            } 
+            }
           />
 
           <Route 
@@ -271,6 +271,15 @@ const AppRouter: React.FC = () => {
             element={
               <RouteGuard requiresAuth={true}>
                 <RISPSurveillance />
+              </RouteGuard>
+            } 
+          />
+
+          <Route 
+            path="risp/market-price" 
+            element={
+              <RouteGuard requiresAuth={true}>
+                <RISPMarketPrice />
               </RouteGuard>
             } 
           />

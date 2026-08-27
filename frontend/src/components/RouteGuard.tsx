@@ -1,7 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { isSeenRispUser, SEEN_RISP_PORTAL_PATH } from '../utils/seenUser';
 
 interface RouteGuardProps {
   children: React.ReactNode;
@@ -19,10 +18,7 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
   const { isAuthenticated, user } = useAuthStore();
   const location = useLocation();
 
-  // Redirect RISP users away from home to their landing page
-  if (user?.role === 'risp' && location.pathname === '/') {
-    return <Navigate to={isSeenRispUser(user) ? SEEN_RISP_PORTAL_PATH : '/risp'} replace />;
-  }
+  // Home (/) stays the real home for RISP and SOI users — no auto-redirect away from it.
 
   // Redirect Thrace users to Thrace landing page if they're accessing the home page
   if (user?.role === 'thrace' && location.pathname === '/') {

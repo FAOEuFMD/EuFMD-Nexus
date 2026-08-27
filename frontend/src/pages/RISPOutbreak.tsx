@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RispNavBar from '../components/RISP/RispNavBar';
+import RispEntryIntro from '../components/RISP/RispEntryIntro';
 import QuarterSelection from '../components/RISP/QuarterSelection';
 import NumberInput from '../components/RISP/NumberInput';
 import MultipleSelectOptions from '../components/RISP/MultipleSelectOptions';
@@ -81,6 +82,10 @@ const RISPOutbreak: React.FC = () => {
     { label: "Serotype", tooltip: true },
     { label: "Control Measures", tooltip: true },
     { label: "Location", tooltip: true },
+    { label: "Date suspected", tooltip: true },
+    { label: "Date confirmed", tooltip: true },
+    { label: "Latitude", tooltip: true },
+    { label: "Longitude", tooltip: true },
     { label: "Additional Information", tooltip: true },
   ];
 
@@ -88,12 +93,31 @@ const RISPOutbreak: React.FC = () => {
     { description: "Specify the disease that was identified in the current outbreak." },
     { description: "An outbreak means the occurrence of one or more cases in an epidemiological unit." },
     { description: "Specify the species affected by the outbreak." },
-    { description: "Refers to the level of confirmation for the disease." },
+    { description: "Level of confirmation (laboratory, clinical, or suspected)." },
     { description: "For FMD outbreaks, specify the serotype if known." },
     { description: "Measures taken to control the outbreak." },
-    { description: "Location where the outbreak occurred." },
+    { description: "One location per line: National, border area, or a specific district/region." },
+    { description: "Date the outbreak was first suspected (optional for simple RISP lines; useful for SOI)." },
+    { description: "Date the outbreak was confirmed (optional for simple RISP lines; useful for SOI)." },
+    { description: "Latitude of the outbreak location (preferred over epi-unit name)." },
+    { description: "Longitude of the outbreak location (preferred over epi-unit name)." },
     { description: "Any additional information about the outbreak." },
   ];
+
+  const emptyOutbreakFields = () => ({
+    numberOutbreaks: "" as string | number,
+    selectedSpecies: [] as string[],
+    selectedStatus: [] as string[],
+    selectedSerotype: [] as string[],
+    selectedControlMeasures: [] as string[],
+    selectedLocation: [] as string[],
+    borderingCountry: "",
+    dateSuspected: "",
+    dateConfirmed: "",
+    latitude: "" as string | number,
+    longitude: "" as string | number,
+    outbreaksAdditionalInfo: "",
+  });
 
   // Create state for each disease with modals and data
   const [diseases, setDiseases] = useState(
@@ -108,14 +132,7 @@ const RISPOutbreak: React.FC = () => {
         diseaseId: disease.id,
         diseaseName: disease.name,
         country: user?.country || "",
-        numberOutbreaks: "" as string | number,
-        selectedSpecies: [] as string[],
-        selectedStatus: [] as string[],
-        selectedSerotype: [] as string[],
-        selectedControlMeasures: [] as string[],
-        selectedLocation: [] as string[],
-        borderingCountry: "",
-        outbreaksAdditionalInfo: "",
+        ...emptyOutbreakFields(),
         year: parseInt(selectedYear),
         quarter: selectedQuarter
       }
@@ -163,14 +180,8 @@ const RISPOutbreak: React.FC = () => {
               diseaseId: disease.outbreakData.diseaseId,
               diseaseName: disease.name,
               country: user?.country || "",
+              ...emptyOutbreakFields(),
               numberOutbreaks: 0,
-              selectedLocation: [],
-              borderingCountry: "",
-              selectedStatus: [],
-              selectedSerotype: [],
-              selectedSpecies: [],
-              selectedControlMeasures: [],
-              outbreaksAdditionalInfo: "",
               year: parseInt(selectedYear),
               quarter: selectedQuarter
             }
@@ -182,37 +193,79 @@ const RISPOutbreak: React.FC = () => {
         if (response.data && response.data.length > 0) {
           console.log("Loading outbreak data:", response.data);
 
-          response.data.forEach((record: any) => {
-            setDiseases(prevDiseases => {
-              const newDiseases = [...prevDiseases];
-              const disease = newDiseases.find(d => 
-                d.name.split(' - ')[0].trim() === record.disease_name.trim()
-              );
-              
-              if (disease) {
-                try {
-                  disease.outbreakData = {
-                    diseaseId: disease.outbreakData.diseaseId,
-                    diseaseName: disease.name,
-                    country: user?.country || "",
-                    numberOutbreaks: Number(record.number_outbreaks) || 0,
-                    selectedLocation: JSON.parse(record.locations || '[]'),
-                    borderingCountry: record.bordering_country || "",
-                    selectedStatus: JSON.parse(record.status || '[]'),
-                    selectedSerotype: JSON.parse(record.serotype || '[]'),
-                    selectedSpecies: JSON.parse(record.species || '[]'),
-                    selectedControlMeasures: JSON.parse(record.control_measures || '[]'),
-                    outbreaksAdditionalInfo: record.additional_info || "",
-                    year: parseInt(selectedYear),
-                    quarter: selectedQuarter
-                  };
-                  console.log('Loaded data for', disease.name, ':', disease.outbreakData);
-                } catch (e) {
-                  console.error("Error parsing JSON for disease:", disease.name, e);
-                }
+          // One grid row per disease — keep first id (ORDER BY disease_name, id).
+          // Extra historical split rows may still exist; skip duplicates.
+          setDiseases(prevDiseases => {
+            const newDiseases = prevDiseases.map(disease => ({
+              ...disease,
+              outbreakData: {
+                diseaseId: disease.outbreakData.diseaseId,
+                diseaseName: disease.name,
+                country: user?.country || "",
+                ...emptyOutbreakFields(),
+                numberOutbreaks: 0,
+                year: parseInt(selectedYear),
+                quarter: selectedQuarter
               }
-              return newDiseases;
-            });
+            }));
+            const seenDiseases = new Set<string>();
+
+            for (const record of response.data) {
+              const diseaseKey = (record.disease_name || "").trim();
+              if (!diseaseKey || seenDiseases.has(diseaseKey)) continue;
+              seenDiseases.add(diseaseKey);
+
+              const disease = newDiseases.find(d =>
+                d.name.split(' - ')[0].trim() === diseaseKey
+              );
+              if (!disease) continue;
+
+              try {
+                const locsRaw = record.locations;
+                let locs: string[] = [];
+                if (Array.isArray(locsRaw)) locs = locsRaw;
+                else if (typeof locsRaw === 'string') {
+                  try { locs = JSON.parse(locsRaw || '[]'); } catch { locs = []; }
+                }
+                if (record.location) locs = [record.location];
+                locs = (locs || []).slice(0, 1);
+
+                const parseJsonArray = (value: any): string[] => {
+                  if (Array.isArray(value)) return value;
+                  if (typeof value === 'string') {
+                    try { return JSON.parse(value || '[]'); } catch { return []; }
+                  }
+                  return [];
+                };
+
+                disease.outbreakData = {
+                  diseaseId: disease.outbreakData.diseaseId,
+                  diseaseName: disease.name,
+                  country: user?.country || "",
+                  numberOutbreaks: Number(record.number_outbreaks) || 0,
+                  selectedLocation: locs,
+                  borderingCountry: record.bordering_country || "",
+                  selectedStatus: parseJsonArray(record.status),
+                  selectedSerotype: parseJsonArray(record.serotype),
+                  selectedSpecies: parseJsonArray(record.species),
+                  selectedControlMeasures: parseJsonArray(record.control_measures),
+                  dateSuspected: record.date_suspected
+                    ? String(record.date_suspected).slice(0, 10)
+                    : "",
+                  dateConfirmed: record.date_confirmed
+                    ? String(record.date_confirmed).slice(0, 10)
+                    : "",
+                  latitude: record.latitude ?? "",
+                  longitude: record.longitude ?? "",
+                  outbreaksAdditionalInfo: record.additional_info || "",
+                  year: parseInt(selectedYear),
+                  quarter: selectedQuarter
+                };
+              } catch (e) {
+                console.error("Error parsing JSON for disease:", disease.name, e);
+              }
+            }
+            return newDiseases;
           });
         } else {
           console.log("No outbreak data found for this period");
@@ -235,25 +288,27 @@ const RISPOutbreak: React.FC = () => {
       const disease = newDiseases[index];
       
       if (disease) {
-        // Update the specific field in outbreakData
-        disease.outbreakData = {
-          ...disease.outbreakData,
-          [field]: value
-        };
-        
-        // Close modal for selection fields
-        if (field === 'selectedSpecies') {
-          disease.isSpeciesModalOpen = false;
-        } else if (field === 'selectedStatus') {
-          disease.isSelectedModalOpen = false;
-        } else if (field === 'selectedSerotype') {
-          disease.isSerotypeModalOpen = false;
-        } else if (field === 'selectedControlMeasures') {
-          disease.isControlMeasuresModalOpen = false;
-        } else if (field === 'selectedLocation') {
+        if (field === 'selectedLocation') {
+          disease.outbreakData = {
+            ...disease.outbreakData,
+            selectedLocation: Array.isArray(value) ? value.slice(-1) : []
+          };
           disease.isLocationModalOpen = false;
+        } else {
+          disease.outbreakData = {
+            ...disease.outbreakData,
+            [field]: value
+          };
+          if (field === 'selectedSpecies') {
+            disease.isSpeciesModalOpen = false;
+          } else if (field === 'selectedStatus') {
+            disease.isSelectedModalOpen = false;
+          } else if (field === 'selectedSerotype') {
+            disease.isSerotypeModalOpen = false;
+          } else if (field === 'selectedControlMeasures') {
+            disease.isControlMeasuresModalOpen = false;
+          }
         }
-        
         console.log(`Updated ${field} for ${disease.name}:`, value);
       }
       
@@ -290,8 +345,8 @@ const RISPOutbreak: React.FC = () => {
 
   // Custom handler for location changes that includes bordering country formatting
   // Helper function to convert formatted locations back to raw selections
-  const getRawLocations = (formattedLocations: string[]): string[] => {
-    return formattedLocations.map(location => {
+  const getRawLocations = (formattedLocations?: string[] | null): string[] => {
+    return (formattedLocations || []).map(location => {
       if (location.startsWith('Within 50km from the border:')) {
         return 'Within 50km from the border';
       }
@@ -317,7 +372,7 @@ const RISPOutbreak: React.FC = () => {
       
       if (disease) {
         // Store the raw selections
-        disease.outbreakData.selectedLocation = selectedLocations;
+        disease.outbreakData.selectedLocation = selectedLocations.slice(-1);
         
         // Close modal
         disease.isLocationModalOpen = false;
@@ -375,17 +430,34 @@ const RISPOutbreak: React.FC = () => {
     setSaving(true);
     
     // Submit all diseases, including those with zero outbreaks (like Vue does)
-    const diseasesToSubmit = diseases.map(disease => ({
-      disease: disease.outbreakData.diseaseName.split(' - ')[0].trim(),
-      number_outbreaks: parseInt(String(disease.outbreakData.numberOutbreaks)) || 0,
-      locations: disease.outbreakData.selectedLocation || [],
-      bordering_country: disease.outbreakData.borderingCountry || "",
-      status: disease.outbreakData.selectedStatus || [],
-      serotype: disease.outbreakData.selectedSerotype || [],
-      species: disease.outbreakData.selectedSpecies || [],
-      control_measures: disease.outbreakData.selectedControlMeasures || [],
-      comments: disease.outbreakData.outbreaksAdditionalInfo || ""  // Change from additional_info to comments and ensure it's a string
-    }));
+    const diseasesToSubmit = diseases.map(disease => {
+      const latRaw = disease.outbreakData.latitude;
+      const lonRaw = disease.outbreakData.longitude;
+      const latitude =
+        latRaw === '' || latRaw === null || latRaw === undefined
+          ? null
+          : Number(latRaw);
+      const longitude =
+        lonRaw === '' || lonRaw === null || lonRaw === undefined
+          ? null
+          : Number(lonRaw);
+      return {
+        disease: disease.outbreakData.diseaseName.split(' - ')[0].trim(),
+        number_outbreaks: parseInt(String(disease.outbreakData.numberOutbreaks)) || 0,
+        locations: (disease.outbreakData.selectedLocation || []).slice(0, 1),
+        location: (disease.outbreakData.selectedLocation || [])[0] || null,
+        bordering_country: disease.outbreakData.borderingCountry || "",
+        status: disease.outbreakData.selectedStatus || [],
+        serotype: disease.outbreakData.selectedSerotype || [],
+        species: disease.outbreakData.selectedSpecies || [],
+        control_measures: disease.outbreakData.selectedControlMeasures || [],
+        comments: disease.outbreakData.outbreaksAdditionalInfo || "",
+        date_suspected: disease.outbreakData.dateSuspected || null,
+        date_confirmed: disease.outbreakData.dateConfirmed || null,
+        latitude: Number.isFinite(latitude as number) ? latitude : null,
+        longitude: Number.isFinite(longitude as number) ? longitude : null,
+      };
+    });
 
     console.log('Outbreak data details:');
     diseases.forEach((disease, index) => {
@@ -453,24 +525,11 @@ const RISPOutbreak: React.FC = () => {
   return (
     <div className="container mx-auto px-4">
       <RispNavBar />
-      
-      <section>
-        <h3 className="text-lg m-3 text-justify px-7">
-          In this section, please report the occurrence of FAST diseases in your
-          country during the previous quarter. An outbreak is defined as the
-          occurrence of one or more cases in an epidemiological unit (link:
-          <a
-            href="https://www.woah.org/fileadmin/Home/eng/Health_standards/tahc/2018/en_glossaire.htm"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 mx-1"
-          >
-            WOAH
-          </a>
-          ). You can report outbreaks at national (mandatory) and sub-national
-          level (optional).
-        </h3>
-      </section>
+
+      <RispEntryIntro
+        bulkCategory="outbreaks"
+        pageHint="In this section, report FAST disease outbreaks for the selected quarter. An outbreak is one or more cases in an epidemiological unit (see WOAH glossary). Use one location per disease line (e.g. National); for many locations use Excel bulk upload."
+      />
 
       <div className="flex gap-2.5 items-center px-7" style={{ maxWidth: '300px' }}>
         <QuarterSelection 
@@ -498,7 +557,7 @@ const RISPOutbreak: React.FC = () => {
                 <thead>
                   <tr className="bg-green-greenMain text-white text-sm">
                     <th
-                      colSpan={8}
+                      colSpan={12}
                       className="py-2 px-4 border relative rounded-tl-lg rounded-tr-lg"
                     >
                       Outbreak information
@@ -786,7 +845,80 @@ const RISPOutbreak: React.FC = () => {
                           // Pass region countries for bordering country dropdown
                           borderingCountryOptions={userRegionCountries}
                           onBorderingCountryChange={(countries) => handleBorderingCountryChange(index, countries)}
+                          singleSelect
                         />
+                      </td>
+
+                      {/* DATE SUSPECTED */}
+                      <td className="p-4" style={{ width: '150px' }}>
+                        {isNoOutbreaks(disease.outbreakData) ? (
+                          <input type="date" disabled className="w-full p-2 border border-gray-300 rounded bg-gray-200" />
+                        ) : (
+                          <input
+                            type="date"
+                            className="w-full p-2 border border-gray-300 rounded"
+                            value={disease.outbreakData.dateSuspected || ''}
+                            onChange={(e) => handleFieldUpdate(index, 'dateSuspected', e.target.value)}
+                          />
+                        )}
+                      </td>
+
+                      {/* DATE CONFIRMED */}
+                      <td className="p-4" style={{ width: '150px' }}>
+                        {isNoOutbreaks(disease.outbreakData) ? (
+                          <input type="date" disabled className="w-full p-2 border border-gray-300 rounded bg-gray-200" />
+                        ) : (
+                          <input
+                            type="date"
+                            className="w-full p-2 border border-gray-300 rounded"
+                            value={disease.outbreakData.dateConfirmed || ''}
+                            onChange={(e) => handleFieldUpdate(index, 'dateConfirmed', e.target.value)}
+                          />
+                        )}
+                      </td>
+
+                      {/* LATITUDE */}
+                      <td className="p-4" style={{ width: '120px' }}>
+                        {isNoOutbreaks(disease.outbreakData) ? (
+                          <input type="number" disabled className="w-full p-2 border border-gray-300 rounded bg-gray-200" placeholder="—" />
+                        ) : (
+                          <input
+                            type="number"
+                            step="any"
+                            className="w-full p-2 border border-gray-300 rounded"
+                            placeholder="Lat"
+                            value={disease.outbreakData.latitude}
+                            onChange={(e) =>
+                              handleFieldUpdate(
+                                index,
+                                'latitude',
+                                e.target.value === '' ? '' : e.target.value
+                              )
+                            }
+                          />
+                        )}
+                      </td>
+
+                      {/* LONGITUDE */}
+                      <td className="p-4" style={{ width: '120px' }}>
+                        {isNoOutbreaks(disease.outbreakData) ? (
+                          <input type="number" disabled className="w-full p-2 border border-gray-300 rounded bg-gray-200" placeholder="—" />
+                        ) : (
+                          <input
+                            type="number"
+                            step="any"
+                            className="w-full p-2 border border-gray-300 rounded"
+                            placeholder="Long"
+                            value={disease.outbreakData.longitude}
+                            onChange={(e) =>
+                              handleFieldUpdate(
+                                index,
+                                'longitude',
+                                e.target.value === '' ? '' : e.target.value
+                              )
+                            }
+                          />
+                        )}
                       </td>
 
                       {/* ADDITIONAL INFORMATION */}
