@@ -18,10 +18,17 @@ import {
 import { countryToRegion } from './RISPLanding';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { useRispProgram } from '../hooks/useRispProgram';
+import { useSoiDistricts } from '../hooks/useSoiDistricts';
+import SoiDistrictPicker from '../components/RISP/SoiDistrictPicker';
+import type { SoiDistrict } from '../hooks/useSoiDistricts';
 
 const RISPOutbreak: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { isSoi } = useRispProgram();
+  const { districts: soiDistricts, loading: soiDistrictsLoading, error: soiDistrictsError } =
+    useSoiDistricts(isSoi);
 
   // Compute user's region and region countries
   const userRegion = useMemo(() => {
@@ -72,6 +79,7 @@ const RISPOutbreak: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+  const [bulkReloadKey, setBulkReloadKey] = useState(0);
 
   // Table headers with tooltips
   const tableHeaders = [
@@ -111,6 +119,8 @@ const RISPOutbreak: React.FC = () => {
     selectedSerotype: [] as string[],
     selectedControlMeasures: [] as string[],
     selectedLocation: [] as string[],
+    districtId: null as number | null,
+    provinceId: null as number | null,
     borderingCountry: "",
     dateSuspected: "",
     dateConfirmed: "",
@@ -257,6 +267,8 @@ const RISPOutbreak: React.FC = () => {
                     : "",
                   latitude: record.latitude ?? "",
                   longitude: record.longitude ?? "",
+                  districtId: record.district_id ?? null,
+                  provinceId: record.province_id ?? null,
                   outbreaksAdditionalInfo: record.additional_info || "",
                   year: parseInt(selectedYear),
                   quarter: selectedQuarter
@@ -279,7 +291,7 @@ const RISPOutbreak: React.FC = () => {
       console.log('useEffect triggered - Loading previous data for year/quarter:', selectedYear, selectedQuarter, 'country:', user?.country);
       loadPreviousData();
     }
-  }, [selectedYear, selectedQuarter, user?.country]); // Removed loadPreviousData dependency
+  }, [selectedYear, selectedQuarter, user?.country, bulkReloadKey]);
 
   // Generic field update function similar to vaccination page
   const handleFieldUpdate = (index: number, field: string, value: any) => {
@@ -382,6 +394,23 @@ const RISPOutbreak: React.FC = () => {
     });
   };
 
+  const handleSoiDistrictSelect = (index: number, district: SoiDistrict) => {
+    setDiseases((prevDiseases) => {
+      const newDiseases = [...prevDiseases];
+      const disease = newDiseases[index];
+      if (disease) {
+        disease.outbreakData = {
+          ...disease.outbreakData,
+          selectedLocation: [district.district_name],
+          districtId: district.district_id,
+          provinceId: district.province_id,
+        };
+        disease.isLocationModalOpen = false;
+      }
+      return newDiseases;
+    });
+  };
+
   const handleCommentsChange = (index: number, value: string) => {
     setDiseases(prevDiseases => {
       const newDiseases = [...prevDiseases];
@@ -456,6 +485,8 @@ const RISPOutbreak: React.FC = () => {
         date_confirmed: disease.outbreakData.dateConfirmed || null,
         latitude: Number.isFinite(latitude as number) ? latitude : null,
         longitude: Number.isFinite(longitude as number) ? longitude : null,
+        district_id: disease.outbreakData.districtId ?? null,
+        province_id: disease.outbreakData.provinceId ?? null,
       };
     });
 
@@ -478,7 +509,7 @@ const RISPOutbreak: React.FC = () => {
       // Only validate if there are outbreaks
       if (diseaseData.number_outbreaks > 0) {
         const missing = [];
-        if (!diseaseData.locations.length) missing.push('Location');
+        if (!diseaseData.locations.length) missing.push(isSoi ? 'District' : 'Location');
         if (!diseaseData.species.length) missing.push('Species');
         if (!diseaseData.status.length) missing.push('Status');
         if (isFMD(diseaseData.disease) && !diseaseData.serotype.length) missing.push('Serotype');
@@ -528,6 +559,13 @@ const RISPOutbreak: React.FC = () => {
 
       <RispEntryIntro
         bulkCategory="outbreaks"
+        templateYear={selectedYear}
+        templateQuarter={selectedQuarter}
+        onUploadSuccess={() => {
+          if (user?.country) {
+            setBulkReloadKey((k) => k + 1);
+          }
+        }}
         pageHint="In this section, report FAST disease outbreaks for the selected quarter. An outbreak is one or more cases in an epidemiological unit (see WOAH glossary). Use one location per disease line (e.g. National); for many locations use Excel bulk upload."
       />
 
@@ -825,11 +863,28 @@ const RISPOutbreak: React.FC = () => {
                               className="w-full p-2 text-left"
                             >
                               {disease.outbreakData.selectedLocation?.length 
-                                ? formatLocationsForDisplay(disease.outbreakData.selectedLocation, disease.outbreakData.borderingCountry).join(", ") 
-                                : "Select Location"}
+                                ? (isSoi
+                                    ? disease.outbreakData.selectedLocation.join(', ')
+                                    : formatLocationsForDisplay(disease.outbreakData.selectedLocation, disease.outbreakData.borderingCountry).join(", "))
+                                : (isSoi ? "Select district" : "Select Location")}
                             </button>
                           </div>
                         )}
+                        {isSoi ? (
+                          <SoiDistrictPicker
+                            isOpen={disease.isLocationModalOpen}
+                            districts={soiDistricts}
+                            loading={soiDistrictsLoading}
+                            error={soiDistrictsError}
+                            selectedDistrictId={disease.outbreakData.districtId}
+                            onClose={() => {
+                              const newDiseases = [...diseases];
+                              newDiseases[index].isLocationModalOpen = false;
+                              setDiseases(newDiseases);
+                            }}
+                            onSelect={(district) => handleSoiDistrictSelect(index, district)}
+                          />
+                        ) : (
                         <MultipleSelectOptions 
                           isOpen={disease.isLocationModalOpen}
                           multipleOptions={locationOptions}
@@ -847,6 +902,7 @@ const RISPOutbreak: React.FC = () => {
                           onBorderingCountryChange={(countries) => handleBorderingCountryChange(index, countries)}
                           singleSelect
                         />
+                        )}
                       </td>
 
                       {/* DATE SUSPECTED */}

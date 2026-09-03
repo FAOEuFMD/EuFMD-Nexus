@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 import json
@@ -6,6 +6,7 @@ from datetime import datetime
 from auth import get_current_user
 import pymysql
 from config import settings
+from routers import risp_templates, risp_upload
 
 router = APIRouter(prefix="/api/risp", tags=["risp"])
 
@@ -68,6 +69,85 @@ async def program_context(current_user: dict = Depends(get_current_user)):
         "is_soi": is_soi,
         "program": "soi" if is_soi else "risp",
     }
+
+
+@router.get("/templates/{category}")
+async def download_risp_template(
+    category: str,
+    year: Optional[str] = Query(None),
+    quarter: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate an Excel template tailored to SOI (per-district rows) or RISP (location presets)."""
+    country = current_user.get("country")
+    is_soi = _resolve_is_soi(country)
+    districts: List[Dict[str, Any]] = []
+
+    if is_soi:
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            country_id = risp_templates._resolve_country_id(cursor, country)
+            if country_id:
+                districts = risp_templates._fetch_soi_districts(cursor, country_id)
+            cursor.close()
+            connection.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not load district list: {e}")
+
+    return risp_templates.generate_template_response(
+        category,
+        is_soi=is_soi,
+        districts=districts,
+        year=year,
+        quarter=quarter,
+        country=country,
+    )
+
+
+@router.post("/upload/{category}")
+async def upload_risp_bulk(
+    category: str,
+    file: UploadFile = File(...),
+    year: Optional[str] = Query(None),
+    quarter: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Import a filled Excel template for outbreaks, vaccination, or market prices."""
+    country = current_user.get("country")
+    is_soi = _resolve_is_soi(country)
+    return await risp_upload.process_upload(
+        category,
+        file,
+        current_user=current_user,
+        is_soi=is_soi,
+        get_db_connection=get_db_connection,
+        default_year=year,
+        default_quarter=quarter,
+    )
+
+
+@router.get("/geo/districts")
+async def get_country_districts(current_user: dict = Depends(get_current_user)):
+    """Districts for the logged-in user's country (SOI geo from db_manager)."""
+    country = current_user.get("country")
+    if not _resolve_is_soi(country):
+        return []
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        country_id = risp_templates._resolve_country_id(cursor, country)
+        if not country_id:
+            cursor.close()
+            connection.close()
+            return []
+        districts = risp_templates._fetch_soi_districts(cursor, country_id)
+        cursor.close()
+        connection.close()
+        return districts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading districts: {e}")
 
 # Pydantic models for request/response
 class OutbreakDiseaseData(BaseModel):
@@ -229,7 +309,7 @@ async def save_outbreak_data(
             existing_ids = [row["id"] if isinstance(row, dict) else row[0] for row in (cursor.fetchall() or [])]
 
             clear_only = disease_data.number_outbreaks <= 0 and not areas
-            row_values = (
+            data_values = (
                 disease_data.number_outbreaks if not clear_only else 0,
                 json.dumps(areas if not clear_only else []),
                 loc if not clear_only else None,
@@ -246,7 +326,6 @@ async def save_outbreak_data(
                 disease_data.district_id,
                 program,
                 visibility,
-                now,
             )
 
             if existing_ids:
@@ -269,10 +348,11 @@ async def save_outbreak_data(
                       district_id = %s,
                       program = %s,
                       visibility = %s,
+                      created_at = COALESCE(created_at, %s),
                       updated_at = %s
                     WHERE id = %s AND user_id = %s
                     """,
-                    row_values + (existing_ids[0], user_id),
+                    data_values + (now, now, existing_ids[0], user_id),
                 )
                 # Soft-clear sibling rows (e.g. former multi-location splits)
                 if len(existing_ids) > 1:
@@ -295,12 +375,12 @@ async def save_outbreak_data(
                       (user_id, country, year, quarter, disease_name, number_outbreaks,
                        locations, location, status, serotype, species, control_measures, additional_info,
                        date_suspected, date_confirmed, latitude, longitude,
-                       province_id, district_id, program, visibility, updated_at)
+                       province_id, district_id, program, visibility, created_at, updated_at)
                     VALUES
                       (%s, %s, %s, %s, %s, %s,
                        %s, %s, %s, %s, %s, %s, %s,
                        %s, %s, %s, %s,
-                       %s, %s, %s, %s, %s)
+                       %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         user_id,
@@ -309,7 +389,8 @@ async def save_outbreak_data(
                         data.quarter,
                         disease_data.disease,
                     )
-                    + row_values,
+                    + data_values
+                    + (now, now),
                 )
         
         connection.commit()
@@ -893,6 +974,7 @@ async def save_market_prices(
             for row in (cursor.fetchall() or [])
         }
         kept_ids = set()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         for row in data.rows:
             if row.species not in ("cattle", "sheep", "pig"):
@@ -909,7 +991,9 @@ async def save_market_prices(
                       species = %s, market_level = %s, product = %s,
                       price_min = %s, price_max = %s, price_avg = %s,
                       district_id = %s, location = %s, reference = %s,
-                      program = %s, visibility = 'public'
+                      program = %s, visibility = 'public',
+                      created_at = COALESCE(created_at, %s),
+                      updated_at = %s
                     WHERE id = %s AND user_id = %s
                     """,
                     (
@@ -923,6 +1007,8 @@ async def save_market_prices(
                         row.location,
                         row.reference,
                         program,
+                        now,
+                        now,
                         row.id,
                         user_id,
                     ),
@@ -934,9 +1020,9 @@ async def save_market_prices(
                     INSERT INTO risp_marketprice
                       (user_id, country, year, quarter, species, market_level, product,
                        price_min, price_max, price_avg, district_id, location, reference,
-                       program, visibility)
+                       program, visibility, created_at, updated_at)
                     VALUES
-                      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public')
+                      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s)
                     """,
                     (
                         user_id,
@@ -953,6 +1039,8 @@ async def save_market_prices(
                         row.location,
                         row.reference,
                         program,
+                        now,
+                        now,
                     ),
                 )
 

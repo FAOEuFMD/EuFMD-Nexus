@@ -1,18 +1,18 @@
 import React, { useRef, useState } from 'react';
+import { apiService } from '../../services/api';
 
 export type RispBulkCategory = 'outbreaks' | 'vaccination' | 'marketprice';
-
-const TEMPLATE_HREF: Record<RispBulkCategory, string> = {
-  outbreaks: '/templates/outbreaks.xlsx',
-  vaccination: '/templates/vaccination.xlsx',
-  marketprice: '/templates/marketprice.xlsx',
-};
 
 interface RispEntryIntroProps {
   /** Extra sentence above the bulk strip (page-specific). */
   pageHint?: string;
   bulkCategory: RispBulkCategory;
+  /** Pre-fill year/quarter columns in the downloaded template. */
+  templateYear?: string;
+  templateQuarter?: string;
   onUploadFile?: (file: File) => Promise<void> | void;
+  /** Called after a successful bulk import (e.g. reload table data). */
+  onUploadSuccess?: () => void;
 }
 
 /**
@@ -21,11 +21,46 @@ interface RispEntryIntroProps {
 const RispEntryIntro: React.FC<RispEntryIntroProps> = ({
   pageHint,
   bulkCategory,
+  templateYear,
+  templateQuarter,
   onUploadFile,
+  onUploadSuccess,
 }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
+  const [rowErrors, setRowErrors] = useState<{ row: number; error: string }[]>([]);
+
+  const handleDownloadTemplate = async () => {
+    setDownloading(true);
+    setMessage(null);
+    setRowErrors([]);
+    try {
+      const response = await apiService.risp.downloadTemplate(bulkCategory, {
+        year: templateYear,
+        quarter: templateQuarter,
+      });
+      const blob = response.data as Blob;
+      const disposition = response.headers?.['content-disposition'] as string | undefined;
+      const match = disposition?.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] || `risp_${bulkCategory}_template.xlsx`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setMessageType('error');
+      setMessage(err?.response?.data?.detail || err?.message || 'Template download failed.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -33,17 +68,40 @@ const RispEntryIntro: React.FC<RispEntryIntroProps> = ({
     if (!file) return;
     setUploading(true);
     setMessage(null);
+    setRowErrors([]);
     try {
       if (onUploadFile) {
         await onUploadFile(file);
+        setMessageType('success');
         setMessage('Upload completed.');
+        onUploadSuccess?.();
       } else {
-        setMessage(
-          'Bulk upload to RISP is being wired next. Your template download is ready; please use the form for now or try again shortly.'
-        );
+        const response = await apiService.risp.uploadBulk(bulkCategory, file, {
+          year: templateYear,
+          quarter: templateQuarter,
+        });
+        const data = response.data;
+        if (data?.success) {
+          setMessageType('success');
+          setMessage(data.message || 'Upload completed.');
+          onUploadSuccess?.();
+        } else if (data?.has_errors && Array.isArray(data.errors) && data.errors.length > 0) {
+          setMessageType('error');
+          setMessage(data.message || 'Some rows failed validation. Nothing was imported.');
+          setRowErrors(data.errors);
+        } else {
+          setMessageType('error');
+          setMessage(data?.message || 'Upload failed — no rows were imported.');
+        }
       }
     } catch (err: any) {
-      setMessage(err?.message || 'Upload failed.');
+      setMessageType('error');
+      const detail = err?.response?.data?.detail;
+      setMessage(
+        typeof detail === 'string'
+          ? detail
+          : err?.message || 'Upload failed.'
+      );
     } finally {
       setUploading(false);
     }
@@ -62,13 +120,14 @@ const RispEntryIntro: React.FC<RispEntryIntroProps> = ({
           upload.
         </p>
         <div className="flex flex-wrap gap-3 items-center">
-          <a
-            href={TEMPLATE_HREF[bulkCategory]}
-            download
-            className="inline-flex items-center px-4 py-2 text-sm font-semibold border-2 border-green-greenMain text-green-greenMain rounded hover:bg-green-greenMain hover:text-white transition-colors"
+          <button
+            type="button"
+            disabled={downloading}
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center px-4 py-2 text-sm font-semibold border-2 border-green-greenMain text-green-greenMain rounded hover:bg-green-greenMain hover:text-white transition-colors disabled:opacity-60"
           >
-            Download Excel template
-          </a>
+            {downloading ? 'Preparing…' : 'Download Excel template'}
+          </button>
           <button
             type="button"
             disabled={uploading}
@@ -85,7 +144,28 @@ const RispEntryIntro: React.FC<RispEntryIntroProps> = ({
             onChange={handleFile}
           />
         </div>
-        {message && <p className="text-sm text-gray-600 mt-2">{message}</p>}
+        {message && (
+          <p
+            className={`text-sm mt-2 ${
+              messageType === 'success'
+                ? 'text-green-700'
+                : messageType === 'error'
+                  ? 'text-red-600'
+                  : 'text-gray-600'
+            }`}
+          >
+            {message}
+          </p>
+        )}
+        {rowErrors.length > 0 && (
+          <ul className="mt-2 text-sm text-red-600 list-disc pl-5 space-y-1 max-h-40 overflow-y-auto">
+            {rowErrors.map((err) => (
+              <li key={`${err.row}-${err.error}`}>
+                Row {err.row}: {err.error}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );

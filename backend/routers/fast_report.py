@@ -400,14 +400,50 @@ async def get_country_boundaries(iso3: Optional[str] = None):
     return {"type": "FeatureCollection", "features": all_features}
 
 
+def _quarter_date_bounds(year: int, quarter: int) -> tuple[str, str]:
+    bounds = {
+        1: (f"{year}-01-01", f"{year}-03-31"),
+        2: (f"{year}-04-01", f"{year}-06-30"),
+        3: (f"{year}-07-01", f"{year}-09-30"),
+        4: (f"{year}-10-01", f"{year}-12-31"),
+    }
+    return bounds[quarter]
+
+
+def _infur_matches_historical_period(
+    outbreak_start: Optional[str],
+    year: Optional[int],
+    quarter: Optional[int],
+) -> bool:
+    if not outbreak_start:
+        return False
+    if year is not None:
+        if quarter is not None:
+            start, end = _quarter_date_bounds(year, quarter)
+            return start <= outbreak_start <= end
+        return outbreak_start.startswith(f"{year:04d}-")
+    if quarter is not None:
+        try:
+            month = int(outbreak_start[5:7])
+        except (TypeError, ValueError):
+            return False
+        q = 1 if month <= 3 else 2 if month <= 6 else 3 if month <= 9 else 4
+        return q == quarter
+    return True
+
+
 @router.get("/infur")
-async def get_infur_outbreaks():
+async def get_infur_outbreaks(
+    mode: str = Query("now", description="now = current semester; historical = year/quarter archive"),
+    year: Optional[int] = Query(None, ge=1990, le=2100),
+    quarter: Optional[int] = Query(None, ge=1, le=4),
+):
     """
-    WAHIS immediate notifications (INFUR) for the Europe Now map.
-    Point features from lat/long with cases / killed / susceptible, etc.
-    Prefer qtyScope=total; keep On-going events plus outbreaks starting in the current semester.
+    WAHIS immediate notifications (INFUR) for the Europe map.
+    Now: current semester + ongoing events. Historical: filter by outbreak start year/quarter.
     """
     try:
+        historical = mode.strip().lower() == "historical"
         semester_start = _current_semester_start()
         semester_label = f"{semester_start[:4]}-{'H1' if semester_start[5:7] == '01' else 'H2'}"
 
@@ -453,10 +489,14 @@ async def get_infur_outbreaks():
 
             outbreak_start = _parse_iso_date_prefix(row.get("outbreakStartDate"))
             event_status = (row.get("eventStatus") or "").strip()
-            in_semester = bool(outbreak_start and outbreak_start >= semester_start)
-            ongoing = event_status.lower() in {"on-going", "ongoing", "stable"}
-            if not in_semester and not ongoing:
-                continue
+            if historical:
+                if not _infur_matches_historical_period(outbreak_start, year, quarter):
+                    continue
+            else:
+                in_semester = bool(outbreak_start and outbreak_start >= semester_start)
+                ongoing = event_status.lower() in {"on-going", "ongoing", "stable"}
+                if not in_semester and not ongoing:
+                    continue
 
             outbreak_id = row.get("outbreakId")
             species = (row.get("speciesName") or "").strip()
@@ -501,8 +541,11 @@ async def get_infur_outbreaks():
             )
 
         return {
-            "semester": semester_label,
-            "semesterStart": semester_start,
+            "mode": "historical" if historical else "now",
+            "semester": semester_label if not historical else None,
+            "semesterStart": semester_start if not historical else None,
+            "year": year,
+            "quarter": quarter,
             "count": len(points),
             "data": points,
         }

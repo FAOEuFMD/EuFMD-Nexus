@@ -86,6 +86,46 @@ export function isInPeriods(
   return periods.some((p) => p.year === y && p.quarter === q);
 }
 
+/** Calendar quarter bounds (FAST uses Q1–Q4). */
+export function quarterDateRange(
+  year: number,
+  quarter: number
+): { start: string; end: string } {
+  const ranges: Record<number, [string, string]> = {
+    1: ['01-01', '03-31'],
+    2: ['04-01', '06-30'],
+    3: ['07-01', '09-30'],
+    4: ['10-01', '12-31'],
+  };
+  const [start, end] = ranges[quarter] || ranges[1];
+  return { start: `${year}-${start}`, end: `${year}-${end}` };
+}
+
+/** Whether an ISO date (YYYY-MM-DD) falls in a FAST year/quarter filter. */
+export function infurDateMatchesPeriod(
+  dateStr: string | null | undefined,
+  yearFilter: string,
+  quarterFilter: string
+): boolean {
+  if (!dateStr || dateStr.length < 10) return false;
+  const prefix = dateStr.slice(0, 10);
+  if (yearFilter !== 'all') {
+    const year = Number(yearFilter);
+    if (!prefix.startsWith(`${year}-`)) return false;
+    if (quarterFilter !== 'all') {
+      const quarter = Number(quarterFilter);
+      const { start, end } = quarterDateRange(year, quarter);
+      return prefix >= start && prefix <= end;
+    }
+  } else if (quarterFilter !== 'all') {
+    const quarter = Number(quarterFilter);
+    const month = Number(prefix.slice(5, 7));
+    const q = month <= 3 ? 1 : month <= 6 ? 2 : month <= 9 ? 3 : 4;
+    return q === quarter;
+  }
+  return true;
+}
+
 /** Current calendar semester label, e.g. 2026-H2. */
 export function getCurrentSemesterLabel(now = new Date()): string {
   const half = now.getMonth() < 6 ? 'H1' : 'H2';

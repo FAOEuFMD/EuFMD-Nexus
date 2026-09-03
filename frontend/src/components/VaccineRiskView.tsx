@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 // Types
 interface HerdImmunityRecord {
@@ -41,6 +41,26 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
 );
 
 type HerdChartMode = 'country' | 'province' | 'district';
+
+type CoverageStatus = {
+  has_records: boolean;
+  has_calculable_coverage: boolean;
+};
+
+const NO_COVERAGE_CALC_MESSAGE =
+  'Coverage cannot be calculated — target population was not reported for this country.';
+
+const getCoverageGapMessage = (
+  country: string | null | undefined,
+  statusByCountry: Map<string, CoverageStatus>
+): string | null => {
+  if (!country) return null;
+  const status = statusByCountry.get(country);
+  if (status?.has_records && !status.has_calculable_coverage) {
+    return NO_COVERAGE_CALC_MESSAGE;
+  }
+  return null;
+};
 
 const computeCoverage = (totalInjected: number, totalTarget: number) => {
   if (!totalTarget) return 0;
@@ -240,12 +260,22 @@ interface VaccineRiskViewProps {
   filterCountry?: string;
   filterDateFrom?: string;
   filterDateTo?: string;
+  /** Logged-in user's SOI nation — used for detail chart when filter is "all". */
+  userSoiCountry?: string | null;
 }
 
-const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filterDateFrom, filterDateTo }) => {
+const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({
+  filterCountry,
+  filterDateFrom,
+  filterDateTo,
+  userSoiCountry,
+}) => {
   const [herdData, setHerdData] = useState<HerdImmunityRecord[]>([]);
   const [herdLoading, setHerdLoading] = useState(true);
   const [herdError, setHerdError] = useState<string | null>(null);
+  const [coverageStatusByCountry, setCoverageStatusByCountry] = useState<
+    Map<string, CoverageStatus>
+  >(new Map());
   const [threshold, setThreshold] = useState<number>(70);
   const [detailMode, setDetailMode] = useState<HerdChartMode>('district');
 
@@ -261,10 +291,25 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
         if (filterDateFrom) params.append('date_from', filterDateFrom);
         if (filterDateTo) params.append('date_to', filterDateTo);
         const qs = params.toString();
-        const res = await fetch(`/api/tcc/herd-immunity-gap${qs ? '?' + qs : ''}`);
+        const [res, statusRes] = await Promise.all([
+          fetch(`/api/tcc/herd-immunity-gap${qs ? '?' + qs : ''}`),
+          fetch('/api/tcc/vaccination/coverage-status'),
+        ]);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const result = await res.json();
         setHerdData(result.data || []);
+
+        if (statusRes.ok) {
+          const statusJson = await statusRes.json();
+          const map = new Map<string, CoverageStatus>();
+          (statusJson.data || []).forEach((row: CoverageStatus & { country: string }) => {
+            map.set(row.country, {
+              has_records: row.has_records,
+              has_calculable_coverage: row.has_calculable_coverage,
+            });
+          });
+          setCoverageStatusByCountry(map);
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         setHerdError(`Failed to load herd immunity data: ${message}`);
@@ -274,6 +319,16 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
     };
     fetchData();
   }, [filterCountry, filterDateFrom, filterDateTo]);
+
+  const effectiveDetailCountry = useMemo(() => {
+    if (filterCountry && filterCountry !== 'all') return filterCountry;
+    return userSoiCountry || null;
+  }, [filterCountry, userSoiCountry]);
+
+  const detailSourceData = useMemo(() => {
+    if (!effectiveDetailCountry) return herdData;
+    return herdData.filter((r) => r.country === effectiveDetailCountry);
+  }, [herdData, effectiveDetailCountry]);
 
   const countryRows = React.useMemo(() => {
     const by = new Map<string, { total_target: number; total_injected: number }>();
@@ -294,7 +349,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
 
   const detailRows = React.useMemo(() => {
     if (detailMode === 'district') {
-      return herdData.map((r) => ({
+      return detailSourceData.map((r) => ({
         label: r.district_name,
         total_target: Number(r.total_target || 0),
         total_injected: Number(r.total_injected || 0),
@@ -303,7 +358,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
     }
     if (detailMode === 'province') {
       const by = new Map<string, { total_target: number; total_injected: number }>();
-      herdData.forEach((r) => {
+      detailSourceData.forEach((r) => {
         const key = r.province_name || 'Unknown';
         const cur = by.get(key) || { total_target: 0, total_injected: 0 };
         cur.total_target += Number(r.total_target || 0);
@@ -318,7 +373,16 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
       }));
     }
     return [];
-  }, [herdData, detailMode]);
+  }, [detailSourceData, detailMode]);
+
+  const filteredCountryGapMessage = getCoverageGapMessage(
+    filterCountry && filterCountry !== 'all' ? filterCountry : null,
+    coverageStatusByCountry
+  );
+  const detailCountryGapMessage = getCoverageGapMessage(
+    effectiveDetailCountry,
+    coverageStatusByCountry
+  );
 
   return (
     <div className="space-y-6">
@@ -360,7 +424,12 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
           ) : herdError ? (
             <div className="text-center py-8 text-red-500 text-sm">{herdError}</div>
           ) : herdData.length === 0 ? (
-            <EmptyState message="No vaccination coverage data available" />
+            <EmptyState
+              message={
+                filteredCountryGapMessage ||
+                'No vaccination coverage data available'
+              }
+            />
           ) : (
             <HerdImmunityCountryChart rows={countryRows} threshold={threshold} />
           )}
@@ -370,7 +439,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
             <h3 className="text-sm font-semibold text-gray-700">
-              Coverage detail (labels on the left)
+              Coverage detail (one country — use filter above)
             </h3>
             <div className="flex gap-2">
               <button
@@ -394,14 +463,23 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({ filterCountry, filter
             </div>
           </div>
           <p className="text-xs text-gray-500 mb-4">
-            Same data as before, but shown horizontally so the district/province list stays on the left.
+            {effectiveDetailCountry
+              ? `Showing ${effectiveDetailCountry}. Change country in the filter above.`
+              : 'Select a country in the filter above to view district/province coverage.'}
           </p>
           {herdLoading ? (
             <div style={{ height: 350 }}><SkeletonLoader /></div>
           ) : herdError ? (
             <div className="text-center py-8 text-red-500 text-sm">{herdError}</div>
+          ) : !effectiveDetailCountry ? (
+            <EmptyState message="Select a country in the filter above" />
           ) : detailRows.length === 0 ? (
-            <EmptyState message="No coverage detail available" />
+            <EmptyState
+              message={
+                detailCountryGapMessage ||
+                'No coverage detail available for this country'
+              }
+            />
           ) : (
             <HerdImmunityHorizontalChart
               title={detailMode === 'district' ? 'District coverage' : 'Province coverage'}

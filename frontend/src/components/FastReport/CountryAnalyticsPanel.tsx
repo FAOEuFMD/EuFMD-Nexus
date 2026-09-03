@@ -15,6 +15,7 @@ interface CountryAnalyticsPanelProps {
   hasFastReportMatch: boolean;
   getDiseaseColor: (disease: string) => string;
   beaconNews?: BeaconNewsItem[];
+  showBeaconNews?: boolean;
 }
 
 const PLOT_LAYOUT = {
@@ -53,6 +54,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
   hasFastReportMatch,
   getDiseaseColor,
   beaconNews = [],
+  showBeaconNews = true,
 }) => {
   const outbreakChartRef = useRef<HTMLDivElement>(null);
   const vaccinationChartRef = useRef<HTMLDivElement>(null);
@@ -175,7 +177,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
   const outbreakStats = buildOutbreakTraces(rows, diseaseColorMap);
   const vaccinationStats = buildVaccinationTraces(rows, diseaseColorMap);
 
-  const newsSection = (
+  const newsSection = showBeaconNews ? (
     <div>
       <h5 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1.5">
         <span
@@ -232,7 +234,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
         </div>
       )}
     </div>
-  );
+  ) : null;
 
   if (loading && hasFastReportMatch) {
     return (

@@ -24,6 +24,7 @@ import {
   formatPeriod,
   getCurrentSemesterLabel,
   getLastPublishedQuarters,
+  infurDateMatchesPeriod,
   isInPeriods,
   type InfurOutbreakPoint,
 } from '../utils/fastReport/currentSituation';
@@ -239,8 +240,9 @@ const FastReport: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FastReportData[]>([]);
-  /** WAHIS immediate notifications (INFUR) — Europe only, Now mode. */
+  /** WAHIS immediate notifications (INFUR) — Europe; Now or Historical by period. */
   const [infurData, setInfurData] = useState<InfurOutbreakPoint[]>([]);
+  const [infurLoading, setInfurLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'now' | 'historical'>('now');
   const [countryCoordinates, setCountryCoordinates] = useState<CountryCoordinates>({});
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -298,9 +300,20 @@ const FastReport: React.FC = () => {
   }, []);
 
   const availableYears = useMemo(() => {
-    const years = Array.from(new Set(dataWithoutBef.map((item) => item.Year))).sort((a, b) => b - a);
-    return years;
-  }, [dataWithoutBef]);
+    const fromFast = dataWithoutBef.map((item) => item.Year);
+    const fromInfur =
+      viewMode === 'historical'
+        ? infurData
+            .map((item) => {
+              const d = item.outbreakStartDate;
+              if (!d || d.length < 4) return null;
+              const y = Number(d.slice(0, 4));
+              return Number.isFinite(y) ? y : null;
+            })
+            .filter((y): y is number => y !== null)
+        : [];
+    return Array.from(new Set([...fromFast, ...fromInfur])).sort((a, b) => b - a);
+  }, [dataWithoutBef, infurData, viewMode]);
 
   const availableDiseases = useMemo(() => {
     const fromFast = dataWithoutBef.map((item) => item.Disease).filter(Boolean);
@@ -398,15 +411,31 @@ const FastReport: React.FC = () => {
     diseaseLayerMatch,
   ]);
 
-  /** WAHIS-INFUR point outbreaks — Europe only, Now mode. */
+  /** WAHIS-INFUR point outbreaks — Europe; period + disease layers. */
   const filteredInfurData = useMemo(() => {
-    if (viewMode !== 'now') return [];
     if (selectedRegion !== 'all' && selectedRegion !== EUROPE_REGION) return [];
     return infurData.filter((item) => {
       if (!item.disease || item.disease === 'BEF') return false;
-      return diseaseLayers[item.disease]?.outbreaks === true;
+      if (!diseaseLayers[item.disease]?.outbreaks) return false;
+      if (viewMode === 'historical') {
+        return infurDateMatchesPeriod(
+          item.outbreakStartDate,
+          selectedYear,
+          selectedQuarter
+        );
+      }
+      return true;
     });
-  }, [viewMode, selectedRegion, infurData, diseaseLayers]);
+  }, [
+    selectedRegion,
+    infurData,
+    diseaseLayers,
+    viewMode,
+    selectedYear,
+    selectedQuarter,
+  ]);
+
+  const showBeacon = viewMode === 'now';
 
   /** FAST rows only for country info-boxes / vaccination / FAST stats. */
   const filteredData = filteredFastData;
@@ -483,12 +512,16 @@ const FastReport: React.FC = () => {
   );
 
   const beaconNewsByCountry = useMemo(
-    () => groupBeaconNewsByCountry(beaconNews),
-    [beaconNews]
+    () => (showBeacon ? groupBeaconNewsByCountry(beaconNews) : {}),
+    [beaconNews, showBeacon]
   );
 
-  /** Outbreak info boxes with optional leading BEACON news column (+ news-only boxes). */
+  /** Outbreak info boxes; BEACON news column only in Now view. */
   const countryInfoBoxes = useMemo((): CountryOutbreakBox[] => {
+    if (!showBeacon) {
+      return countryOutbreakBoxes.map((b) => ({ ...b, newsCount: 0 }));
+    }
+
     const boxes: CountryOutbreakBox[] = countryOutbreakBoxes.map((b) => ({
       ...b,
       newsCount: beaconNewsForCountry(beaconNewsByCountry, b.country).length,
@@ -511,6 +544,7 @@ const FastReport: React.FC = () => {
 
     return boxes.sort((a, b) => a.country.localeCompare(b.country));
   }, [
+    showBeacon,
     countryOutbreakBoxes,
     beaconNewsByCountry,
     countryCoordinates,
@@ -628,10 +662,7 @@ const FastReport: React.FC = () => {
         const coords = await coordsResponse.json();
         setCountryCoordinates(coords);
 
-        const [dashboardRes, infurRes] = await Promise.all([
-          fetch('/api/fast-report/create-dashboard'),
-          fetch('/api/fast-report/infur'),
-        ]);
+        const dashboardRes = await fetch('/api/fast-report/create-dashboard');
 
         if (!dashboardRes.ok) {
           throw new Error(`API error: ${dashboardRes.status} ${dashboardRes.statusText}`);
@@ -646,19 +677,10 @@ const FastReport: React.FC = () => {
         } else {
           throw new Error('Invalid API response format - expected array or {data: array}');
         }
-
-        if (infurRes.ok) {
-          const infurPayload = await infurRes.json();
-          setInfurData(Array.isArray(infurPayload?.data) ? infurPayload.data : []);
-        } else {
-          console.warn('INFUR API unavailable:', infurRes.status);
-          setInfurData([]);
-        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         setError(`Unable to load data: ${message}`);
         setData([]);
-        setInfurData([]);
       } finally {
         setLoading(false);
       }
@@ -666,6 +688,38 @@ const FastReport: React.FC = () => {
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInfur = async () => {
+      setInfurLoading(true);
+      try {
+        const params = new URLSearchParams({ mode: viewMode });
+        const infurRes = await fetch(`/api/fast-report/infur?${params.toString()}`);
+        if (cancelled) return;
+        if (infurRes.ok) {
+          const infurPayload = await infurRes.json();
+          setInfurData(Array.isArray(infurPayload?.data) ? infurPayload.data : []);
+        } else {
+          console.warn('INFUR API unavailable:', infurRes.status);
+          setInfurData([]);
+        }
+      } catch (infurErr) {
+        if (!cancelled) {
+          console.warn('INFUR load failed:', infurErr);
+          setInfurData([]);
+        }
+      } finally {
+        if (!cancelled) setInfurLoading(false);
+      }
+    };
+
+    loadInfur();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMode]);
 
   const fastReportCountriesKey = fastReportCountries.slice().sort().join('|');
   const pcpEnabled = !!diseaseLayers['FMD']?.pcpFmd;
@@ -736,6 +790,13 @@ const FastReport: React.FC = () => {
   const beaconRegionParam = selectedRegion === 'all' ? 'all' : selectedRegion;
 
   useEffect(() => {
+    if (!showBeacon) {
+      setBeaconNews([]);
+      setBeaconError(null);
+      setBeaconLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const loadBeacon = async () => {
@@ -773,7 +834,7 @@ const FastReport: React.FC = () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keys encode filter inputs
-  }, [beaconRegionParam, beaconDiseaseKey]);
+  }, [showBeacon, beaconRegionParam, beaconDiseaseKey]);
 
   useEffect(() => {
     const loadPcpData = async () => {
@@ -898,12 +959,15 @@ const FastReport: React.FC = () => {
 
   const selectedCountryBeaconNews = useMemo(
     () =>
-      beaconNewsForCountry(
-        beaconNewsByCountry,
-        selectedFastReportCountry,
-        selectedGeoName || selectedCountry
-      ),
+      showBeacon
+        ? beaconNewsForCountry(
+            beaconNewsByCountry,
+            selectedFastReportCountry,
+            selectedGeoName || selectedCountry
+          )
+        : [],
     [
+      showBeacon,
       beaconNewsByCountry,
       selectedFastReportCountry,
       selectedGeoName,
@@ -970,9 +1034,9 @@ const FastReport: React.FC = () => {
               </div>
             ) : (
               <p className="text-gray-600 mt-1 text-sm max-w-4xl">
-                Historical FAST reports for neighbourhood countries — filter by year, quarter,
-                region, and disease. Europe immediate notifications are available in the Now view
-                only.
+                Historical FAST reports for neighbourhood countries and WAHIS immediate notifications
+                (INFUR) for Europe — filter by year, quarter, region, and disease. BEACON news is
+                available in the Now view only.
               </p>
             )}
           </div>
@@ -1132,7 +1196,7 @@ const FastReport: React.FC = () => {
                 );
               })}
 
-              {viewMode === 'now' && filteredInfurData.length > 0 && (
+              {filteredInfurData.length > 0 && (
                 <InfurOutbreakLayer points={filteredInfurData} getDiseaseColor={getMarkerColor} />
               )}
 
@@ -1159,11 +1223,13 @@ const FastReport: React.FC = () => {
               </div>
             )}
 
-            {viewMode === 'historical' && selectedRegion === EUROPE_REGION && (
+            {viewMode === 'historical' &&
+              selectedRegion === EUROPE_REGION &&
+              infurLoading &&
+              filteredInfurData.length === 0 && (
               <div className="absolute bottom-3 left-3 right-3 z-[1000] pointer-events-none">
                 <div className="bg-white/95 text-gray-700 text-xs px-3 py-2 rounded border border-gray-200 shadow-sm">
-                  Europe is not in the FAST historical archive. Use Now view for WAHIS-INFUR, or select a
-                  neighbourhood region.
+                  Loading WAHIS-INFUR data for the selected period…
                 </div>
               </div>
             )}
@@ -1183,6 +1249,7 @@ const FastReport: React.FC = () => {
                 hasFastReportMatch={!!selectedFastReportCountry}
                 getDiseaseColor={getMarkerColor}
                 beaconNews={selectedCountryBeaconNews}
+                showBeaconNews={showBeacon}
               />
             </CollapsibleSidePanel>
           )}
@@ -1436,20 +1503,22 @@ const FastReport: React.FC = () => {
         </div>
       </div>
 
-      <BeaconNewsPanel
-        items={beaconNews}
-        loading={beaconLoading}
-        error={beaconError}
-        regionLabel={
-          selectedRegion === 'all'
-            ? 'Europe and EuFMD neighbourhood countries'
-            : selectedRegion === EUROPE_REGION
-              ? 'European countries'
-              : selectedRegion
-        }
-        diseaseLabels={beaconDiseaseCodes}
-        getDiseaseColor={getMarkerColor}
-      />
+      {showBeacon && (
+        <BeaconNewsPanel
+          items={beaconNews}
+          loading={beaconLoading}
+          error={beaconError}
+          regionLabel={
+            selectedRegion === 'all'
+              ? 'Europe and EuFMD neighbourhood countries'
+              : selectedRegion === EUROPE_REGION
+                ? 'European countries'
+                : selectedRegion
+          }
+          diseaseLabels={beaconDiseaseCodes}
+          getDiseaseColor={getMarkerColor}
+        />
+      )}
     </div>
   );
 };

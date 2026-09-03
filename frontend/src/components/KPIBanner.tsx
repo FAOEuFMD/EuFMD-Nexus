@@ -7,7 +7,11 @@ interface KPIData {
   dominantSerotype: string | null;
 }
 
-const KPIBanner: React.FC = () => {
+interface KPIBannerProps {
+  reloadKey?: string;
+}
+
+const KPIBanner: React.FC<KPIBannerProps> = ({ reloadKey }) => {
   const [kpi, setKpi] = useState<KPIData>({
     daysSince: null,
     activeHotspots: 0,
@@ -46,7 +50,7 @@ const KPIBanner: React.FC = () => {
     };
 
     fetchKPIs();
-  }, []);
+  }, [reloadKey]);
 
   const getDaysColor = (days: number | null) => {
     if (days === null) return 'text-gray-500';

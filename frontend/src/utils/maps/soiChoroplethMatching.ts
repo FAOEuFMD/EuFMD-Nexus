@@ -12,6 +12,20 @@ export const SOI_TO_GEO_COUNTRY: Record<string, string> = {
 
 export const ALLOWED_SOI_COUNTRIES = Object.keys(SOI_TO_GEO_COUNTRY);
 
+/** Map auth/profile country string to formal TCC nation name for filters. */
+export function matchSoiCountryName(userCountry?: string | null): string | null {
+  if (!userCountry?.trim()) return null;
+  const norm = userCountry.toLowerCase().trim();
+  for (const formal of ALLOWED_SOI_COUNTRIES) {
+    if (formal.toLowerCase() === norm) return formal;
+    const geo = (SOI_TO_GEO_COUNTRY[formal] || '').toLowerCase();
+    if (geo && (geo === norm || norm.includes(geo) || geo.includes(norm))) return formal;
+    const shortName = formal.split(',')[0].toLowerCase().trim();
+    if (norm.includes(shortName) || shortName.includes(norm)) return formal;
+  }
+  return null;
+}
+
 /** Lowercase GADM country names included in the SOI choropleth */
 export const ALLOWED_GEO_COUNTRIES = new Set(
   Object.values(SOI_TO_GEO_COUNTRY).map((name) => name.toLowerCase())

@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from 'react-leaflet';
+import { Link, useLocation } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import KPIBanner from '../components/KPIBanner';
 import VaccineRiskView from '../components/VaccineRiskView';
 import EconomicImpactView from '../components/EconomicImpactView';
 import SurveillanceQualityView from '../components/SurveillanceQualityView';
+import { useAuthStore } from '../stores/authStore';
 import {
   ALLOWED_SOI_COUNTRIES,
   isAllowedGeoCountry,
   isAllowedSoiCountry,
+  matchSoiCountryName,
   vaccinationRegionKeyFromGeoFeature,
   vaccinationRegionKeyFromSoiRecord,
 } from '../utils/maps/soiChoroplethMatching';
@@ -99,7 +101,22 @@ interface SoiDataRecord {
 // Allowed countries for SOI dashboard (formal TCC nation names)
 const ALLOWED_C = ALLOWED_SOI_COUNTRIES;
 
+/** Leaflet maps need a resize after React Router remounts the page. */
+const MapResizeOnMount: React.FC = () => {
+  const map = useMap();
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [map]);
+  return null;
+};
+
 const RISPSOI: React.FC = () => {
+  const location = useLocation();
+  const { user } = useAuthStore();
+  const userSoiCountry = useMemo(() => matchSoiCountryName(user?.country), [user?.country]);
   type DashboardTab = 'spatial' | 'vaccine' | 'economic' | 'surveillance';
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('spatial');
 
@@ -118,38 +135,49 @@ const RISPSOI: React.FC = () => {
   const [geoJsonData, setGeoJsonData] = useState<any>(null);
   const [vaccinationByProvince, setVaccinationByProvince] = useState<Record<string, number>>({});
 
-  // Load GeoJSON on mount
+  // Reload dashboard data whenever user navigates back to this page
   useEffect(() => {
-    fetch('/gadm.geojson')
-      .then((res) => res.json())
-      .then((data) => setGeoJsonData(data))
-      .catch((err) => console.error('Failed to load GeoJSON:', err));
-  }, []);
+    let cancelled = false;
 
-  // Pre-fetch outbreaks and vaccination data for country dropdown population
-  useEffect(() => {
-    const prefetch = async () => {
-      if (mapOutbreaks.length === 0) {
-        try {
-          const res = await fetch('/api/tcc/outbreaks');
-          if (res.ok) {
-            const data = await res.json();
-            setMapOutbreaks(data.data || []);
-          }
-        } catch (err) { /* ignore */ }
-      }
-      if (mapVaccination.length === 0) {
-        try {
-          const res = await fetch('/api/tcc/vaccination');
-          if (res.ok) {
-            const data = await res.json();
-            setMapVaccination(data.data || []);
-          }
-        } catch (err) { /* ignore */ }
+    const loadDashboardData = async () => {
+      setMapLoading(true);
+      setMapOutbreaks([]);
+      setMapVaccination([]);
+      setGeoJsonData(null);
+      setVaccinationByProvince({});
+
+      try {
+        const [geoRes, outbreaksRes, vaccinationRes] = await Promise.all([
+          fetch('/gadm.geojson'),
+          fetch('/api/tcc/outbreaks'),
+          fetch('/api/tcc/vaccination'),
+        ]);
+
+        if (cancelled) return;
+
+        if (geoRes.ok) {
+          setGeoJsonData(await geoRes.json());
+        }
+        if (outbreaksRes.ok) {
+          const outbreaksData = await outbreaksRes.json();
+          setMapOutbreaks(outbreaksData.data || []);
+        }
+        if (vaccinationRes.ok) {
+          const vaccinationData = await vaccinationRes.json();
+          setMapVaccination(vaccinationData.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to load SOI dashboard data:', err);
+      } finally {
+        if (!cancelled) setMapLoading(false);
       }
     };
-    prefetch();
-  }, [mapOutbreaks.length, mapVaccination.length]);
+
+    loadDashboardData();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.key]);
 
   // Compute vaccination counts per province/region when vaccination data changes
   useEffect(() => {
@@ -199,35 +227,6 @@ const RISPSOI: React.FC = () => {
     const values = Object.keys(vaccinationByProvince).map((k) => vaccinationByProvince[k]);
     return values.length > 0 ? Math.max(...values) : 1;
   }, [vaccinationByProvince]);
-
-  // Fetch data for map when checkboxes are toggled
-  useEffect(() => {
-    if (!showOutbreaks && !showVaccination) return;
-    const fetchMapData = async () => {
-      setMapLoading(true);
-      try {
-        if (showOutbreaks && mapOutbreaks.length === 0) {
-          const res = await fetch('/api/tcc/outbreaks');
-          if (res.ok) {
-            const data = await res.json();
-            setMapOutbreaks(data.data || []);
-          }
-        }
-        if (showVaccination && mapVaccination.length === 0) {
-          const res = await fetch('/api/tcc/vaccination');
-          if (res.ok) {
-            const data = await res.json();
-            setMapVaccination(data.data || []);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch map data:', err);
-      } finally {
-        setMapLoading(false);
-      }
-    };
-    fetchMapData();
-  }, [showOutbreaks, showVaccination, mapOutbreaks.length, mapVaccination.length]);
 
   // Filtered map markers based on country and date filters
   const filteredMapOutbreaks = useMemo(() => {
@@ -286,14 +285,15 @@ const RISPSOI: React.FC = () => {
       </div>
 
       {/* Dashboard / Map */}
-      <div className="bg-white rounded-lg shadow p-6">
-          <KPIBanner />
+      <div key={location.key} className="bg-white rounded-lg shadow p-6">
+          <KPIBanner reloadKey={location.key} />
           <div className="flex gap-4 mt-4">
             {/* Main Content Area (Map or Charts) */}
             <div className="flex-1 min-h-[24rem] rounded-lg overflow-hidden border border-gray-200">
               {dashboardTab === 'spatial' && (
                 <div className="relative w-full h-full">
                   <MapContainer
+                    key={`soi-map-${location.key}`}
                     center={[39.0, 35.0]}
                     zoom={5}
                     scrollWheelZoom={true}
@@ -303,6 +303,7 @@ const RISPSOI: React.FC = () => {
                     doubleClickZoom={true}
                     touchZoom={true}
                   >
+                    <MapResizeOnMount />
                     <TileLayer
                       url="https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/tile/{z}/{y}/{x}"
                       attribution="&copy; United Nations Geospatial Information Section"
@@ -386,25 +387,29 @@ const RISPSOI: React.FC = () => {
 
               {/* Vaccine & Risk Tab Content */}
               {dashboardTab === 'vaccine' && (
-                <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }}>
+                <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }} key={`vaccine-${location.key}`}>
                   <VaccineRiskView
                     filterCountry={filterCountry}
                     filterDateFrom={filterDateFrom}
                     filterDateTo={filterDateTo}
+                    userSoiCountry={userSoiCountry}
                   />
                 </div>
               )}
 
               {/* Economic Impact Tab Content */}
               {dashboardTab === 'economic' && (
-                <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }}>
-                  <EconomicImpactView />
+                <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }} key={`economic-${location.key}`}>
+                  <EconomicImpactView
+                    filterCountry={filterCountry}
+                    userSoiCountry={userSoiCountry}
+                  />
                 </div>
               )}
 
               {/* Surveillance Quality Tab Content */}
               {dashboardTab === 'surveillance' && (
-                <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }}>
+                <div className="p-4 h-full overflow-y-auto" style={{ minHeight: '24rem' }} key={`surveillance-${location.key}`}>
                   <SurveillanceQualityView
                     filterCountry={filterCountry}
                     filterDateFrom={filterDateFrom}

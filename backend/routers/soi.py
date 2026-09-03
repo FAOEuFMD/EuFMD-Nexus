@@ -43,25 +43,35 @@ async def get_outbreaks():
 @router.get("/economic/outbreak-price-correlation")
 async def get_outbreak_price_correlation(
     nationID: Optional[int] = Query(None, description="Filter by nation ID"),
+    country: Optional[str] = Query(None, description="Filter by country name"),
     months: int = Query(12, description="Number of recent periods to include"),
 ):
-    """Correlate outbreak counts with market prices over time.
-    Joins outbreak counts per period with cattle price data."""
+    """Correlate outbreak counts with market prices over time for one country."""
     try:
-        # If nationID is provided, keep previous behaviour: one country's prices + that country's outbreaks.
-        # If nationID is NOT provided, return prices for ALL countries per period while outbreaks remain aggregated by period.
+        resolved_nation_id = nationID
+        if resolved_nation_id is None and country:
+            nation_lookup = await db_helper.execute_tcc_query(
+                "SELECT nationID FROM nations WHERE country = %s LIMIT 1",
+                (country,),
+            )
+            if nation_lookup["error"]:
+                raise HTTPException(status_code=500, detail=nation_lookup["error"])
+            if not nation_lookup["data"]:
+                return {"data": []}
+            resolved_nation_id = nation_lookup["data"][0]["nationID"]
+
         params: list = []
 
         ob_where = ["o.dt_conf IS NOT NULL"]
-        if nationID is not None:
+        if resolved_nation_id is not None:
             ob_where.append("o.nationID = %s")
-            params.append(nationID)
+            params.append(resolved_nation_id)
         ob_where_sql = " AND ".join(ob_where)
 
         price_where = ["1=1"]
-        if nationID is not None:
-            price_where.append("mp2.nationID = %s")
-            params.append(nationID)
+        if resolved_nation_id is not None:
+            price_where.append("mp.nationID = %s")
+            params.append(resolved_nation_id)
         price_where_sql = " AND ".join(price_where)
 
         query = (
@@ -107,18 +117,29 @@ async def get_outbreak_price_correlation(
 @router.get("/economic/capital-district-divergence")
 async def get_capital_district_divergence(
     nationID: Optional[int] = Query(None, description="Filter by nation ID"),
+    country: Optional[str] = Query(None, description="Filter by country name"),
     months: int = Query(12, description="Number of recent periods to include"),
 ):
-    """Calculate the price gap between Capital and District markets.
+    """Calculate the price gap between Capital and District markets for one country.
     Large gaps may indicate trade restrictions or quarantines."""
     try:
-        params: list = []
-        if nationID is not None:
-            params.append(nationID)
+        resolved_nation_id = nationID
+        if resolved_nation_id is None and country:
+            nation_lookup = await db_helper.execute_tcc_query(
+                "SELECT nationID FROM nations WHERE country = %s LIMIT 1",
+                (country,),
+            )
+            if nation_lookup["error"]:
+                raise HTTPException(status_code=500, detail=nation_lookup["error"])
+            if not nation_lookup["data"]:
+                return {"data": []}
+            resolved_nation_id = nation_lookup["data"][0]["nationID"]
 
+        params: list = []
         where_clauses = ["1=1"]
-        if nationID is not None:
+        if resolved_nation_id is not None:
             where_clauses.append("mp.nationID = %s")
+            params.append(resolved_nation_id)
         where_sql = " AND ".join(where_clauses)
 
         query = (
@@ -158,65 +179,67 @@ async def get_capital_district_divergence(
 @router.get("/economic/species-price-comparison")
 async def get_species_price_comparison(
     nationID: Optional[int] = Query(None, description="Filter by nation ID"),
+    country: Optional[str] = Query(None, description="Filter by country name"),
     periodID: Optional[int] = Query(None, description="Filter by specific period ID"),
 ):
     """Compare prices across species (Cattle, Sheep, Pig) for the most recent period.
-    Returns one row per species with District and Capital average prices."""
+    Returns one row per species with District and Capital average prices for one country."""
     try:
-        # Build params: repeat for each of the 3 UNION subqueries
-        sub_params: list = []
-        if periodID is not None:
-            sub_params.append(periodID)
-        if nationID is not None:
-            sub_params.append(nationID)
+        resolved_nation_id = nationID
+        if resolved_nation_id is None and country:
+            nation_lookup = await db_helper.execute_tcc_query(
+                "SELECT nationID FROM nations WHERE country = %s LIMIT 1",
+                (country,),
+            )
+            if nation_lookup["error"]:
+                raise HTTPException(status_code=500, detail=nation_lookup["error"])
+            if not nation_lookup["data"]:
+                return {"data": [], "period": None}
+            resolved_nation_id = nation_lookup["data"][0]["nationID"]
 
-        # Each UNION subquery needs its own set of params
-        # So we repeat params 3 times (once per UNION)
-        all_params = sub_params + sub_params + sub_params
+        resolved_period_id = periodID
+        period_meta: Optional[dict] = None
 
-        # Determine the period to use
-        period_sub = "(SELECT periodID FROM marketprice_period ORDER BY dt_from DESC LIMIT 1)"
-        if periodID is not None:
-            period_sub = "%s"
+        if resolved_period_id is None:
+            lookup_query = (
+                "SELECT p.periodID, p.descrizione, p.dt_from "
+                "FROM marketprice_period p "
+                "INNER JOIN marketprice mp ON mp.periodID = p.periodID "
+            )
+            lookup_params: list = []
+            if resolved_nation_id is not None:
+                lookup_query += "WHERE mp.nationID = %s "
+                lookup_params.append(resolved_nation_id)
+            lookup_query += "ORDER BY p.dt_from DESC LIMIT 1"
 
-        nation_sub = ""
-        if nationID is not None:
-            nation_sub = "AND mp.nationID = %s"
+            lookup_result = await db_helper.execute_tcc_query(
+                lookup_query,
+                tuple(lookup_params) if lookup_params else None,
+            )
+            if lookup_result["error"]:
+                raise HTTPException(status_code=500, detail=lookup_result["error"])
+            if not lookup_result["data"]:
+                return {"data": [], "period": None}
 
-        # Build the WHERE clause for each subquery
-        if periodID is not None:
-            period_where = f"AND mp.periodID = %s {nation_sub}"
+            period_meta = lookup_result["data"][0]
+            resolved_period_id = period_meta["periodID"]
         else:
-            period_where = f"AND mp.periodID = {period_sub} {nation_sub}"
+            meta_result = await db_helper.execute_tcc_query(
+                "SELECT periodID, descrizione, dt_from FROM marketprice_period WHERE periodID = %s",
+                (resolved_period_id,),
+            )
+            if meta_result["error"]:
+                raise HTTPException(status_code=500, detail=meta_result["error"])
+            if meta_result["data"]:
+                period_meta = meta_result["data"][0]
 
-        # For UNION subqueries, each needs independent %s placeholders
-        # Build 3 separate WHERE clauses with their own params
-        sub1_where = "WHERE 1=1"
-        sub2_where = "WHERE 1=1"
-        sub3_where = "WHERE 1=1"
-        sub1_params: list = []
-        sub2_params: list = []
-        sub3_params: list = []
+        sub_params: list = [resolved_period_id]
+        if resolved_nation_id is not None:
+            sub_params.append(resolved_nation_id)
 
-        if periodID is not None:
-            sub1_where += " AND mp.periodID = %s"
-            sub2_where += " AND mp.periodID = %s"
-            sub3_where += " AND mp.periodID = %s"
-            sub1_params.append(periodID)
-            sub2_params.append(periodID)
-            sub3_params.append(periodID)
-        else:
-            sub1_where += f" AND mp.periodID = {period_sub}"
-            sub2_where += f" AND mp.periodID = {period_sub}"
-            sub3_where += f" AND mp.periodID = {period_sub}"
-
-        if nationID is not None:
-            sub1_where += " AND mp.nationID = %s"
-            sub2_where += " AND mp.nationID = %s"
-            sub3_where += " AND mp.nationID = %s"
-            sub1_params.append(nationID)
-            sub2_params.append(nationID)
-            sub3_params.append(nationID)
+        sub_where = "WHERE mp.periodID = %s"
+        if resolved_nation_id is not None:
+            sub_where += " AND mp.nationID = %s"
 
         query = (
             "SELECT species, "
@@ -232,28 +255,30 @@ async def get_species_price_comparison(
             "    ctl_dis_meatAVG AS district_meat_avg, "
             "    ctl_cap_meatAVG AS capital_meat_avg "
             "  FROM marketprice mp "
-            f"  {sub1_where} "
+            f"  {sub_where} "
             "  UNION ALL "
             "  SELECT 'Sheep' AS species, "
             "    shp_dis_liveAVG, shp_cap_liveAVG, shp_dis_meatAVG, shp_cap_meatAVG "
             "  FROM marketprice mp "
-            f"  {sub2_where} "
+            f"  {sub_where} "
             "  UNION ALL "
             "  SELECT 'Pig' AS species, "
             "    pig_dis_liveAVG, pig_cap_liveAVG, pig_dis_meatAVG, pig_cap_meatAVG "
             "  FROM marketprice mp "
-            f"  {sub3_where} "
+            f"  {sub_where} "
             ") all_species "
             "GROUP BY species "
             "ORDER BY FIELD(species, 'Cattle', 'Sheep', 'Pig')"
         )
 
-        final_params = tuple(sub1_params + sub2_params + sub3_params)
-        result = await db_helper.execute_tcc_query(query, final_params if final_params else None)
+        final_params = tuple(sub_params * 3)
+        result = await db_helper.execute_tcc_query(query, final_params)
         if result["error"]:
             raise HTTPException(status_code=500, detail=result["error"])
 
-        return {"data": result["data"]}
+        return {"data": result["data"], "period": period_meta}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -663,6 +688,37 @@ async def get_dominant_serotype():
             raise HTTPException(status_code=500, detail=result["error"])
         serotype = result["data"][0]["serotype"] if result["data"] else None
         return {"serotype": serotype}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/vaccination/coverage-status")
+async def get_vaccination_coverage_status():
+    """Per-country flags: has vaccination rows vs rows with cattle target pop for coverage calc."""
+    try:
+        result = await db_helper.execute_tcc_query(
+            """
+            SELECT n.country AS country,
+                   COUNT(*) AS vacc_rows,
+                   SUM(CASE WHEN v.cattle_target_pop > 0 THEN 1 ELSE 0 END) AS rows_with_target
+            FROM vaccinations v
+            JOIN nations n ON v.nationID = n.nationID
+            WHERE n.country IS NOT NULL
+            GROUP BY n.country
+            ORDER BY n.country
+            """
+        )
+        if result["error"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        data = [
+            {
+                "country": row["country"],
+                "has_records": int(row["vacc_rows"] or 0) > 0,
+                "has_calculable_coverage": int(row["rows_with_target"] or 0) > 0,
+            }
+            for row in (result["data"] or [])
+        ]
+        return {"data": data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

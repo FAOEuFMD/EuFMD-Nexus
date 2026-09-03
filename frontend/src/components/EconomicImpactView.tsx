@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 // Types
 interface OutbreakPriceRecord {
@@ -462,10 +462,7 @@ const SpeciesChart: React.FC<{ data: SpeciesRecord[] }> = ({ data }) => {
   const plotWidth = chartWidth - marginLeft - marginRight;
   const plotHeight = chartHeight - marginTop - marginBottom;
 
-  const allPrices: number[] = [];
-  data.forEach((d) => { [d.district_live_avg, d.capital_live_avg, d.district_meat_avg, d.capital_meat_avg].forEach((v) => { if (v != null) allPrices.push(v); }); });
-  const maxPrice = allPrices.length > 0 ? Math.max(...allPrices) : 1;
-  const priceMax = Math.ceil(maxPrice / 100) * 100 || 100;
+  const priceMax = 25;
 
   const groupCount = data.length;
   const groupGap = 30;
@@ -564,10 +561,14 @@ const SpeciesChart: React.FC<{ data: SpeciesRecord[] }> = ({ data }) => {
 
 // ============ MAIN COMPONENT ============
 interface EconomicImpactViewProps {
-  filterNationID?: number;
+  filterCountry?: string;
+  userSoiCountry?: string | null;
 }
 
-const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID }) => {
+const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({
+  filterCountry,
+  userSoiCountry,
+}) => {
   const [correlationData, setCorrelationData] = useState<OutbreakPriceRecord[]>([]);
   const [corrLoading, setCorrLoading] = useState(true);
   const [corrError, setCorrError] = useState<string | null>(null);
@@ -577,18 +578,30 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
   const [divError, setDivError] = useState<string | null>(null);
 
   const [speciesData, setSpeciesData] = useState<SpeciesRecord[]>([]);
+  const [speciesPeriodLabel, setSpeciesPeriodLabel] = useState<string | null>(null);
   const [spLoading, setSpLoading] = useState(true);
   const [spError, setSpError] = useState<string | null>(null);
 
+  const effectiveCountry = useMemo(() => {
+    if (filterCountry && filterCountry !== 'all') return filterCountry;
+    return userSoiCountry || null;
+  }, [filterCountry, userSoiCountry]);
+
   useEffect(() => {
     const fetchData = async () => {
+      if (!effectiveCountry) {
+        setCorrelationData([]);
+        setCorrLoading(false);
+        setCorrError(null);
+        return;
+      }
+
       setCorrLoading(true);
       setCorrError(null);
       try {
         const params = new URLSearchParams();
-        if (filterNationID) params.append('nationID', String(filterNationID));
-        const qs = params.toString();
-        const res = await fetch(`/api/tcc/economic/outbreak-price-correlation${qs ? '?' + qs : ''}`);
+        params.append('country', effectiveCountry);
+        const res = await fetch(`/api/tcc/economic/outbreak-price-correlation?${params.toString()}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const result = await res.json();
         setCorrelationData(result.data || []);
@@ -600,17 +613,23 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
       }
     };
     fetchData();
-  }, [filterNationID]);
+  }, [effectiveCountry]);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!effectiveCountry) {
+        setDivergenceData([]);
+        setDivLoading(false);
+        setDivError(null);
+        return;
+      }
+
       setDivLoading(true);
       setDivError(null);
       try {
         const params = new URLSearchParams();
-        if (filterNationID) params.append('nationID', String(filterNationID));
-        const qs = params.toString();
-        const res = await fetch(`/api/tcc/economic/capital-district-divergence${qs ? '?' + qs : ''}`);
+        params.append('country', effectiveCountry);
+        const res = await fetch(`/api/tcc/economic/capital-district-divergence?${params.toString()}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const result = await res.json();
         setDivergenceData(result.data || []);
@@ -622,20 +641,28 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
       }
     };
     fetchData();
-  }, [filterNationID]);
+  }, [effectiveCountry]);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!effectiveCountry) {
+        setSpeciesData([]);
+        setSpeciesPeriodLabel(null);
+        setSpLoading(false);
+        setSpError(null);
+        return;
+      }
+
       setSpLoading(true);
       setSpError(null);
       try {
         const params = new URLSearchParams();
-        if (filterNationID) params.append('nationID', String(filterNationID));
-        const qs = params.toString();
-        const res = await fetch(`/api/tcc/economic/species-price-comparison${qs ? '?' + qs : ''}`);
+        params.append('country', effectiveCountry);
+        const res = await fetch(`/api/tcc/economic/species-price-comparison?${params.toString()}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const result = await res.json();
         setSpeciesData(result.data || []);
+        setSpeciesPeriodLabel(result.period?.descrizione ?? null);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         setSpError(`Failed to load species data: ${message}`);
@@ -644,7 +671,7 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
       }
     };
     fetchData();
-  }, [filterNationID]);
+  }, [effectiveCountry]);
 
   const hasHighDivergence = divergenceData.some(
     (d) => (d.live_price_gap_percent ?? 0) > 20 || (d.meat_price_gap_percent ?? 0) > 20
@@ -661,15 +688,23 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
         <h3 className="text-sm font-semibold text-gray-700 mb-1">
           Disease Outbreaks vs. Livestock Market Prices (Cattle)
         </h3>
+        <p className="text-xs text-gray-500 mb-1">
+          One country at a time — use the country filter above
+        </p>
+        <p className="text-xs text-gray-400 mb-1">
+          {effectiveCountry || 'Select a country to compare outbreak frequency with cattle market prices over time.'}
+        </p>
         <p className="text-xs text-gray-500 mb-4">
-          Dual-axis view comparing outbreak frequency (red bars) with cattle market prices (lines) over time.
+          Dual-axis view: outbreak frequency (red bars) vs cattle market prices (lines).
         </p>
         {corrLoading ? (
           <div style={{ height: 380 }}><SkeletonLoader /></div>
         ) : corrError ? (
           <div className="text-center py-8 text-red-500 text-sm">{corrError}</div>
+        ) : !effectiveCountry ? (
+          <EmptyState message="Select a country using the filter above to view correlation data" />
         ) : correlationData.length === 0 ? (
-          <EmptyState message="No outbreak-price correlation data available" />
+          <EmptyState message={`No outbreak-price correlation data available for ${effectiveCountry}`} />
         ) : (
           <OutbreakPriceChart data={correlationData} />
         )}
@@ -688,15 +723,23 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
             </span>
           )}
         </div>
+        <p className="text-xs text-gray-500 mb-1">
+          One country at a time — use the country filter above
+        </p>
+        <p className="text-xs text-gray-400 mb-1">
+          {effectiveCountry || 'Select a country to view capital vs district price gaps over time.'}
+        </p>
         <p className="text-xs text-gray-500 mb-4">
-          Price gap percentage between capital and district markets. Dashed line = 0% baseline. Positive values mean capital prices are higher.
+          Price gap % between capital and district markets. Dashed line = 0% baseline. Positive values mean capital prices are higher.
         </p>
         {divLoading ? (
           <div style={{ height: 350 }}><SkeletonLoader /></div>
         ) : divError ? (
           <div className="text-center py-8 text-red-500 text-sm">{divError}</div>
+        ) : !effectiveCountry ? (
+          <EmptyState message="Select a country using the filter above to view divergence data" />
         ) : divergenceData.length === 0 ? (
-          <EmptyState message="No divergence data available" />
+          <EmptyState message={`No divergence data available for ${effectiveCountry}`} />
         ) : (
           <DivergenceChart data={divergenceData} />
         )}
@@ -752,15 +795,22 @@ const EconomicImpactView: React.FC<EconomicImpactViewProps> = ({ filterNationID 
         <h3 className="text-sm font-semibold text-gray-700 mb-1">
           Current Prices by Species (Most Recent Period)
         </h3>
-        <p className="text-xs text-gray-500 mb-4">
-          Grouped bar chart comparing District vs Capital prices for live and meat across species.
+        <p className="text-xs text-gray-500 mb-1">
+          One country at a time — use the country filter above
+        </p>
+        <p className="text-xs text-gray-400 mb-4">
+          {effectiveCountry
+            ? [effectiveCountry, speciesPeriodLabel].filter(Boolean).join(' · ')
+            : 'Select a country to view District vs Capital prices for live and meat across species.'}
         </p>
         {spLoading ? (
           <div style={{ height: 320 }}><SkeletonLoader /></div>
         ) : spError ? (
           <div className="text-center py-8 text-red-500 text-sm">{spError}</div>
+        ) : !effectiveCountry ? (
+          <EmptyState message="Select a country using the filter above to view species prices" />
         ) : speciesData.length === 0 ? (
-          <EmptyState message="No species price data available" />
+          <EmptyState message={`No species price data available for ${effectiveCountry}`} />
         ) : (
           <SpeciesChart data={speciesData} />
         )}
