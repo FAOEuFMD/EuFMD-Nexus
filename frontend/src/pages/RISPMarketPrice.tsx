@@ -4,8 +4,6 @@ import RispEntryIntro from '../components/RISP/RispEntryIntro';
 import QuarterSelection from '../components/RISP/QuarterSelection';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
-import { useRispProgram } from '../hooks/useRispProgram';
-import { useSoiDistricts } from '../hooks/useSoiDistricts';
 
 type Species = 'cattle' | 'sheep' | 'pig';
 type MarketLevel = 'district' | 'capital';
@@ -20,8 +18,6 @@ interface MarketPriceRow {
   price_max: number | '';
   price_avg: number | '';
   reference: string;
-  location: string;
-  district_id?: number | null;
 }
 
 const emptyRow = (): MarketPriceRow => ({
@@ -33,13 +29,10 @@ const emptyRow = (): MarketPriceRow => ({
   price_max: '',
   price_avg: '',
   reference: '',
-  location: '',
 });
 
 const RISPMarketPrice: React.FC = () => {
   const { user } = useAuthStore();
-  const { isSoi } = useRispProgram();
-  const { districts: soiDistricts } = useSoiDistricts(isSoi);
 
   const getPreviousQuarterAndYear = () => {
     const currentMonth = new Date().getMonth() + 1;
@@ -76,8 +69,6 @@ const RISPMarketPrice: React.FC = () => {
             price_max: r.price_max ?? '',
             price_avg: r.price_avg ?? '',
             reference: r.reference || '',
-            location: r.location || '',
-            district_id: r.district_id ?? null,
           }))
         );
       } else {
@@ -142,8 +133,6 @@ const RISPMarketPrice: React.FC = () => {
             price_max: r.price_max === '' ? null : Number(r.price_max),
             price_avg: r.price_avg === '' ? null : Number(r.price_avg),
             reference: r.reference || null,
-            location: r.location || null,
-            district_id: r.district_id ?? null,
           })),
       };
       await apiService.risp.saveMarketPrices(payload);
@@ -157,29 +146,6 @@ const RISPMarketPrice: React.FC = () => {
     }
   };
 
-  const soiDistrictGroups = useMemo(() => {
-    const byProvince = new Map<string, typeof soiDistricts>();
-    for (const d of soiDistricts) {
-      const list = byProvince.get(d.province_name) || [];
-      list.push(d);
-      byProvince.set(d.province_name, list);
-    }
-    return Array.from(byProvince.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [soiDistricts]);
-
-  const handleDistrictChange = (index: number, districtId: string) => {
-    const picked = soiDistricts.find((d) => String(d.district_id) === districtId);
-    setRows((prev) => {
-      const next = [...prev];
-      next[index] = {
-        ...next[index],
-        district_id: picked?.district_id ?? null,
-        location: picked?.district_name || '',
-      };
-      return next;
-    });
-  };
-
   return (
     <div>
       <RispNavBar />
@@ -189,7 +155,7 @@ const RISPMarketPrice: React.FC = () => {
           templateYear={selectedYear}
           templateQuarter={selectedQuarter}
           onUploadSuccess={loadRows}
-          pageHint="Report livestock market prices (min / max / average) by species, market level and product for the selected quarter."
+          pageHint="Report livestock market prices (min / max / average) by species, market level (capital vs elsewhere) and product for the selected quarter."
         />
 
         <div className="flex gap-2.5 items-center px-7" style={{ maxWidth: '300px' }}>
@@ -213,19 +179,18 @@ const RISPMarketPrice: React.FC = () => {
                 <th className="py-3 px-2 border border-white">Min</th>
                 <th className="py-3 px-2 border border-white">Max</th>
                 <th className="py-3 px-2 border border-white">Average</th>
-                <th className="py-3 px-2 border border-white">{isSoi ? 'District' : 'Location (optional)'}</th>
                 <th className="py-3 px-2 border border-white">Reference</th>
                 <th className="py-3 px-2 border border-white"> </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50">
+                <tr key={row.id ?? `new-${index}`} className="border-b border-gray-100">
                   <td className="p-2">
                     <select
-                      className="w-full h-[38px] border border-gray-300 rounded-md text-sm"
+                      className="w-full h-[38px] border border-gray-300 rounded-md px-2 text-sm"
                       value={row.species}
-                      onChange={(e) => updateRow(index, 'species', e.target.value)}
+                      onChange={(e) => updateRow(index, 'species', e.target.value as Species)}
                     >
                       <option value="cattle">Cattle</option>
                       <option value="sheep">Sheep</option>
@@ -234,19 +199,21 @@ const RISPMarketPrice: React.FC = () => {
                   </td>
                   <td className="p-2">
                     <select
-                      className="w-full h-[38px] border border-gray-300 rounded-md text-sm"
+                      className="w-full h-[38px] border border-gray-300 rounded-md px-2 text-sm"
                       value={row.market_level}
-                      onChange={(e) => updateRow(index, 'market_level', e.target.value)}
+                      onChange={(e) =>
+                        updateRow(index, 'market_level', e.target.value as MarketLevel)
+                      }
                     >
-                      <option value="district">District</option>
                       <option value="capital">Capital</option>
+                      <option value="district">Elsewhere (districts)</option>
                     </select>
                   </td>
                   <td className="p-2">
                     <select
-                      className="w-full h-[38px] border border-gray-300 rounded-md text-sm"
+                      className="w-full h-[38px] border border-gray-300 rounded-md px-2 text-sm"
                       value={row.product}
-                      onChange={(e) => updateRow(index, 'product', e.target.value)}
+                      onChange={(e) => updateRow(index, 'product', e.target.value as Product)}
                     >
                       <option value="live">Live</option>
                       <option value="meat">Meat</option>
@@ -287,34 +254,6 @@ const RISPMarketPrice: React.FC = () => {
                         updateRow(index, 'price_avg', e.target.value === '' ? '' : e.target.value)
                       }
                     />
-                  </td>
-                  <td className="p-2">
-                    {isSoi ? (
-                      <select
-                        className="w-full h-[38px] border border-gray-300 rounded-md px-2 text-sm"
-                        value={row.district_id ?? ''}
-                        onChange={(e) => handleDistrictChange(index, e.target.value)}
-                      >
-                        <option value="">Select district…</option>
-                        {soiDistrictGroups.map(([province, items]) => (
-                          <optgroup key={province} label={province}>
-                            {items.map((d) => (
-                              <option key={d.district_id} value={d.district_id}>
-                                {d.district_name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        className="w-full h-[38px] border border-gray-300 rounded-md px-2 text-sm"
-                        value={row.location}
-                        onChange={(e) => updateRow(index, 'location', e.target.value)}
-                        placeholder="Optional"
-                      />
-                    )}
                   </td>
                   <td className="p-2">
                     <input

@@ -505,38 +505,14 @@ def _import_market_prices(
         if price_min is None and price_max is None and price_avg is None:
             continue
 
-        location = _cell_str(_get_cell(ws, row_idx, headers, "location"))
-        district_name = _cell_str(_get_cell(ws, row_idx, headers, "district"))
-        district_id = _cell_int(_get_cell(ws, row_idx, headers, "district_id"))
         reference = _cell_str(_get_cell(ws, row_idx, headers, "reference"))
-
-        if is_soi and country_id:
-            resolved_district_id, _, resolved_name = _resolve_district(
-                cursor, country_id, district_id, district_name or location, None
-            )
-            if not resolved_district_id:
-                errors.append(
-                    {
-                        "row": row_idx,
-                        "error": f"Could not match district '{district_name or location}' for your country",
-                    }
-                )
-                continue
-            district_id = resolved_district_id
-            location = resolved_name or district_name or location
-        elif not location and district_name:
-            location = district_name
 
         cursor.execute(
             """
             SELECT id FROM risp_marketprice
             WHERE user_id = %s AND year = %s AND quarter = %s
               AND species = %s AND market_level = %s AND product = %s
-              AND (location IS NULL OR location <> %s)
-              AND (
-                (district_id IS NOT NULL AND district_id = %s)
-                OR (district_id IS NULL AND location <=> %s)
-              )
+              AND (reference IS NULL OR reference <> %s)
             ORDER BY id LIMIT 1
             """,
             (
@@ -547,8 +523,6 @@ def _import_market_prices(
                 market_level,
                 product,
                 deleted_marker,
-                district_id,
-                location,
             ),
         )
         existing = cursor.fetchone()
@@ -559,8 +533,6 @@ def _import_market_prices(
             price_min,
             price_max,
             price_avg,
-            district_id,
-            location,
             reference,
             program,
         )
@@ -572,7 +544,7 @@ def _import_market_prices(
                 UPDATE risp_marketprice SET
                   species = %s, market_level = %s, product = %s,
                   price_min = %s, price_max = %s, price_avg = %s,
-                  district_id = %s, location = %s, reference = %s, program = %s,
+                  reference = %s, program = %s,
                   visibility = 'public',
                   created_at = COALESCE(created_at, %s),
                   updated_at = %s
@@ -585,10 +557,10 @@ def _import_market_prices(
                 """
                 INSERT INTO risp_marketprice
                   (user_id, country, year, quarter, species, market_level, product,
-                   price_min, price_max, price_avg, district_id, location, reference,
+                   price_min, price_max, price_avg, reference,
                    program, visibility, created_at, updated_at)
                 VALUES
-                  (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s)
+                  (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s)
                 """,
                 (user_id, country, year, quarter) + values + (now, now),
             )

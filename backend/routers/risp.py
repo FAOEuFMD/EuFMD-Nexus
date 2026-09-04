@@ -907,8 +907,6 @@ class MarketPriceRow(BaseModel):
     price_max: Optional[float] = None
     price_avg: Optional[float] = None
     reference: Optional[str] = None
-    location: Optional[str] = None
-    district_id: Optional[int] = None
 
 
 class MarketPriceBatch(BaseModel):
@@ -918,6 +916,7 @@ class MarketPriceBatch(BaseModel):
 
 
 # Soft-delete marker — DB user has no DELETE privilege on risp_* tables.
+# Stored in `reference` (district/location columns removed from the model).
 _MARKETPRICE_DELETED = "__deleted__"
 
 
@@ -934,7 +933,7 @@ async def get_market_prices(
             """
             SELECT * FROM risp_marketprice
             WHERE user_id = %s AND year = %s AND quarter = %s
-              AND (location IS NULL OR location <> %s)
+              AND (reference IS NULL OR reference <> %s)
             ORDER BY id
             """,
             (current_user.get("id"), year, quarter, _MARKETPRICE_DELETED),
@@ -965,7 +964,7 @@ async def save_market_prices(
             """
             SELECT id FROM risp_marketprice
             WHERE user_id = %s AND year = %s AND quarter = %s
-              AND (location IS NULL OR location <> %s)
+              AND (reference IS NULL OR reference <> %s)
             """,
             (user_id, data.year, data.quarter, _MARKETPRICE_DELETED),
         )
@@ -990,7 +989,7 @@ async def save_market_prices(
                     UPDATE risp_marketprice SET
                       species = %s, market_level = %s, product = %s,
                       price_min = %s, price_max = %s, price_avg = %s,
-                      district_id = %s, location = %s, reference = %s,
+                      reference = %s,
                       program = %s, visibility = 'public',
                       created_at = COALESCE(created_at, %s),
                       updated_at = %s
@@ -1003,8 +1002,6 @@ async def save_market_prices(
                         row.price_min,
                         row.price_max,
                         row.price_avg,
-                        row.district_id,
-                        row.location,
                         row.reference,
                         program,
                         now,
@@ -1019,10 +1016,10 @@ async def save_market_prices(
                     """
                     INSERT INTO risp_marketprice
                       (user_id, country, year, quarter, species, market_level, product,
-                       price_min, price_max, price_avg, district_id, location, reference,
+                       price_min, price_max, price_avg, reference,
                        program, visibility, created_at, updated_at)
                     VALUES
-                      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s)
+                      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s)
                     """,
                     (
                         user_id,
@@ -1035,8 +1032,6 @@ async def save_market_prices(
                         row.price_min,
                         row.price_max,
                         row.price_avg,
-                        row.district_id,
-                        row.location,
                         row.reference,
                         program,
                         now,
@@ -1049,7 +1044,7 @@ async def save_market_prices(
             cursor.execute(
                 """
                 UPDATE risp_marketprice
-                SET location = %s, price_min = NULL, price_max = NULL, price_avg = NULL
+                SET reference = %s, price_min = NULL, price_max = NULL, price_avg = NULL
                 WHERE id = %s AND user_id = %s
                 """,
                 (_MARKETPRICE_DELETED, orphan_id, user_id),
@@ -1060,7 +1055,7 @@ async def save_market_prices(
             """
             SELECT * FROM risp_marketprice
             WHERE user_id = %s AND year = %s AND quarter = %s
-              AND (location IS NULL OR location <> %s)
+              AND (reference IS NULL OR reference <> %s)
             ORDER BY id
             """,
             (user_id, data.year, data.quarter, _MARKETPRICE_DELETED),
@@ -1085,7 +1080,7 @@ async def remove_market_price(
         cursor.execute(
             """
             UPDATE risp_marketprice
-            SET location = %s, price_min = NULL, price_max = NULL, price_avg = NULL
+            SET reference = %s, price_min = NULL, price_max = NULL, price_avg = NULL
             WHERE id = %s AND user_id = %s
             """,
             (_MARKETPRICE_DELETED, row_id, current_user.get("id")),

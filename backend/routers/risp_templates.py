@@ -393,6 +393,8 @@ def build_marketprice_workbook(
     year: Optional[str],
     quarter: Optional[str],
 ) -> openpyxl.Workbook:
+    # is_soi / districts unused: market prices are capital vs elsewhere, not per district
+    _ = (is_soi, districts)
     wb = openpyxl.Workbook()
     data_ws = wb.active
     data_ws.title = "Market prices"
@@ -406,31 +408,17 @@ def build_marketprice_workbook(
         "price_min",
         "price_max",
         "price_avg",
-        "location",
-        "province",
-        "district",
         "reference",
-        "district_id",
     ]
     _style_header_row(data_ws, headers)
     col = {h: get_column_letter(i + 1) for i, h in enumerate(headers)}
 
-    if is_soi and districts:
-        for row_idx, d in enumerate(districts, start=2):
-            data_ws.cell(row=row_idx, column=1, value=year or "")
-            data_ws.cell(row=row_idx, column=2, value=quarter or "")
-            data_ws.cell(row=row_idx, column=9, value=d["district_name"])
-            data_ws.cell(row=row_idx, column=10, value=d["province_name"])
-            data_ws.cell(row=row_idx, column=11, value=d["district_name"])
-            data_ws.cell(row=row_idx, column=13, value=d["district_id"])
-        row_start, row_end = 2, len(districts) + 1
-    else:
-        for row_idx in range(2, RISP_EMPTY_ROWS + 2):
-            if year:
-                data_ws.cell(row=row_idx, column=1, value=year)
-            if quarter:
-                data_ws.cell(row=row_idx, column=2, value=quarter)
-        row_start, row_end = 2, RISP_EMPTY_ROWS + 1
+    for row_idx in range(2, RISP_EMPTY_ROWS + 2):
+        if year:
+            data_ws.cell(row=row_idx, column=1, value=year)
+        if quarter:
+            data_ws.cell(row=row_idx, column=2, value=quarter)
+    row_start, row_end = 2, RISP_EMPTY_ROWS + 1
 
     lists_ws = _build_lists_sheet(wb)
     list_col = 1
@@ -443,10 +431,6 @@ def build_marketprice_workbook(
         range_ref = _write_list_column(lists_ws, list_col, options)
         _apply_list_validation(data_ws, col[key], row_start, row_end, range_ref)
         list_col += 1
-
-    if is_soi:
-        for row_idx in range(row_start, row_end + 1):
-            data_ws[f"{col['district_id']}{row_idx}"].fill = PatternFill("solid", fgColor="F3F4F6")
 
     _autosize_columns(data_ws)
     return wb
