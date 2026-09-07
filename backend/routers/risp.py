@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
