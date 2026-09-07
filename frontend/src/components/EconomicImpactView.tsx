@@ -127,8 +127,8 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
   const totalBarsWidth = barCount * barWidth + (barCount - 1) * barGap;
   const offsetX = marginLeft + (plotWidth - totalBarsWidth) / 2;
 
-  const palette = ['#2563EB', '#16A34A', '#9333EA', '#EA580C', '#0F766E', '#DC2626', '#DB2777', '#4B5563'];
-  const countryColor = (country: string) => palette[Math.abs(country.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % palette.length];
+  const PRICE_LIVE = '#2563EB';
+  const PRICE_MEAT = '#60A5FA';
 
   const legendCountries = countries.slice(0, 6);
   const hiddenCount = Math.max(0, countries.length - legendCountries.length);
@@ -203,9 +203,8 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
           );
         })}
 
-        {/* Country price lines: same color, live=solid, meat=dashed */}
+        {/* Price lines: always blue (live=solid, meat=dashed) — avoid clashing with red outbreak bars */}
         {countries.map((country) => {
-          const color = countryColor(country);
           const per = priceByCountryPeriod.get(country);
           if (!per) return null;
 
@@ -233,8 +232,8 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
 
           return (
             <g key={`lines-${country}`}>
-              {livePoints ? <polyline points={livePoints} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" opacity={0.9} /> : null}
-              {meatPoints ? <polyline points={meatPoints} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeDasharray="6 4" opacity={0.9} /> : null}
+              {livePoints ? <polyline points={livePoints} fill="none" stroke={PRICE_LIVE} strokeWidth={2} strokeLinejoin="round" opacity={0.95} /> : null}
+              {meatPoints ? <polyline points={meatPoints} fill="none" stroke={PRICE_MEAT} strokeWidth={2} strokeLinejoin="round" strokeDasharray="6 4" opacity={0.95} /> : null}
             </g>
           );
         })}
@@ -254,20 +253,19 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
         <g transform={`translate(${marginLeft + 10}, ${marginTop + 10})`}>
           <rect x={0} y={0} width={12} height={10} fill="#DC2626" rx={1} />
           <text x={16} y={9} fontSize={9} fill="#374151">Outbreaks</text>
-          <line x1={90} y1={5} x2={108} y2={5} stroke="#111827" strokeWidth={2} />
+          <line x1={90} y1={5} x2={108} y2={5} stroke={PRICE_LIVE} strokeWidth={2} />
           <text x={114} y={9} fontSize={9} fill="#374151">Live (solid)</text>
-          <line x1={180} y1={5} x2={198} y2={5} stroke="#111827" strokeWidth={2} strokeDasharray="6 4" />
+          <line x1={180} y1={5} x2={198} y2={5} stroke={PRICE_MEAT} strokeWidth={2} strokeDasharray="6 4" />
           <text x={204} y={9} fontSize={9} fill="#374151">Meat (dashed)</text>
         </g>
 
-        {/* Country color legend (limited) */}
+        {/* Country labels (prices are always blue) */}
         <g transform={`translate(${marginLeft + 10}, ${marginTop + 26})`}>
           {legendCountries.map((c, idx) => {
             const y = idx * 14;
-            const color = countryColor(c);
             return (
               <g key={`leg-${c}`} transform={`translate(0, ${y})`}>
-                <line x1={0} y1={7} x2={14} y2={7} stroke={color} strokeWidth={3} />
+                <line x1={0} y1={7} x2={14} y2={7} stroke={PRICE_LIVE} strokeWidth={3} />
                 <text x={18} y={10} fontSize={9} fill="#374151">{c}</text>
               </g>
             );
@@ -286,7 +284,7 @@ const OutbreakPriceChart: React.FC<{ data: OutbreakPriceRecord[] }> = ({ data })
             <text x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 14, tooltipData.y - 72)} fontSize={10} fontWeight="bold" fill="#1f2937">{tooltipData.periodLabel}</text>
             <text x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 28, tooltipData.y - 58)} fontSize={9} fill="#ef4444">Outbreaks: {tooltipData.outbreakCount}</text>
             {tooltipData.prices.slice(0, 3).map((p, idx) => (
-              <text key={`tp-${p.country}`} x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 42 + idx * 14, tooltipData.y - 44 + idx * 14)} fontSize={9} fill={countryColor(p.country)}>
+              <text key={`tp-${p.country}`} x={Math.min(tooltipData.x - 112, marginLeft + plotWidth - 252)} y={Math.max(marginTop + 42 + idx * 14, tooltipData.y - 44 + idx * 14)} fontSize={9} fill={PRICE_LIVE}>
                 {p.country}: L ${p.live?.toLocaleString() ?? '-'} / M ${p.meat?.toLocaleString() ?? '-'}
               </text>
             ))}

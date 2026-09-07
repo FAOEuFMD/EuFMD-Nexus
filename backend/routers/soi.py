@@ -82,6 +82,16 @@ def _opt_int(val: Any, default: int) -> int:
     return default
 
 
+def _disease_sql_clause(column: str, disease: Optional[str], params: list) -> Optional[str]:
+    """Match disease_name allowing 'Name - CODE' vs 'Name' variants."""
+    d = _opt_str(disease)
+    if not d:
+        return None
+    base = d.rsplit(" - ", 1)[0].strip() if " - " in d else d
+    params.extend([d, base, f"{base} - %", f"%{base}%"])
+    return f"({column} = %s OR {column} = %s OR {column} LIKE %s OR {column} LIKE %s)"
+
+
 async def _main(query: str, params=None):
     result = await db_helper.execute_main_query(query, params)
     if result["error"]:
@@ -157,6 +167,8 @@ async def get_vaccination():
               p.name AS Province,
               d.name AS District,
               v.year AS Year,
+              v.q1, v.q2, v.q3, v.q4,
+              v.disease_name AS Disease,
               v.vaccine_details AS Vaccination_Campaign,
               v.created_at AS Vaccination_Date,
               v.total AS Vaccination_Doses,
@@ -177,6 +189,11 @@ async def get_vaccination():
                     "Province": r.get("Province"),
                     "District": r.get("District"),
                     "Year": r.get("Year"),
+                    "Q1": r.get("q1"),
+                    "Q2": r.get("q2"),
+                    "Q3": r.get("q3"),
+                    "Q4": r.get("q4"),
+                    "Disease": r.get("Disease"),
                     "Vaccination_Campaign": r.get("Vaccination_Campaign"),
                     "Vaccination_Date": str(r["Vaccination_Date"])[:10] if r.get("Vaccination_Date") else None,
                     "Vaccination_Doses": r.get("Vaccination_Doses"),
@@ -335,17 +352,22 @@ async def get_herd_immunity_gap(
     country: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    disease: Optional[str] = Query(None),
 ):
     """Coverage per district from risp_vaccination (cattle-preferring; else all species)."""
     try:
         country = _opt_str(country)
         date_from = _opt_str(date_from)
         date_to = _opt_str(date_to)
+        disease = _opt_str(disease)
         where = [VACC_ACTIVE, "d.name IS NOT NULL", "v.country IS NOT NULL"]
         params: list = []
         if country:
             where.append("v.country = %s")
             params.append(country)
+        clause = _disease_sql_clause("v.disease_name", disease, params)
+        if clause:
+            where.append(clause)
         if date_from:
             where.append("v.year >= %s")
             params.append(date_from[:4])
@@ -498,15 +520,20 @@ def _outbreak_country_filters(
     country: Optional[str],
     date_from: Optional[str],
     date_to: Optional[str],
+    disease: Optional[str] = None,
 ) -> tuple[list[str], list]:
     country = _opt_str(country)
     date_from = _opt_str(date_from)
     date_to = _opt_str(date_to)
+    disease = _opt_str(disease)
     where = [OB_ACTIVE]
     params: list = []
     if country:
         where.append("o.country = %s")
         params.append(country)
+    clause = _disease_sql_clause("o.disease_name", disease, params)
+    if clause:
+        where.append(clause)
     if date_from:
         where.append("COALESCE(o.date_confirmed, o.date_suspected) >= %s")
         params.append(date_from)
@@ -522,10 +549,11 @@ async def get_response_time_distribution(
     country: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    disease: Optional[str] = Query(None),
     months: int = Query(12),
 ):
     try:
-        where, params = _outbreak_country_filters(country, date_from, date_to)
+        where, params = _outbreak_country_filters(country, date_from, date_to, disease)
         where.extend(
             [
                 "o.date_suspected IS NOT NULL",
@@ -588,10 +616,11 @@ async def get_confirmation_methods(
     country: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    disease: Optional[str] = Query(None),
     months: int = Query(12),
 ):
     try:
-        where, params = _outbreak_country_filters(country, date_from, date_to)
+        where, params = _outbreak_country_filters(country, date_from, date_to, disease)
         where.append("o.status IS NOT NULL")
         where_sql = " AND ".join(where)
         rows = await _main(
@@ -631,10 +660,11 @@ async def get_surveillance_trends(
     country: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    disease: Optional[str] = Query(None),
     months: int = Query(12),
 ):
     try:
-        where, params = _outbreak_country_filters(country, date_from, date_to)
+        where, params = _outbreak_country_filters(country, date_from, date_to, disease)
         where.append("o.date_confirmed IS NOT NULL")
         where.append("o.status IS NOT NULL")
         where_sql = " AND ".join(where)

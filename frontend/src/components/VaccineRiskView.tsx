@@ -260,6 +260,7 @@ interface VaccineRiskViewProps {
   filterCountry?: string;
   filterDateFrom?: string;
   filterDateTo?: string;
+  filterDisease?: string;
   /** Logged-in user's SOI nation — used for detail chart when filter is "all". */
   userSoiCountry?: string | null;
 }
@@ -268,6 +269,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({
   filterCountry,
   filterDateFrom,
   filterDateTo,
+  filterDisease,
   userSoiCountry,
 }) => {
   const [herdData, setHerdData] = useState<HerdImmunityRecord[]>([]);
@@ -290,6 +292,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({
         if (filterCountry && filterCountry !== 'all') params.append('country', filterCountry);
         if (filterDateFrom) params.append('date_from', filterDateFrom);
         if (filterDateTo) params.append('date_to', filterDateTo);
+        if (filterDisease) params.append('disease', filterDisease);
         const qs = params.toString();
         const [res, statusRes] = await Promise.all([
           fetch(`/api/tcc/herd-immunity-gap${qs ? '?' + qs : ''}`),
@@ -318,7 +321,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({
       }
     };
     fetchData();
-  }, [filterCountry, filterDateFrom, filterDateTo]);
+  }, [filterCountry, filterDateFrom, filterDateTo, filterDisease]);
 
   const effectiveDetailCountry = useMemo(() => {
     if (filterCountry && filterCountry !== 'all') return filterCountry;
@@ -387,7 +390,7 @@ const VaccineRiskView: React.FC<VaccineRiskViewProps> = ({
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-gray-800 font-martaBold">
-        Vaccine Effectiveness & Risk Analysis
+        Vaccine Coverage
       </h2>
 
       <div className="grid grid-cols-1 gap-6">

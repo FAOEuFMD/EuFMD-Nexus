@@ -7,7 +7,9 @@ import KPIBanner from '../components/KPIBanner';
 import VaccineRiskView from '../components/VaccineRiskView';
 import EconomicImpactView from '../components/EconomicImpactView';
 import SurveillanceQualityView from '../components/SurveillanceQualityView';
+import VaccinationOutbreakDynamics from '../components/VaccinationOutbreakDynamics';
 import { useAuthStore } from '../stores/authStore';
+import { diseaseOptions } from '../services/risp/rispService';
 import {
   ALLOWED_SOI_COUNTRIES,
   isAllowedGeoCountry,
@@ -16,6 +18,7 @@ import {
   vaccinationRegionKeyFromGeoFeature,
   vaccinationRegionKeyFromSoiRecord,
 } from '../utils/maps/soiChoroplethMatching';
+import { diseasesMatch } from '../utils/soiDiseaseMatch';
 
 // Fix for default markers in React Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -55,6 +58,11 @@ interface SoiDataRecord {
   SR_Estimated_Doses?: number;
   SR_Doses_Injected?: number;
   Vaccination_Doses?: number;
+  Coverage?: number;
+  Q1?: number;
+  Q2?: number;
+  Q3?: number;
+  Q4?: number;
   // Market price fields
   Quarter?: string;
   Reference?: string;
@@ -121,8 +129,21 @@ const RISPSOI: React.FC = () => {
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('spatial');
 
   const [filterCountry, setFilterCountry] = useState<string>('all');
+  const [filterDisease, setFilterDisease] = useState<string>(
+    'Foot-and-Mouth Disease - FMD'
+  );
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [countryDefaultApplied, setCountryDefaultApplied] = useState(false);
+
+  // Prefer the logged-in user's SOI country as the default filter
+  useEffect(() => {
+    if (countryDefaultApplied) return;
+    if (userSoiCountry) {
+      setFilterCountry(userSoiCountry);
+      setCountryDefaultApplied(true);
+    }
+  }, [userSoiCountry, countryDefaultApplied]);
 
   // Map layer toggles (default to checked so map shows data on load)
   const [showOutbreaks, setShowOutbreaks] = useState(true);
@@ -188,12 +209,13 @@ const RISPSOI: React.FC = () => {
     const counts: Record<string, number> = {};
     mapVaccination.forEach((r) => {
       if (!isAllowedSoiCountry(r.Country || '')) return;
+      if (filterDisease && r.Disease && !diseasesMatch(r.Disease, filterDisease)) return;
       const key = vaccinationRegionKeyFromSoiRecord(r.Country || '', r.Province);
       if (!key) return;
       counts[key] = (counts[key] || 0) + 1;
     });
     setVaccinationByProvince(counts);
-  }, [mapVaccination]);
+  }, [mapVaccination, filterDisease]);
 
   // Filter GeoJSON to admin_level 1 and attach vaccination counts for choropleth
   const adminBoundaryData = useMemo(() => {
@@ -228,28 +250,29 @@ const RISPSOI: React.FC = () => {
     return values.length > 0 ? Math.max(...values) : 1;
   }, [vaccinationByProvince]);
 
-  // Filtered map markers based on country and date filters
+  // Filtered map markers based on country, disease and date filters
   const filteredMapOutbreaks = useMemo(() => {
     return mapOutbreaks.filter((r) => {
       if (!r.Latitude || !r.Longitude) return false;
       if (filterCountry !== 'all' && r.Country !== filterCountry) return false;
+      if (filterDisease && r.Disease && !diseasesMatch(r.Disease, filterDisease)) return false;
       const recordDate = r.Date_Confirmed || r.Date_Suspected || '';
       if (filterDateFrom && recordDate < filterDateFrom) return false;
       if (filterDateTo && recordDate > filterDateTo) return false;
       return true;
     });
-  }, [mapOutbreaks, filterCountry, filterDateFrom, filterDateTo]);
+  }, [mapOutbreaks, filterCountry, filterDisease, filterDateFrom, filterDateTo]);
 
   const filteredMapVaccination = useMemo(() => {
     return mapVaccination.filter((r) => {
-      if (!r.Latitude || !r.Longitude) return false;
       if (filterCountry !== 'all' && r.Country !== filterCountry) return false;
+      if (filterDisease && r.Disease && !diseasesMatch(r.Disease, filterDisease)) return false;
       const recordDate = r.Vaccination_Date || '';
-      if (filterDateFrom && recordDate < filterDateFrom) return false;
-      if (filterDateTo && recordDate > filterDateTo) return false;
+      if (filterDateFrom && recordDate && recordDate < filterDateFrom) return false;
+      if (filterDateTo && recordDate && recordDate > filterDateTo) return false;
       return true;
     });
-  }, [mapVaccination, filterCountry, filterDateFrom, filterDateTo]);
+  }, [mapVaccination, filterCountry, filterDisease, filterDateFrom, filterDateTo]);
 
   const availableCountries = useMemo(() => ALLOWED_C, []);
 
@@ -295,7 +318,7 @@ const RISPSOI: React.FC = () => {
                   <MapContainer
                     key={`soi-map-${location.key}`}
                     center={[39.0, 35.0]}
-                    zoom={5}
+                    zoom={4}
                     scrollWheelZoom={true}
                     className="h-full w-full"
                     style={{ height: '24rem' }}
@@ -392,6 +415,7 @@ const RISPSOI: React.FC = () => {
                     filterCountry={filterCountry}
                     filterDateFrom={filterDateFrom}
                     filterDateTo={filterDateTo}
+                    filterDisease={filterDisease}
                     userSoiCountry={userSoiCountry}
                   />
                 </div>
@@ -414,6 +438,7 @@ const RISPSOI: React.FC = () => {
                     filterCountry={filterCountry}
                     filterDateFrom={filterDateFrom}
                     filterDateTo={filterDateTo}
+                    filterDisease={filterDisease}
                   />
                 </div>
               )}
@@ -458,6 +483,21 @@ const RISPSOI: React.FC = () => {
                       <option value="all">All Countries</option>
                       {availableCountries.map((c) => (
                         <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <p className="text-[9px] text-gray-400 mt-0.5 leading-snug">
+                      Defaults to your country. Choose another to explore.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Disease:</label>
+                    <select
+                      value={filterDisease}
+                      onChange={(e) => setFilterDisease(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-1.5 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      {diseaseOptions.map((d) => (
+                        <option key={d.id} value={d.name}>{d.name.replace(' - ', ' · ')}</option>
                       ))}
                     </select>
                   </div>
@@ -512,7 +552,14 @@ const RISPSOI: React.FC = () => {
               )}
 
               <button
-                onClick={() => { setFilterCountry('all'); setFilterDateFrom(''); setFilterDateTo(''); setShowOutbreaks(true); setShowVaccination(true); }}
+                onClick={() => {
+                  setFilterCountry(userSoiCountry || 'all');
+                  setFilterDisease('Foot-and-Mouth Disease - FMD');
+                  setFilterDateFrom('');
+                  setFilterDateTo('');
+                  setShowOutbreaks(true);
+                  setShowVaccination(true);
+                }}
                 className="px-2 py-1 text-[11px] font-medium bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
               >
                 Reset Filters
@@ -520,14 +567,25 @@ const RISPSOI: React.FC = () => {
             </div>
           </div>
           {dashboardTab === 'spatial' && (
-            <div className="mt-4 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <p className="text-sm text-gray-700 italic">
-                The boundaries and names shown and the designations used on this map do not imply the
-                expression of any opinion whatsoever on the part of FAO concerning the legal status of any
-                country, territory, city or area or of its authorities, or concerning the delimitation of its
-                frontiers and boundaries.
-              </p>
-            </div>
+            <>
+              <div className="mt-4 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-700 italic">
+                  The boundaries and names shown and the designations used on this map do not imply the
+                  expression of any opinion whatsoever on the part of FAO concerning the legal status of any
+                  country, territory, city or area or of its authorities, or concerning the delimitation of its
+                  frontiers and boundaries.
+                </p>
+              </div>
+              <VaccinationOutbreakDynamics
+                country={filterCountry}
+                disease={filterDisease}
+                dateFrom={filterDateFrom}
+                dateTo={filterDateTo}
+                outbreaks={mapOutbreaks}
+                vaccinations={mapVaccination}
+                userCountry={userSoiCountry}
+              />
+            </>
           )}
         </div>
     </div>
