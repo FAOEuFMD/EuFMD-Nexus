@@ -239,16 +239,17 @@ export const rispService = {
     }
   },
 
-  deleteVaccination: async (id: number) => {
+  removeVaccination: async (id: number) => {
     try {
-      const response = await apiService.risp.deleteRISPVaccination(id);
-      console.log('Vaccination campaign deleted successfully:', response.data);
+      const response = await apiService.risp.removeRISPVaccination(id);
+      console.log('Vaccination campaign removed successfully:', response.data);
       return { success: true };
     } catch (error) {
-      console.error('Error deleting vaccination campaign:', error);
+      console.error('Error removing vaccination campaign:', error);
       return { success: false, error: String(error) };
     }
   }
 };
+
 
 export default rispService;

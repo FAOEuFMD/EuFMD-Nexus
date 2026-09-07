@@ -1,16 +1,63 @@
-/** Formal TCC nation names used in SOI data -> GADM GeoJSON COUNTRY values */
+/** Nexus countries.name_un (and common aliases) -> GADM GeoJSON COUNTRY values */
 export const SOI_TO_GEO_COUNTRY: Record<string, string> = {
+  // Nexus / countries.name_un
+  Azerbaijan: 'Azerbaijan',
+  Armenia: 'Armenia',
+  Georgia: 'Georgia',
+  'Iran (Islamic Republic of)': 'Iran',
+  Iraq: 'Iraq',
+  Pakistan: 'Pakistan',
+  'Russian Federation': 'Russia',
+  Türkiye: 'Turkey',
+  // Legacy TCC formal names (keep matching during transition)
   'Azerbaijan, Republic of': 'Azerbaijan',
   'Armenia, Republic of': 'Armenia',
-  'Georgia': 'Georgia',
   'Iran, Islamic, Republic of': 'Iran',
   'Iraq, Republic of': 'Iraq',
   'Pakistan, Islamic, Republic of': 'Pakistan',
-  'Russian Federation': 'Russia',
   'Turkey, Republic of': 'Turkey',
+  Turkey: 'Turkey',
+  Iran: 'Iran',
 };
 
-export const ALLOWED_SOI_COUNTRIES = Object.keys(SOI_TO_GEO_COUNTRY);
+/** Prefer Nexus display names in the SOI country filter */
+export const ALLOWED_SOI_COUNTRIES = [
+  'Armenia',
+  'Azerbaijan',
+  'Georgia',
+  'Iran (Islamic Republic of)',
+  'Iraq',
+  'Pakistan',
+  'Russian Federation',
+  'Türkiye',
+];
+
+/** Map auth/profile country string to a filter country name. */
+export function matchSoiCountryName(userCountry?: string | null): string | null {
+  if (!userCountry?.trim()) return null;
+  const norm = userCountry.toLowerCase().trim();
+
+  // Exact / contains against allowed Nexus names first
+  for (const formal of ALLOWED_SOI_COUNTRIES) {
+    if (formal.toLowerCase() === norm) return formal;
+    const geo = (SOI_TO_GEO_COUNTRY[formal] || '').toLowerCase();
+    if (geo && (geo === norm || norm.includes(geo) || geo.includes(norm))) return formal;
+    const shortName = formal.split(/[,(]/)[0].toLowerCase().trim();
+    if (norm.includes(shortName) || shortName.includes(norm)) return formal;
+  }
+
+  // Fallback: any key in the map
+  for (const formal of Object.keys(SOI_TO_GEO_COUNTRY)) {
+    if (formal.toLowerCase() === norm) {
+      const geo = SOI_TO_GEO_COUNTRY[formal];
+      const preferred = ALLOWED_SOI_COUNTRIES.find(
+        (c) => SOI_TO_GEO_COUNTRY[c]?.toLowerCase() === geo.toLowerCase()
+      );
+      return preferred || formal;
+    }
+  }
+  return null;
+}
 
 /** Lowercase GADM country names included in the SOI choropleth */
 export const ALLOWED_GEO_COUNTRIES = new Set(
@@ -18,7 +65,7 @@ export const ALLOWED_GEO_COUNTRIES = new Set(
 );
 
 /**
- * Known mismatches between TCC province names and GADM NAME_1 values.
+ * Known mismatches between province names and GADM NAME_1 values.
  * Keys and values are canonical region names (see canonicalRegionName).
  */
 const REGION_ALIASES: Record<string, string> = {
@@ -54,7 +101,9 @@ export function toGeoCountry(soiCountry: string): string | null {
 }
 
 export function isAllowedSoiCountry(soiCountry: string): boolean {
-  return soiCountry in SOI_TO_GEO_COUNTRY;
+  if (soiCountry in SOI_TO_GEO_COUNTRY) return true;
+  // Accept any name that maps via match
+  return matchSoiCountryName(soiCountry) != null;
 }
 
 export function isAllowedGeoCountry(geoCountry: string): boolean {
@@ -68,7 +117,7 @@ export function vaccinationRegionKey(geoCountry: string, regionName: string): st
 
 export function vaccinationRegionKeyFromSoiRecord(country: string, province?: string): string | null {
   if (!province) return null;
-  const geoCountry = toGeoCountry(country);
+  const geoCountry = toGeoCountry(country) || toGeoCountry(matchSoiCountryName(country) || '');
   if (!geoCountry) return null;
   return vaccinationRegionKey(geoCountry, province);
 }

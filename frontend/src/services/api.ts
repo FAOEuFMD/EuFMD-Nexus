@@ -43,7 +43,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Only auto-redirect for non-upload endpoints
       // File upload errors should be handled by the component
-      if (!error.config?.url?.includes('/upload-data')) {
+      if (!error.config?.url?.includes('/upload-data') && !error.config?.url?.includes('/api/risp/upload/')) {
         // Clear token and redirect to login
         localStorage.removeItem('token');
         localStorage.removeItem('auth');
@@ -290,9 +290,52 @@ export const apiService = {
     updateRISPVaccination: (id: number, formData: any) =>
       api.put(`/api/risp/vaccinations/${id}`, formData),
     
-    deleteRISPVaccination: (id: number) =>
-      api.delete(`/api/risp/vaccinations/${id}`),
+    removeRISPVaccination: (id: number) =>
+      api.put(`/api/risp/vaccinations/${id}/remove`),
+
+    getProgramContext: () => api.get('/api/risp/program-context'),
+
+    getSoiDistricts: () => api.get('/api/risp/geo/districts'),
+
+    getMarketPrices: (year: string, quarter: string) =>
+      api.get(`/api/risp/marketprice?year=${year}&quarter=${quarter}`),
+
+    saveMarketPrices: (payload: any) =>
+      api.post('/api/risp/marketprice', payload),
+
+    removeMarketPrice: (id: number) =>
+      api.put(`/api/risp/marketprice/${id}/remove`),
+
+    downloadTemplate: (
+      category: 'outbreaks' | 'vaccination' | 'marketprice',
+      params?: { year?: string; quarter?: string }
+    ) => {
+      const search = new URLSearchParams();
+      if (params?.year) search.set('year', params.year);
+      if (params?.quarter) search.set('quarter', params.quarter);
+      const qs = search.toString();
+      return api.get(`/api/risp/templates/${category}${qs ? `?${qs}` : ''}`, {
+        responseType: 'blob',
+      });
+    },
+
+    uploadBulk: (
+      category: 'outbreaks' | 'vaccination' | 'marketprice',
+      file: File,
+      params?: { year?: string; quarter?: string }
+    ) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const search = new URLSearchParams();
+      if (params?.year) search.set('year', params.year);
+      if (params?.quarter) search.set('quarter', params.quarter);
+      const qs = search.toString();
+      return api.post(`/api/risp/upload/${category}${qs ? `?${qs}` : ''}`, formData, {
+        transformRequest: [(data) => data],
+      });
+    },
   },
+
 
   // THRACE endpoints
   thrace: {

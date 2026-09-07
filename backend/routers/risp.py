@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 import json
@@ -6,6 +6,7 @@ from datetime import datetime
 from auth import get_current_user
 import pymysql
 from config import settings
+from routers import risp_templates, risp_upload
 
 router = APIRouter(prefix="/api/risp", tags=["risp"])
 
@@ -25,16 +26,148 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
 
+
+def _resolve_is_soi(country: Optional[str]) -> bool:
+    if not country:
+        return False
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT soi FROM countries
+            WHERE name_un = %s OR name_moodle = %s
+               OR (%s LIKE '%%Iraq%%' AND iso3 = 'IRQ')
+               OR (%s LIKE '%%rkiye%%' AND iso3 = 'TUR')
+               OR (%s = 'Turkey' AND iso3 = 'TUR')
+            LIMIT 1
+            """,
+            (country, country, country, country, country),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        if row and row.get("soi") == 1:
+            return True
+    except Exception:
+        pass
+    c = country.lower()
+    hints = (
+        "armenia", "azerbaijan", "bulgaria", "georgia", "greece",
+        "iran", "iraq", "pakistan", "russia", "turkey", "türkiye", "turkiye",
+    )
+    return any(h in c for h in hints)
+
+
+@router.get("/program-context")
+async def program_context(current_user: dict = Depends(get_current_user)):
+    """Whether the logged-in user's country is flagged SOI (same UI, different welcome text)."""
+    country = current_user.get("country")
+    is_soi = _resolve_is_soi(country)
+    return {
+        "country": country,
+        "is_soi": is_soi,
+        "program": "soi" if is_soi else "risp",
+    }
+
+
+@router.get("/templates/{category}")
+async def download_risp_template(
+    category: str,
+    year: Optional[str] = Query(None),
+    quarter: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate an Excel template tailored to SOI (per-district rows) or RISP (location presets)."""
+    country = current_user.get("country")
+    is_soi = _resolve_is_soi(country)
+    districts: List[Dict[str, Any]] = []
+
+    if is_soi:
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            country_id = risp_templates._resolve_country_id(cursor, country)
+            if country_id:
+                districts = risp_templates._fetch_soi_districts(cursor, country_id)
+            cursor.close()
+            connection.close()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not load district list: {e}")
+
+    return risp_templates.generate_template_response(
+        category,
+        is_soi=is_soi,
+        districts=districts,
+        year=year,
+        quarter=quarter,
+        country=country,
+    )
+
+
+@router.post("/upload/{category}")
+async def upload_risp_bulk(
+    category: str,
+    file: UploadFile = File(...),
+    year: Optional[str] = Query(None),
+    quarter: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Import a filled Excel template for outbreaks, vaccination, or market prices."""
+    country = current_user.get("country")
+    is_soi = _resolve_is_soi(country)
+    return await risp_upload.process_upload(
+        category,
+        file,
+        current_user=current_user,
+        is_soi=is_soi,
+        get_db_connection=get_db_connection,
+        default_year=year,
+        default_quarter=quarter,
+    )
+
+
+@router.get("/geo/districts")
+async def get_country_districts(current_user: dict = Depends(get_current_user)):
+    """Districts for the logged-in user's country (SOI geo from db_manager)."""
+    country = current_user.get("country")
+    if not _resolve_is_soi(country):
+        return []
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        country_id = risp_templates._resolve_country_id(cursor, country)
+        if not country_id:
+            cursor.close()
+            connection.close()
+            return []
+        districts = risp_templates._fetch_soi_districts(cursor, country_id)
+        cursor.close()
+        connection.close()
+        return districts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading districts: {e}")
+
 # Pydantic models for request/response
 class OutbreakDiseaseData(BaseModel):
     disease: str
     number_outbreaks: int
     locations: Optional[List[str]] = []
+    location: Optional[str] = None
     species: List[str]
     status: List[str]
     serotype: List[str]
     control_measures: List[str]
     comments: str  # This maps to additional_info in the database
+    date_suspected: Optional[str] = None
+    date_confirmed: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    district_id: Optional[int] = None
+    province_id: Optional[int] = None
+    program: Optional[str] = "risp"
+    visibility: Optional[str] = "public"
 
 class OutbreakData(BaseModel):
     type: str
@@ -65,7 +198,14 @@ class VaccinationCampaign(BaseModel):
     country: Optional[str] = None
     status: Optional[str] = None
     vaccination_type: Optional[str] = None
+    # One location per row: National / one region / one district name.
+    # geographical_areas kept for compat (store 0–1 item); prefer `location`.
+    location: Optional[str] = None
     geographical_areas: Optional[List[str]] = []
+    province_id: Optional[int] = None
+    district_id: Optional[int] = None
+    program: Optional[str] = "risp"
+    visibility: Optional[str] = "public"
     species: Optional[List[str]] = []
     vaccine_details: Optional[str] = None
     q1: Optional[int] = 0
@@ -74,6 +214,19 @@ class VaccinationCampaign(BaseModel):
     q4: Optional[int] = 0
     total: Optional[int] = 0
     coverage: Optional[int] = 0
+
+
+def _normalize_vaccination_location(campaign: VaccinationCampaign) -> tuple[Optional[str], list]:
+    """Enforce single location per vaccination row."""
+    loc = (campaign.location or "").strip() or None
+    areas = [str(a).strip() for a in (campaign.geographical_areas or []) if a and str(a).strip()]
+    if not loc and areas:
+        loc = areas[0]
+    if loc:
+        areas = [loc]
+    else:
+        areas = []
+    return loc, areas
 
 # Outbreak endpoints
 @router.get("/outbreaks")
@@ -88,10 +241,13 @@ async def get_outbreak_data(
         cursor = connection.cursor()
         
         query = """
-        SELECT user_id, country, year, quarter, disease_name, number_outbreaks, 
-               locations, status, serotype, species, control_measures, additional_info 
+        SELECT id, user_id, country, year, quarter, disease_name, number_outbreaks,
+               location, locations, status, serotype, species, control_measures, additional_info,
+               date_suspected, date_confirmed, latitude, longitude,
+               province_id, district_id, program, visibility
         FROM risp_outbreaks 
         WHERE user_id = %s AND year = %s AND quarter = %s
+        ORDER BY disease_name, id
         """
         
         cursor.execute(query, (current_user.get('id'), year, quarter))
@@ -110,57 +266,133 @@ async def save_outbreak_data(
     data: OutbreakData,
     current_user: dict = Depends(get_current_user)
 ):
-    """Save outbreak data"""
+    """Save outbreak data — one location per disease line from the grid UI.
+
+    Uses UPDATE/INSERT only (no DELETE): db_manager_user lacks DELETE privilege.
+    Extra historical rows for the same disease/period are zeroed via UPDATE.
+    """
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
         
-        # Get user info
         user_id = current_user.get('id')
         country = current_user.get('country')
+        is_soi = _resolve_is_soi(country)
+        default_program = 'soi' if is_soi else 'risp'
         
-        # If no diseases provided, return success
         if not data.diseases or len(data.diseases) == 0:
             return {"message": "No outbreak data to save"}
-        
-        # Prepare values for batch insert/update using INSERT ON DUPLICATE KEY UPDATE
-        values = []
+
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
         for disease_data in data.diseases:
-            values.extend([
-                user_id,
-                country,
-                data.year,
-                data.quarter,
-                disease_data.disease,
-                disease_data.number_outbreaks,
-                json.dumps(disease_data.locations or []),
+            loc = (disease_data.location or "").strip() or None
+            areas = [str(a).strip() for a in (disease_data.locations or []) if a and str(a).strip()]
+            if not loc and areas:
+                loc = areas[0]
+            if loc:
+                areas = [loc]
+            else:
+                areas = []
+
+            program = disease_data.program if disease_data.program in ('risp', 'soi') else default_program
+            visibility = disease_data.visibility if disease_data.visibility in ('private', 'public') else 'public'
+
+            cursor.execute(
+                """
+                SELECT id FROM risp_outbreaks
+                WHERE user_id = %s AND year = %s AND quarter = %s AND disease_name = %s
+                ORDER BY id
+                """,
+                (user_id, str(data.year), data.quarter, disease_data.disease),
+            )
+            existing_ids = [row["id"] if isinstance(row, dict) else row[0] for row in (cursor.fetchall() or [])]
+
+            clear_only = disease_data.number_outbreaks <= 0 and not areas
+            data_values = (
+                disease_data.number_outbreaks if not clear_only else 0,
+                json.dumps(areas if not clear_only else []),
+                loc if not clear_only else None,
                 json.dumps(disease_data.status or []),
                 json.dumps(disease_data.serotype or []),
                 json.dumps(disease_data.species or []),
                 json.dumps(disease_data.control_measures or []),
-                disease_data.comments or ""
-            ])
+                disease_data.comments or "",
+                disease_data.date_suspected,
+                disease_data.date_confirmed,
+                disease_data.latitude,
+                disease_data.longitude,
+                disease_data.province_id,
+                disease_data.district_id,
+                program,
+                visibility,
+            )
+
+            if existing_ids:
+                cursor.execute(
+                    """
+                    UPDATE risp_outbreaks SET
+                      number_outbreaks = %s,
+                      locations = %s,
+                      location = %s,
+                      status = %s,
+                      serotype = %s,
+                      species = %s,
+                      control_measures = %s,
+                      additional_info = %s,
+                      date_suspected = %s,
+                      date_confirmed = %s,
+                      latitude = %s,
+                      longitude = %s,
+                      province_id = %s,
+                      district_id = %s,
+                      program = %s,
+                      visibility = %s,
+                      created_at = COALESCE(created_at, %s),
+                      updated_at = %s
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    data_values + (now, now, existing_ids[0], user_id),
+                )
+                # Soft-clear sibling rows (e.g. former multi-location splits)
+                if len(existing_ids) > 1:
+                    placeholders = ", ".join(["%s"] * (len(existing_ids) - 1))
+                    cursor.execute(
+                        f"""
+                        UPDATE risp_outbreaks SET
+                          number_outbreaks = 0,
+                          locations = %s,
+                          location = NULL,
+                          updated_at = %s
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        """,
+                        (json.dumps([]), now, user_id, *existing_ids[1:]),
+                    )
+            elif not clear_only:
+                cursor.execute(
+                    """
+                    INSERT INTO risp_outbreaks
+                      (user_id, country, year, quarter, disease_name, number_outbreaks,
+                       locations, location, status, serotype, species, control_measures, additional_info,
+                       date_suspected, date_confirmed, latitude, longitude,
+                       province_id, district_id, program, visibility, created_at, updated_at)
+                    VALUES
+                      (%s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        user_id,
+                        country,
+                        str(data.year),
+                        data.quarter,
+                        disease_data.disease,
+                    )
+                    + data_values
+                    + (now, now),
+                )
         
-        # Create placeholders for multiple records
-        num_diseases = len(data.diseases)
-        placeholders = ", ".join(["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * num_diseases)
-        
-        query = f"""
-        INSERT INTO risp_outbreaks 
-        (user_id, country, year, quarter, disease_name, number_outbreaks, 
-         locations, status, serotype, species, control_measures, additional_info)
-        VALUES {placeholders}
-        ON DUPLICATE KEY UPDATE
-        number_outbreaks = VALUES(number_outbreaks),
-        locations = VALUES(locations),
-        status = VALUES(status),
-        serotype = VALUES(serotype),
-        species = VALUES(species),
-        control_measures = VALUES(control_measures),
-        additional_info = VALUES(additional_info)
-        """
-        
-        cursor.execute(query, values)
         connection.commit()
         cursor.close()
         connection.close()
@@ -170,7 +402,6 @@ async def save_outbreak_data(
     except Exception as e:
         print(f"Error saving outbreak data: {str(e)}")
         print(f"Data received: {data}")
-        print(f"Values prepared: {values}")
         raise HTTPException(status_code=500, detail=f"Error saving outbreak data: {str(e)}")
 
 # Surveillance endpoints
@@ -276,8 +507,12 @@ async def get_vaccination_campaigns(
         connection = get_db_connection()
         cursor = connection.cursor()
         
-        query = "SELECT * FROM risp_vaccination WHERE user_id = %s"
-        cursor.execute(query, (current_user.get('id'),))
+        query = """
+            SELECT * FROM risp_vaccination
+            WHERE user_id = %s
+              AND (location IS NULL OR location <> %s)
+        """
+        cursor.execute(query, (current_user.get('id'), "__deleted__"))
         results = cursor.fetchall()
         
         # Parse JSON strings back into arrays/objects
@@ -294,9 +529,12 @@ async def get_vaccination_campaigns(
                 except (json.JSONDecodeError, TypeError):
                     return default_value
             
+            areas = safe_json_parse(campaign.get('geographical_areas'))
+            location = campaign.get('location') or (areas[0] if areas else None)
             parsed_campaign = {
                 **campaign,
-                'geographical_areas': safe_json_parse(campaign.get('geographical_areas')),
+                'location': location,
+                'geographical_areas': areas[:1] if areas else ([] if not location else [location]),
                 'species': safe_json_parse(campaign.get('species'))
             }
             parsed_results.append(parsed_campaign)
@@ -329,6 +567,9 @@ async def add_vaccination_campaign(
         
         # Get current timestamp in MySQL format
         current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        location, areas = _normalize_vaccination_location(campaign)
+        program = campaign.program if campaign.program in ('risp', 'soi') else 'risp'
+        visibility = campaign.visibility if campaign.visibility in ('private', 'public') else 'public'
         
         # Prepare the campaign data
         campaign_data = {
@@ -338,7 +579,12 @@ async def add_vaccination_campaign(
             'year': campaign.year,
             'status': campaign.status or None,
             'vaccination_type': campaign.vaccination_type,
-            'geographical_areas': json.dumps(campaign.geographical_areas or []),
+            'geographical_areas': json.dumps(areas),
+            'location': location,
+            'province_id': campaign.province_id,
+            'district_id': campaign.district_id,
+            'program': program,
+            'visibility': visibility,
             'species': json.dumps(campaign.species or []),
             'vaccine_details': campaign.vaccine_details or None,
             'q1': campaign.q1 or 0,
@@ -404,6 +650,9 @@ async def update_vaccination_campaign(
             raise HTTPException(status_code=403, detail="Not authorized to update this campaign")
         
         existing_created_at = verify_result.get('created_at')
+        location, areas = _normalize_vaccination_location(campaign)
+        program = campaign.program if campaign.program in ('risp', 'soi') else 'risp'
+        visibility = campaign.visibility if campaign.visibility in ('private', 'public') else 'public'
         
         # Prepare the update data
         campaign_data = {
@@ -412,7 +661,12 @@ async def update_vaccination_campaign(
             'year': campaign.year,
             'status': campaign.status or None,
             'vaccination_type': campaign.vaccination_type,
-            'geographical_areas': json.dumps(campaign.geographical_areas or []),
+            'geographical_areas': json.dumps(areas),
+            'location': location,
+            'province_id': campaign.province_id,
+            'district_id': campaign.district_id,
+            'program': program,
+            'visibility': visibility,
             'species': json.dumps(campaign.species or []),
             'vaccine_details': campaign.vaccine_details or None,
             'q1': campaign.q1 or 0,
@@ -447,12 +701,12 @@ async def update_vaccination_campaign(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating vaccination campaign: {str(e)}")
 
-@router.delete("/vaccinations/{campaign_id}")
-async def delete_vaccination_campaign(
+@router.put("/vaccinations/{campaign_id}/remove")
+async def remove_vaccination_campaign(
     campaign_id: int,
     current_user: dict = Depends(get_current_user)
 ):
-    """Delete a vaccination campaign"""
+    """Mark a vaccination campaign as removed via UPDATE only (no SQL DELETE)."""
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
@@ -465,20 +719,25 @@ async def delete_vaccination_campaign(
         verify_result = cursor.fetchone()
         
         if not verify_result:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this campaign")
+            raise HTTPException(status_code=403, detail="Not authorized to remove this campaign")
         
-        # Delete the campaign
-        delete_query = "DELETE FROM risp_vaccination WHERE id = %s AND user_id = %s"
-        cursor.execute(delete_query, (campaign_id, user_id))
+        cursor.execute(
+            """
+            UPDATE risp_vaccination
+            SET location = %s, geographical_areas = %s, q1 = 0, q2 = 0, q3 = 0, q4 = 0, total = 0
+            WHERE id = %s AND user_id = %s
+            """,
+            ("__deleted__", json.dumps([]), campaign_id, user_id),
+        )
         connection.commit()
         
         cursor.close()
         connection.close()
         
-        return {"message": "Vaccination campaign deleted successfully"}
+        return {"message": "Vaccination campaign removed"}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting vaccination campaign: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error removing vaccination campaign: {str(e)}")
 
 
 @router.get("/dashboard")
@@ -637,3 +896,198 @@ async def get_risp_dashboard():
         print(f"Error fetching RISP dashboard data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching RISP dashboard data: {str(e)}")
 
+# --- Market prices (normalized risp_marketprice) ---
+
+class MarketPriceRow(BaseModel):
+    id: Optional[int] = None
+    species: str
+    market_level: str
+    product: str
+    price_min: Optional[float] = None
+    price_max: Optional[float] = None
+    price_avg: Optional[float] = None
+    reference: Optional[str] = None
+
+
+class MarketPriceBatch(BaseModel):
+    year: str
+    quarter: str
+    rows: List[MarketPriceRow]
+
+
+# Soft-delete marker — DB user has no DELETE privilege on risp_* tables.
+# Stored in `reference` (district/location columns removed from the model).
+_MARKETPRICE_DELETED = "__deleted__"
+
+
+@router.get("/marketprice")
+async def get_market_prices(
+    year: str = Query(...),
+    quarter: str = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM risp_marketprice
+            WHERE user_id = %s AND year = %s AND quarter = %s
+              AND (reference IS NULL OR reference <> %s)
+            ORDER BY id
+            """,
+            (current_user.get("id"), year, quarter, _MARKETPRICE_DELETED),
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        return rows
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching market prices: {str(e)}")
+
+
+@router.post("/marketprice")
+async def save_market_prices(
+    data: MarketPriceBatch,
+    current_user: dict = Depends(get_current_user),
+):
+    """Upsert market price lines for year/quarter (UPDATE/INSERT; no DELETE privilege)."""
+    try:
+        user_id = current_user.get("id")
+        country = current_user.get("country")
+        is_soi = _resolve_is_soi(country)
+        program = "soi" if is_soi else "risp"
+
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT id FROM risp_marketprice
+            WHERE user_id = %s AND year = %s AND quarter = %s
+              AND (reference IS NULL OR reference <> %s)
+            """,
+            (user_id, data.year, data.quarter, _MARKETPRICE_DELETED),
+        )
+        existing_ids = {
+            (row["id"] if isinstance(row, dict) else row[0])
+            for row in (cursor.fetchall() or [])
+        }
+        kept_ids = set()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for row in data.rows:
+            if row.species not in ("cattle", "sheep", "pig"):
+                continue
+            if row.market_level not in ("district", "capital"):
+                continue
+            if row.product not in ("live", "meat"):
+                continue
+
+            if row.id and row.id in existing_ids:
+                cursor.execute(
+                    """
+                    UPDATE risp_marketprice SET
+                      species = %s, market_level = %s, product = %s,
+                      price_min = %s, price_max = %s, price_avg = %s,
+                      reference = %s,
+                      program = %s, visibility = 'public',
+                      created_at = COALESCE(created_at, %s),
+                      updated_at = %s
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (
+                        row.species,
+                        row.market_level,
+                        row.product,
+                        row.price_min,
+                        row.price_max,
+                        row.price_avg,
+                        row.reference,
+                        program,
+                        now,
+                        now,
+                        row.id,
+                        user_id,
+                    ),
+                )
+                kept_ids.add(row.id)
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO risp_marketprice
+                      (user_id, country, year, quarter, species, market_level, product,
+                       price_min, price_max, price_avg, reference,
+                       program, visibility, created_at, updated_at)
+                    VALUES
+                      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'public', %s, %s)
+                    """,
+                    (
+                        user_id,
+                        country,
+                        data.year,
+                        data.quarter,
+                        row.species,
+                        row.market_level,
+                        row.product,
+                        row.price_min,
+                        row.price_max,
+                        row.price_avg,
+                        row.reference,
+                        program,
+                        now,
+                        now,
+                    ),
+                )
+
+        # Soft-remove rows dropped from the form
+        for orphan_id in existing_ids - kept_ids:
+            cursor.execute(
+                """
+                UPDATE risp_marketprice
+                SET reference = %s, price_min = NULL, price_max = NULL, price_avg = NULL
+                WHERE id = %s AND user_id = %s
+                """,
+                (_MARKETPRICE_DELETED, orphan_id, user_id),
+            )
+
+        connection.commit()
+        cursor.execute(
+            """
+            SELECT * FROM risp_marketprice
+            WHERE user_id = %s AND year = %s AND quarter = %s
+              AND (reference IS NULL OR reference <> %s)
+            ORDER BY id
+            """,
+            (user_id, data.year, data.quarter, _MARKETPRICE_DELETED),
+        )
+        saved = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        return {"message": "Market prices saved", "data": saved}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving market prices: {str(e)}")
+
+
+@router.put("/marketprice/{row_id}/remove")
+async def remove_market_price(
+    row_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Mark a market-price row as removed via UPDATE only (no SQL DELETE)."""
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            UPDATE risp_marketprice
+            SET reference = %s, price_min = NULL, price_max = NULL, price_avg = NULL
+            WHERE id = %s AND user_id = %s
+            """,
+            (_MARKETPRICE_DELETED, row_id, current_user.get("id")),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return {"message": "Removed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error removing market price: {str(e)}")

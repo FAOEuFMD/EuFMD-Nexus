@@ -5,7 +5,6 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '../stores/authStore';
-import { isSeenRispUser, SEEN_RISP_PORTAL_PATH } from '../utils/seenUser';
 
 // MapDisabler removed to allow full map interaction
 
@@ -137,7 +136,6 @@ const MapController: React.FC<{ filteredData: FastReportData[] }> = ({ filteredD
 
 const RISPLanding: React.FC = () => {
   const { user } = useAuthStore();
-  const showPortalLink = isSeenRispUser(user);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FastReportData[]>([]);
   const [surveillanceData, setSurveillanceData] = useState<any>({});
@@ -446,11 +444,6 @@ const RISPLanding: React.FC = () => {
         
         {/* Share Information Button - Moved to the right */}
         <div className="flex justify-end space-x-2">
-          {showPortalLink && (
-            <Link to={SEEN_RISP_PORTAL_PATH} className="nav-btn">
-              Choose report type
-            </Link>
-          )}
           <a
             href="/RISP_Template.xlsx"
             download

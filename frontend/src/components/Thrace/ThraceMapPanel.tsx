@@ -45,10 +45,10 @@ const MARKER_RADIUS = 4;
 const CHECKBOX_STYLE: React.CSSProperties = { accentColor: '#15736d' };
 
 function visitIntensityColor(visits: number): string {
-  if (visits <= 0) return '#ef4444'; // red — unvisited
-  if (visits <= 2) return '#22c55e'; // green 1–2
-  if (visits <= 4) return '#eab308'; // yellow 3–4
-  if (visits <= 6) return '#9ca3af'; // gray 5–6
+  if (visits <= 0) return '#ef4444'; // red — 0
+  if (visits <= 2) return '#eab308'; // yellow 1–2
+  if (visits <= 4) return '#f97316'; // orange 3–4
+  if (visits <= 6) return '#22c55e'; // green 5–6
   return '#7c3aed'; // purple 7+
 }
 
@@ -187,9 +187,9 @@ const ThraceMapPanel: React.FC<ThraceMapPanelProps> = ({ onClose }) => {
     }
     return [
       { label: '0 visits', color: '#ef4444' },
-      { label: '1–2 visits', color: '#22c55e' },
-      { label: '3–4 visits', color: '#eab308' },
-      { label: '5–6 visits', color: '#9ca3af' },
+      { label: '1–2 visits', color: '#eab308' },
+      { label: '3–4 visits', color: '#f97316' },
+      { label: '5–6 visits', color: '#22c55e' },
       { label: '7+ visits', color: '#7c3aed' },
     ];
   }, [mode]);

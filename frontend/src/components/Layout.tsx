@@ -121,7 +121,6 @@ const getPageTitle = (pathname: string): string => {
     'getprepared': 'GetPrepared',
     'monitoring': 'Monitoring',
     'risp': 'RISP',
-    'risp/portal': 'RISP Reporting',
     'risp/outbreak': 'RISP - Outbreak Entry',
     'risp/vaccination': 'RISP - Vaccination', 
     'risp/surveillance': 'RISP - Surveillance',

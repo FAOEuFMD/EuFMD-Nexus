@@ -1,12 +1,74 @@
-from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, status, Query
+from typing import List, Dict, Any, Optional
+import ast
 import httpx
 from datetime import datetime
 from models import FastReportEntry, ResponseModel
 from auth import get_current_user
 from database import db_helper
+from services.beacon_client import fetch_beacon_news
 
 router = APIRouter(prefix="/api/fast-report", tags=["fast-report"])
+
+# WAHIS disease labels → FAST short codes used by the map layers
+_INFUR_DISEASE_MAP = (
+    ("foot and mouth", "FMD"),
+    ("lumpy skin", "LSD"),
+    ("peste des petits", "PPR"),
+    ("rift valley", "RVF"),
+    ("sheep pox", "SPGP"),
+    ("goat pox", "SPGP"),
+)
+
+# INFUR dump may include non-European countries; keep Europe-only for Now map
+_INFUR_NON_EUROPE = {
+    "israel",
+    "mauritania",
+    "algeria",
+    "lebanon",
+    "palestine",
+    "mali",
+    "sudan",
+    "south sudan (rep. of)",
+    "south sudan",
+}
+
+
+def _map_infur_disease(raw: Optional[str]) -> Optional[str]:
+    name = (raw or "").lower()
+    for needle, code in _INFUR_DISEASE_MAP:
+        if needle in name:
+            return code
+    return None
+
+
+def _parse_wahis_dict_label(raw: Optional[str]) -> Optional[str]:
+    """Extract translation/keyValue from WAHIS dict-like strings stored as text."""
+    if not raw or not str(raw).strip():
+        return None
+    text = str(raw).strip()
+    try:
+        parsed = ast.literal_eval(text)
+        if isinstance(parsed, dict):
+            return parsed.get("translation") or parsed.get("keyValue") or None
+    except (ValueError, SyntaxError):
+        pass
+    return text if len(text) < 80 else None
+
+
+def _current_semester_start(now: Optional[datetime] = None) -> str:
+    now = now or datetime.utcnow()
+    month = 1 if now.month < 7 else 7
+    return f"{now.year:04d}-{month:02d}-01"
+
+
+def _parse_iso_date_prefix(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:10]
+    return None
 
 async def fetch_iso3_coordinates(iso3_codes: List[str]) -> Dict[str, Any]:
     """Fetch country GeoJSON data from UN service"""
@@ -279,5 +341,236 @@ async def create_dashboard():
             "countryGeojson": country_geojson
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/country-boundaries")
+async def get_country_boundaries(iso3: Optional[str] = None):
+    """
+    Proxy UN ClearMap layer 109 country polygons as GeoJSON (WGS84).
+    Avoids browser CORS / oversized direct calls. Pass comma-separated ISO3 codes.
+    Batches requests so PCP world views (80+ countries) are not truncated.
+    """
+    codes: List[str] = []
+    if iso3:
+        codes = [c.strip().upper() for c in iso3.split(",") if c.strip()]
+    if not codes:
+        raise HTTPException(status_code=400, detail="Provide iso3 query param, e.g. iso3=TUR,EGY")
+
+    # Deduplicate, keep a generous upper bound for PCP world maps
+    codes = list(dict.fromkeys(codes))[:150]
+    batch_size = 40
+    all_features: List[dict] = []
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            for i in range(0, len(codes), batch_size):
+                batch = codes[i : i + batch_size]
+                codes_sql = "','".join(batch)
+                url = (
+                    "https://geoservices.un.org/arcgis/rest/services/ClearMap_WebTopo/MapServer/109/query"
+                    f"?where=ISO3CD%20IN%20('{codes_sql}')"
+                    "&outFields=ISO3CD,ROMNAM"
+                    "&returnGeometry=true"
+                    "&outSR=4326"
+                    "&f=geojson"
+                )
+                response = await client.get(url)
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict) or data.get("type") != "FeatureCollection":
+                    raise HTTPException(
+                        status_code=502, detail="UN GeoServices returned invalid GeoJSON"
+                    )
+                features = data.get("features") or []
+                for f in features:
+                    if (
+                        isinstance(f, dict)
+                        and f.get("type") == "Feature"
+                        and f.get("geometry")
+                        and f.get("properties")
+                    ):
+                        all_features.append(f)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"UN GeoServices request failed: {e}")
+
+    return {"type": "FeatureCollection", "features": all_features}
+
+
+def _quarter_date_bounds(year: int, quarter: int) -> tuple[str, str]:
+    bounds = {
+        1: (f"{year}-01-01", f"{year}-03-31"),
+        2: (f"{year}-04-01", f"{year}-06-30"),
+        3: (f"{year}-07-01", f"{year}-09-30"),
+        4: (f"{year}-10-01", f"{year}-12-31"),
+    }
+    return bounds[quarter]
+
+
+def _infur_matches_historical_period(
+    outbreak_start: Optional[str],
+    year: Optional[int],
+    quarter: Optional[int],
+) -> bool:
+    if not outbreak_start:
+        return False
+    if year is not None:
+        if quarter is not None:
+            start, end = _quarter_date_bounds(year, quarter)
+            return start <= outbreak_start <= end
+        return outbreak_start.startswith(f"{year:04d}-")
+    if quarter is not None:
+        try:
+            month = int(outbreak_start[5:7])
+        except (TypeError, ValueError):
+            return False
+        q = 1 if month <= 3 else 2 if month <= 6 else 3 if month <= 9 else 4
+        return q == quarter
+    return True
+
+
+@router.get("/infur")
+async def get_infur_outbreaks(
+    mode: str = Query("now", description="now = current semester; historical = year/quarter archive"),
+    year: Optional[int] = Query(None, ge=1990, le=2100),
+    quarter: Optional[int] = Query(None, ge=1, le=4),
+):
+    """
+    WAHIS immediate notifications (INFUR) for the Europe map.
+    Now: current semester + ongoing events. Historical: filter by outbreak start year/quarter.
+    """
+    try:
+        historical = mode.strip().lower() == "historical"
+        semester_start = _current_semester_start()
+        semester_label = f"{semester_start[:4]}-{'H1' if semester_start[5:7] == '01' else 'H2'}"
+
+        result = await db_helper.execute_main_query(
+            """
+            SELECT
+              eventId, reportId, reportType, reportNumber, reportStatus,
+              submissionDate, eventStartDate, eventStatus, country, disease, reason,
+              outbreakId, outbreakReference, nationalReference,
+              adminDivision, location, locationApprox, latitude, longitude,
+              outbreakStartDate, outbreakEndDate, epiUnitType, isCluster,
+              speciesName, isWild, qtyScope,
+              susceptible, cases, deaths, killed, slaughtered, vaccinated
+            FROM INFUR
+            WHERE latitude IS NOT NULL
+              AND longitude IS NOT NULL
+              AND latitude <> 0
+              AND longitude <> 0
+              AND (qtyScope = 'total' OR qtyScope IS NULL OR qtyScope = '')
+            ORDER BY outbreakStartDate DESC, outbreakId DESC
+            """
+        )
+        if result["error"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        points = []
+        seen = set()
+
+        for row in result["data"] or []:
+            country = (row.get("country") or "").strip()
+            if not country or country.lower() in _INFUR_NON_EUROPE:
+                continue
+
+            disease_code = _map_infur_disease(row.get("disease"))
+            if not disease_code:
+                continue
+
+            try:
+                lat = float(row["latitude"])
+                lng = float(row["longitude"])
+            except (TypeError, ValueError):
+                continue
+
+            outbreak_start = _parse_iso_date_prefix(row.get("outbreakStartDate"))
+            event_status = (row.get("eventStatus") or "").strip()
+            if historical:
+                if not _infur_matches_historical_period(outbreak_start, year, quarter):
+                    continue
+            else:
+                in_semester = bool(outbreak_start and outbreak_start >= semester_start)
+                ongoing = event_status.lower() in {"on-going", "ongoing", "stable"}
+                if not in_semester and not ongoing:
+                    continue
+
+            outbreak_id = row.get("outbreakId")
+            species = (row.get("speciesName") or "").strip()
+            dedupe_key = (outbreak_id, species, round(lat, 5), round(lng, 5))
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            points.append(
+                {
+                    "eventId": row.get("eventId"),
+                    "reportId": row.get("reportId"),
+                    "outbreakId": outbreak_id,
+                    "outbreakReference": row.get("outbreakReference"),
+                    "nationalReference": row.get("nationalReference"),
+                    "reportType": row.get("reportType"),
+                    "reportStatus": row.get("reportStatus"),
+                    "eventStatus": event_status,
+                    "country": country,
+                    "disease": disease_code,
+                    "diseaseLabel": row.get("disease"),
+                    "reason": row.get("reason"),
+                    "adminDivision": row.get("adminDivision"),
+                    "location": row.get("location"),
+                    "locationApprox": row.get("locationApprox"),
+                    "latitude": lat,
+                    "longitude": lng,
+                    "outbreakStartDate": outbreak_start,
+                    "outbreakEndDate": _parse_iso_date_prefix(row.get("outbreakEndDate")),
+                    "submissionDate": _parse_iso_date_prefix(row.get("submissionDate")),
+                    "eventStartDate": _parse_iso_date_prefix(row.get("eventStartDate")),
+                    "epiUnitType": _parse_wahis_dict_label(row.get("epiUnitType")),
+                    "speciesName": species or None,
+                    "isWild": row.get("isWild"),
+                    "susceptible": row.get("susceptible"),
+                    "cases": row.get("cases"),
+                    "deaths": row.get("deaths"),
+                    "killed": row.get("killed"),
+                    "slaughtered": row.get("slaughtered"),
+                    "vaccinated": row.get("vaccinated"),
+                }
+            )
+
+        return {
+            "mode": "historical" if historical else "now",
+            "semester": semester_label if not historical else None,
+            "semesterStart": semester_start if not historical else None,
+            "year": year,
+            "quarter": quarter,
+            "count": len(points),
+            "data": points,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/beacon-news")
+async def get_beacon_news(
+    region: str = Query("all", description="FAST region, Europe, or all"),
+    diseases: Optional[str] = Query(
+        None, description="Comma-separated disease codes, e.g. FMD,PPR"
+    ),
+    limit: int = Query(20, ge=1, le=50),
+):
+    """
+    BEACON curated disease news/reports for the Fast Report map filters.
+    Scope: EU + EuFMD neighbourhood countries; filter by FAST region and diseases.
+    """
+    try:
+        codes = [c.strip().upper() for c in (diseases or "").split(",") if c.strip()]
+        return await fetch_beacon_news(region=region, disease_codes=codes, limit=limit)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

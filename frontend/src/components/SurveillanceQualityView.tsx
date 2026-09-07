@@ -395,9 +395,10 @@ interface SurveillanceQualityViewProps {
   filterCountry?: string;
   filterDateFrom?: string;
   filterDateTo?: string;
+  filterDisease?: string;
 }
 
-const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filterNationID, filterCountry, filterDateFrom, filterDateTo }) => {
+const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filterNationID, filterCountry, filterDateFrom, filterDateTo, filterDisease }) => {
   const [timeData, setTimeData] = useState<ResponseTimeBucket[]>([]);
   const [avgDays, setAvgDays] = useState<number | null>(null);
   const [timeLoading, setTimeLoading] = useState(true);
@@ -421,6 +422,7 @@ const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filte
         else if (filterCountry && filterCountry !== 'all') params.append('country', filterCountry);
         if (filterDateFrom) params.append('date_from', filterDateFrom);
         if (filterDateTo) params.append('date_to', filterDateTo);
+        if (filterDisease) params.append('disease', filterDisease);
         const qs = params.toString();
         const res = await fetch(`/api/tcc/surveillance/response-time-distribution${qs ? '?' + qs : ''}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -435,7 +437,7 @@ const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filte
       }
     };
     fetchData();
-  }, [filterNationID, filterCountry, filterDateFrom, filterDateTo]);
+  }, [filterNationID, filterCountry, filterDateFrom, filterDateTo, filterDisease]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -447,6 +449,7 @@ const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filte
         else if (filterCountry && filterCountry !== 'all') params.append('country', filterCountry);
         if (filterDateFrom) params.append('date_from', filterDateFrom);
         if (filterDateTo) params.append('date_to', filterDateTo);
+        if (filterDisease) params.append('disease', filterDisease);
         const qs = params.toString();
         const res = await fetch(`/api/tcc/surveillance/confirmation-methods${qs ? '?' + qs : ''}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -460,7 +463,7 @@ const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filte
       }
     };
     fetchData();
-  }, [filterNationID, filterCountry, filterDateFrom, filterDateTo]);
+  }, [filterNationID, filterCountry, filterDateFrom, filterDateTo, filterDisease]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -472,6 +475,7 @@ const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filte
         else if (filterCountry && filterCountry !== 'all') params.append('country', filterCountry);
         if (filterDateFrom) params.append('date_from', filterDateFrom);
         if (filterDateTo) params.append('date_to', filterDateTo);
+        if (filterDisease) params.append('disease', filterDisease);
         const qs = params.toString();
         const res = await fetch(`/api/tcc/surveillance/trends${qs ? '?' + qs : ''}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -485,7 +489,7 @@ const SurveillanceQualityView: React.FC<SurveillanceQualityViewProps> = ({ filte
       }
     };
     fetchData();
-  }, [filterNationID, filterCountry, filterDateFrom, filterDateTo]);
+  }, [filterNationID, filterCountry, filterDateFrom, filterDateTo, filterDisease]);
 
   const labPct = methodData.find((d) => d.conf_type === 'L')?.percentage || 0;
   const meetsTarget = labPct > 50;

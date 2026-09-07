@@ -15,6 +15,8 @@ interface MultipleSelectOptionsProps {
   borderingCountry?: string; // New prop for bordering country
   borderingCountryOptions?: string[]; // New prop for region-based bordering country dropdown
   onBorderingCountryChange?: (countries: string[]) => void; // Now supports multiple
+  /** When true, only one preset/region may be selected (used for vaccination). */
+  singleSelect?: boolean;
 }
 
 const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
@@ -26,7 +28,8 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   country,
   borderingCountry,
   borderingCountryOptions = [],
-  onBorderingCountryChange
+  onBorderingCountryChange,
+  singleSelect = false
 }) => {
   // Split initial selected options into regular options and admin levels
   const initialRegularOptions = selectedOptions.filter(opt => multipleOptions.includes(opt));
@@ -123,6 +126,14 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
       if (option === "Specify region") {
         setSelectedAdminLevels([]);
       }
+    } else if (singleSelect) {
+      // One preset only; National clears region picks
+      if (option === "Specify region") {
+        setSelectedOptionsLocal([option]);
+      } else {
+        setSelectedOptionsLocal([option]);
+        setSelectedAdminLevels([]);
+      }
     } else {
       const newSelected = [...selectedOptionsLocal, option];
       setSelectedOptionsLocal(newSelected);
@@ -132,6 +143,8 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   const handleAdminLevelChange = (adminLevel: string) => {
     if (selectedAdminLevels.includes(adminLevel)) {
       setSelectedAdminLevels(selectedAdminLevels.filter(level => level !== adminLevel));
+    } else if (singleSelect) {
+      setSelectedAdminLevels([adminLevel]);
     } else {
       setSelectedAdminLevels([...selectedAdminLevels, adminLevel]);
     }
@@ -164,6 +177,9 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
     if (selectedOptionsLocal.includes('Within 50km from the border') && onBorderingCountryChange) {
       onBorderingCountryChange(selectedBorderingCountries);
     }
+    if (singleSelect && finalOptions.length > 1) {
+      finalOptions = [finalOptions[finalOptions.length - 1]];
+    }
     onChange(finalOptions);
     onClose();
   };
@@ -173,14 +189,15 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
       <div className="bg-white p-6 rounded shadow-lg w-96">
-        <h2 className="text-lg font-semibold mb-4">Select</h2>
+        <h2 className="text-lg font-semibold mb-4">{singleSelect ? 'Select one location' : 'Select'}</h2>
 
         {/* Options with Nested Admin Levels */}
         {multipleOptions.map(option => (
           <div key={option}>
             <label className="flex items-center space-x-2">
               <input
-                type="checkbox"
+                type={singleSelect ? 'radio' : 'checkbox'}
+                name={singleSelect ? 'risp-location-preset' : undefined}
                 checked={selectedOptionsLocal.includes(option)}
                 onChange={() => handleOptionChange(option)}
                 className="text-green-greenMain focus:ring-green-greenMain focus:border-green-greenMain"
@@ -203,7 +220,8 @@ const MultipleSelectOptions: React.FC<MultipleSelectOptionsProps> = ({
                         className="flex items-center space-x-2 hover:bg-gray-50 px-1 py-0.5 rounded"
                       >
                         <input
-                          type="checkbox"
+                          type={singleSelect ? 'radio' : 'checkbox'}
+                          name={singleSelect ? 'risp-location-admin' : undefined}
                           checked={selectedAdminLevels.includes(adminLevel.name)}
                           onChange={() => handleAdminLevelChange(adminLevel.name)}
                           className="text-green-greenMain focus:ring-green-greenMain focus:border-green-greenMain"

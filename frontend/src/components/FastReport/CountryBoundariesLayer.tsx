@@ -3,9 +3,16 @@ import { GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   getFeatureCountryName,
+  getFeatureIso3,
+  findPcpEntryForFeature,
   resolveFastReportCountry,
 } from '../../utils/fastReport/countryResolver';
+import { ISO3_TO_FAST_COUNTRY, ISO3_TO_PCP_COUNTRY } from '../../utils/fastReport/countryIso3';
 import { COUNTRY_ZOOM_THRESHOLD } from '../../utils/fastReport/countryAnalytics';
+import {
+  getVaccFillBand,
+  getVaccPatternUrl,
+} from './VaccinationPatternDefs';
 
 type GeoFeature = {
   properties?: Record<string, string | number | undefined>;
@@ -25,10 +32,25 @@ interface CountryBoundariesLayerProps {
   showPcpStyling: boolean;
   pcpData: { Country: string; PCP_Stage: string }[];
   getPcpStageColor: (stage: string) => string;
+  /** When true, fill countries by vaccination dose / flagged band (pattern hatch). */
+  showVaccinationChoropleth?: boolean;
+  /** Country name → total vaccine doses (selected vacc layers). */
+  vaccinationDosesByCountry?: Record<string, number>;
+  /** Countries with Vaccination=1 but no quantitative doses. */
+  vaccinationFlaggedByCountry?: Set<string> | Record<string, boolean>;
   fastReportCountries: string[];
   onCountrySelect: (payload: CountrySelectPayload) => void;
   /** When true, also renders admin_level 1 (district/province) polygons */
   showDistrictBoundaries?: boolean;
+}
+
+function isFlagged(
+  country: string | null,
+  flagged: Set<string> | Record<string, boolean> | undefined
+): boolean {
+  if (!country || !flagged) return false;
+  if (flagged instanceof Set) return flagged.has(country);
+  return !!flagged[country];
 }
 
 const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
@@ -39,19 +61,20 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
   showPcpStyling,
   pcpData,
   getPcpStageColor,
+  showVaccinationChoropleth = false,
+  vaccinationDosesByCountry = {},
+  vaccinationFlaggedByCountry,
   fastReportCountries,
   onCountrySelect,
   showDistrictBoundaries = false,
 }) => {
   const map = useMap();
   const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
-  const interactive = mapZoom >= COUNTRY_ZOOM_THRESHOLD;
+  const interactive =
+    showVaccinationChoropleth ||
+    showPcpStyling ||
+    mapZoom >= COUNTRY_ZOOM_THRESHOLD;
 
-  /**
-   * Filter the GeoJSON features to only include:
-   * - admin_level: 0 (country boundaries) always
-   * - admin_level: 1 (district/province) only when showDistrictBoundaries is true
-   */
   const filteredGeoJsonData = useMemo(() => {
     if (!geoJsonData || !geoJsonData.features) return geoJsonData;
 
@@ -60,40 +83,88 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
       features: geoJsonData.features.filter(
         (feature: { properties?: Record<string, string | number | undefined> }) => {
           const adminLevel = feature.properties?.admin_level;
-          // Always include features without admin_level (backward compatibility)
           if (adminLevel === undefined || adminLevel === null) return true;
-          // Include admin_level 0 (countries) always
           if (adminLevel === 0) return true;
-          // Include admin_level 1 only when showDistrictBoundaries is true
           if (adminLevel === 1) return showDistrictBoundaries;
-          // Include any other levels
           return true;
         }
       ),
     };
   }, [geoJsonData, showDistrictBoundaries]);
 
-  const getStyle = useCallback(
+  const resolveFeature = useCallback(
     (feature?: GeoFeature) => {
       const geoName = feature ? getFeatureCountryName(feature) : '';
-      const resolved = geoName
-        ? resolveFastReportCountry(geoName, fastReportCountries)
+      const iso3 = feature ? getFeatureIso3(feature) : null;
+      const resolved = geoName || iso3
+        ? resolveFastReportCountry(geoName, fastReportCountries, iso3)
         : null;
+      return { geoName, iso3, resolved };
+    },
+    [fastReportCountries]
+  );
+
+  const lookupDoses = useCallback(
+    (geoName: string, resolved: string | null) => {
+      if (resolved && vaccinationDosesByCountry[resolved] != null) {
+        return vaccinationDosesByCountry[resolved];
+      }
+      if (geoName && vaccinationDosesByCountry[geoName] != null) {
+        return vaccinationDosesByCountry[geoName];
+      }
+      return 0;
+    },
+    [vaccinationDosesByCountry]
+  );
+
+  const lookupFlagged = useCallback(
+    (geoName: string, resolved: string | null) => {
+      return isFlagged(resolved, vaccinationFlaggedByCountry) || isFlagged(geoName, vaccinationFlaggedByCountry);
+    },
+    [vaccinationFlaggedByCountry]
+  );
+
+  const getStyle = useCallback(
+    (feature?: GeoFeature) => {
+      const { geoName, iso3, resolved } = resolveFeature(feature);
       const isSelected =
         (resolved && resolved === selectedCountry) ||
         geoName === selectedGeoName ||
-        (selectedCountry && geoName && resolveFastReportCountry(geoName, [selectedCountry]) === selectedCountry);
+        (selectedCountry &&
+          geoName &&
+          resolveFastReportCountry(geoName, [selectedCountry]) === selectedCountry);
 
+      // PCP takes priority over vaccination when both layers are enabled
       if (showPcpStyling && feature) {
-        const pcpEntry = pcpData.find(
-          (e) => e.Country === geoName || e.Country === resolved
-        );
+        const pcpEntry = findPcpEntryForFeature(pcpData, geoName, resolved, iso3);
         const pcpStage = pcpEntry?.PCP_Stage || '';
         return {
           fillColor: getPcpStageColor(pcpStage),
           fillOpacity: isSelected ? 0.75 : 0.6,
           color: isSelected ? '#015039' : '#ffffff',
           weight: isSelected ? 3 : 1,
+        };
+      }
+
+      if (showVaccinationChoropleth && feature) {
+        const doses = lookupDoses(geoName, resolved);
+        const flagged = lookupFlagged(geoName, resolved);
+        const band = getVaccFillBand(doses, flagged);
+        if (band) {
+          const isFlagOnly = band === 'flagged';
+          return {
+            fillColor: getVaccPatternUrl(band),
+            fillOpacity: isSelected ? 0.95 : 0.85,
+            color: isSelected ? '#015039' : isFlagOnly ? '#b45309' : '#0f766e',
+            weight: isSelected ? 3 : 1.25,
+            opacity: 0.9,
+          };
+        }
+        return {
+          fillColor: '#94a3b8',
+          fillOpacity: isSelected ? 0.12 : 0.04,
+          color: isSelected ? '#015039' : '#94a3b8',
+          weight: isSelected ? 2.5 : 1,
         };
       }
 
@@ -115,10 +186,13 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
       };
     },
     [
+      showVaccinationChoropleth,
+      lookupDoses,
+      lookupFlagged,
+      resolveFeature,
       showPcpStyling,
       pcpData,
       getPcpStageColor,
-      fastReportCountries,
       selectedCountry,
       selectedGeoName,
       interactive,
@@ -138,12 +212,21 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
         interactive,
       };
     });
-  }, [getStyle, interactive, mapZoom, selectedCountry, selectedGeoName, showPcpStyling]);
+  }, [
+    getStyle,
+    interactive,
+    mapZoom,
+    selectedCountry,
+    selectedGeoName,
+    showPcpStyling,
+    showVaccinationChoropleth,
+    vaccinationDosesByCountry,
+    vaccinationFlaggedByCountry,
+  ]);
 
   const onEachFeature = useCallback(
     (feature: GeoFeature, layer: L.Layer) => {
-      const geoName = getFeatureCountryName(feature);
-      const resolved = resolveFastReportCountry(geoName, fastReportCountries);
+      const { geoName, iso3, resolved } = resolveFeature(feature);
 
       (layer as L.Layer & { options?: { interactive?: boolean } }).options = {
         ...layer.options,
@@ -151,14 +234,34 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
       };
 
       if (showPcpStyling) {
-        const pcpEntry = pcpData.find(
-          (e) => e.Country === geoName || e.Country === resolved
-        );
+        const pcpEntry = findPcpEntryForFeature(pcpData, geoName, resolved, iso3);
         const pcpStage = pcpEntry?.PCP_Stage || 'No data';
+        const label =
+          resolved ||
+          (iso3
+            ? ISO3_TO_FAST_COUNTRY[iso3] || ISO3_TO_PCP_COUNTRY[iso3]
+            : undefined) ||
+          geoName ||
+          'Country';
         layer.bindPopup(
           `<div style="padding: 8px;">
-            <h3 style="font-weight: bold; margin-bottom: 4px;">${geoName}</h3>
+            <h3 style="font-weight: bold; margin-bottom: 4px;">${label}</h3>
             <p><strong>PCP Stage:</strong> ${pcpStage}</p>
+          </div>`
+        );
+      } else if (showVaccinationChoropleth) {
+        const doses = lookupDoses(geoName, resolved);
+        const flagged = lookupFlagged(geoName, resolved);
+        const doseText =
+          doses > 0
+            ? doses.toLocaleString()
+            : flagged
+              ? 'In place (no dose numbers)'
+              : 'No data';
+        layer.bindPopup(
+          `<div style="padding: 8px;">
+            <h3 style="font-weight: bold; margin-bottom: 4px;">${geoName || resolved || 'Country'}</h3>
+            <p><strong>Vaccine doses:</strong> ${doseText}</p>
           </div>`
         );
       }
@@ -169,7 +272,7 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
           const target = e.target as L.Path;
           target.setStyle({
             weight: 2,
-            fillOpacity: showPcpStyling ? 0.7 : 0.2,
+            fillOpacity: showVaccinationChoropleth || showPcpStyling ? 0.95 : 0.2,
           });
           if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
             target.bringToFront();
@@ -196,9 +299,12 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
     },
     [
       interactive,
+      showVaccinationChoropleth,
       showPcpStyling,
       pcpData,
-      fastReportCountries,
+      lookupDoses,
+      lookupFlagged,
+      resolveFeature,
       onCountrySelect,
       map,
       getStyle,
@@ -207,6 +313,7 @@ const CountryBoundariesLayer: React.FC<CountryBoundariesLayerProps> = ({
 
   return (
     <GeoJSON
+      key={`boundaries-${filteredGeoJsonData?.features?.length || 0}-${showVaccinationChoropleth}-${showPcpStyling}`}
       ref={(instance) => {
         geoJsonLayerRef.current = instance;
       }}
