@@ -156,13 +156,31 @@ interface CountryOutbreakBox {
   position?: [number, number];
 }
 
+/** Default Fast Report frame (SE Europe / neighbourhood) — matches MapContainer. */
+const EUROPE_MAP_CENTER: [number, number] = [47, 28];
+const EUROPE_DEFAULT_ZOOM = 5;
+/** If fitBounds would pull out farther than this, keep the Europe frame instead. */
+const EUROPE_MIN_FIT_ZOOM = 4.5;
+const EUROPE_FRAME_BOUNDS = L.latLngBounds([34, -12], [72, 45]);
+
 const MapController: React.FC<{
   countries: string[];
   countryCoordinates: CountryCoordinates;
   skipFit: boolean;
   /** Optional lat/lng points (e.g. INFUR dots) used when country centroids are empty. */
   pointCoords?: [number, number][];
-}> = ({ countries, countryCoordinates, skipFit, pointCoords = [] }) => {
+  /**
+   * When true (All Regions / Europe), avoid zooming out to worldwide marker spans
+   * that appear on production but not on sparse local data.
+   */
+  preferEuropeFrame?: boolean;
+}> = ({
+  countries,
+  countryCoordinates,
+  skipFit,
+  pointCoords = [],
+  preferEuropeFrame = false,
+}) => {
   const map = useMap();
   const countriesKey = countries.slice().sort().join('|');
   // Avoid building a huge dep string for thousands of INFUR points
@@ -173,6 +191,8 @@ const MapController: React.FC<{
 
   useEffect(() => {
     if (skipFit) return;
+
+    map.invalidateSize();
 
     const coords: [number, number][] = [];
 
@@ -192,16 +212,23 @@ const MapController: React.FC<{
     if (coords.length > 0) {
       const bounds = L.latLngBounds(coords);
       if (bounds.isValid()) {
-        map.fitBounds(bounds.pad(0.12));
+        map.fitBounds(bounds.pad(0.12), { animate: false, maxZoom: 7 });
+        if (preferEuropeFrame && map.getZoom() < EUROPE_MIN_FIT_ZOOM) {
+          map.fitBounds(EUROPE_FRAME_BOUNDS, { animate: false, padding: [24, 24] });
+        }
         return;
       }
     }
 
-    map.setView([50, 20], 3);
+    if (preferEuropeFrame) {
+      map.fitBounds(EUROPE_FRAME_BOUNDS, { animate: false, padding: [24, 24] });
+    } else {
+      map.setView(EUROPE_MAP_CENTER, EUROPE_DEFAULT_ZOOM, { animate: false });
+    }
     // Fit only when the country set / coords change — not on every parent re-render
     // (re-fitting on zoomend → state update was locking zoom).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- countriesKey/pointsKey encode geometry
-  }, [map, countriesKey, countryCoordinates, skipFit, pointsKey]);
+  }, [map, countriesKey, countryCoordinates, skipFit, pointsKey, preferEuropeFrame]);
 
   return null;
 };
@@ -1206,6 +1233,9 @@ const FastReport: React.FC = () => {
                 countryCoordinates={countryCoordinates}
                 skipFit={!!selectedCountry || pcpEnabled}
                 pointCoords={selectedRegion === EUROPE_REGION ? infurPointCoords : []}
+                preferEuropeFrame={
+                  selectedRegion === 'all' || selectedRegion === EUROPE_REGION
+                }
               />
               <FitToGeoJson
                 geoJsonData={geoJsonData}
