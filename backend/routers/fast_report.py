@@ -90,8 +90,8 @@ async def fetch_iso3_coordinates(iso3_codes: List[str]) -> Dict[str, Any]:
         return {}
 
 @router.get("/")
-async def get_fast_reports(current_user: dict = Depends(get_current_user)):
-    """Get all fast report entries"""
+async def get_fast_reports():
+    """Get all fast report entries (public — Fast Report page is unauthenticated)."""
     try:
         result = await db_helper.execute_main_query("SELECT * FROM FAST_Report ORDER BY Year DESC, Quarter DESC")
         if result["error"]:
@@ -101,11 +101,8 @@ async def get_fast_reports(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/by-year/{year}")
-async def get_fast_reports_by_year(
-    year: int,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get fast reports by year"""
+async def get_fast_reports_by_year(year: int):
+    """Get fast reports by year (public)."""
     try:
         result = await db_helper.execute_main_query(
             "SELECT * FROM FAST_Report WHERE Year = %s ORDER BY Quarter DESC",
@@ -118,11 +115,8 @@ async def get_fast_reports_by_year(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/by-country/{country}")
-async def get_fast_reports_by_country(
-    country: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get fast reports by country"""
+async def get_fast_reports_by_country(country: str):
+    """Get fast reports by country (public — used by country click panel)."""
     try:
         result = await db_helper.execute_main_query(
             "SELECT * FROM FAST_Report WHERE Country = %s ORDER BY Year DESC, Quarter DESC",
@@ -135,11 +129,8 @@ async def get_fast_reports_by_country(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/by-region/{region}")
-async def get_fast_reports_by_region(
-    region: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get fast reports by region"""
+async def get_fast_reports_by_region(region: str):
+    """Get fast reports by region (public)."""
     try:
         result = await db_helper.execute_main_query(
             "SELECT * FROM FAST_Report WHERE Region = %s ORDER BY Year DESC, Quarter DESC",
@@ -257,8 +248,8 @@ async def delete_fast_report(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/summary")
-async def get_fast_report_summary(current_user: dict = Depends(get_current_user)):
-    """Get summary statistics for fast reports"""
+async def get_fast_report_summary():
+    """Get summary statistics for fast reports (public)."""
     try:
         # Get counts by year
         year_counts = await db_helper.execute_main_query(

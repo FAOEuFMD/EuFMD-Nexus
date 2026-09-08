@@ -77,9 +77,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
       }
 
       try {
-        const response = await apiService.fastReport.getByCountry(
-          encodeURIComponent(country)
-        );
+        const response = await apiService.fastReport.getByCountry(country);
         if (cancelled) return;
         const data = Array.isArray(response.data) ? response.data : [];
         const cleaned = excludeBefDisease(data as FastReportAnalyticsRow[]);

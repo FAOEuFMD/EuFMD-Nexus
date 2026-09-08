@@ -156,12 +156,13 @@ interface CountryOutbreakBox {
   position?: [number, number];
 }
 
-/** Default Fast Report frame (SE Europe / neighbourhood) — matches MapContainer. */
-const EUROPE_MAP_CENTER: [number, number] = [47, 28];
+/** Default Fast Report frame — SE Europe / neighbourhood, slightly south of geographic Europe mid. */
+const EUROPE_MAP_CENTER: [number, number] = [42, 28];
 const EUROPE_DEFAULT_ZOOM = 5;
 /** If fitBounds would pull out farther than this, keep the Europe frame instead. */
 const EUROPE_MIN_FIT_ZOOM = 4.5;
-const EUROPE_FRAME_BOUNDS = L.latLngBounds([34, -12], [72, 45]);
+/** Trim far north so Balkans / Black Sea sit nearer the viewport centre. */
+const EUROPE_FRAME_BOUNDS = L.latLngBounds([32, -10], [62, 45]);
 
 const MapController: React.FC<{
   countries: string[];
@@ -214,14 +215,22 @@ const MapController: React.FC<{
       if (bounds.isValid()) {
         map.fitBounds(bounds.pad(0.12), { animate: false, maxZoom: 7 });
         if (preferEuropeFrame && map.getZoom() < EUROPE_MIN_FIT_ZOOM) {
-          map.fitBounds(EUROPE_FRAME_BOUNDS, { animate: false, padding: [24, 24] });
+          map.fitBounds(EUROPE_FRAME_BOUNDS, {
+            animate: false,
+            paddingTopLeft: [24, 48],
+            paddingBottomRight: [24, 8],
+          });
         }
         return;
       }
     }
 
     if (preferEuropeFrame) {
-      map.fitBounds(EUROPE_FRAME_BOUNDS, { animate: false, padding: [24, 24] });
+      map.fitBounds(EUROPE_FRAME_BOUNDS, {
+        animate: false,
+        paddingTopLeft: [24, 48],
+        paddingBottomRight: [24, 8],
+      });
     } else {
       map.setView(EUROPE_MAP_CENTER, EUROPE_DEFAULT_ZOOM, { animate: false });
     }
@@ -1144,8 +1153,8 @@ const FastReport: React.FC = () => {
         <div className="flex flex-col lg:flex-row gap-0">
           <div className="flex-1 min-w-0 h-96 lg:h-[600px] relative">
             <MapContainer
-              center={[47, 28]}
-              zoom={6}
+              center={EUROPE_MAP_CENTER}
+              zoom={EUROPE_DEFAULT_ZOOM}
               scrollWheelZoom={true}
               className="h-full w-full"
               zoomControl={true}
