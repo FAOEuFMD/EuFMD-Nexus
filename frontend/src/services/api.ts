@@ -41,10 +41,15 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Only auto-redirect for non-upload endpoints
-      // File upload errors should be handled by the component
-      if (!error.config?.url?.includes('/upload-data') && !error.config?.url?.includes('/api/risp/upload/')) {
-        // Clear token and redirect to login
+      const url = error.config?.url || '';
+      const hadToken = Boolean(
+        error.config?.headers?.Authorization || error.config?.headers?.['x-access-token']
+      );
+      // Don't kick anonymous users off public pages (e.g. Fast Report country panel).
+      // Only clear session + redirect when a sent token was rejected.
+      const isUpload =
+        url.includes('/upload-data') || url.includes('/api/risp/upload/');
+      if (hadToken && !isUpload) {
         localStorage.removeItem('token');
         localStorage.removeItem('auth');
         window.location.href = '/login';
