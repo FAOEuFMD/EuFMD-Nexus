@@ -84,6 +84,7 @@ async def download_risp_template(
     country = current_user.get("country")
     is_soi = _resolve_is_soi(country)
     districts: List[Dict[str, Any]] = []
+    admin_regions: List[str] = []
 
     if is_soi:
         try:
@@ -96,11 +97,14 @@ async def download_risp_template(
             connection.close()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Could not load district list: {e}")
+    else:
+        admin_regions = risp_templates._fetch_risp_admin_regions(country)
 
     return risp_templates.generate_template_response(
         category,
         is_soi=is_soi,
         districts=districts,
+        admin_regions=admin_regions,
         year=year,
         quarter=quarter,
         country=country,
@@ -153,6 +157,7 @@ async def get_country_districts(current_user: dict = Depends(get_current_user)):
 
 # Pydantic models for request/response
 class OutbreakDiseaseData(BaseModel):
+    id: Optional[int] = None  # existing risp_outbreaks.id when editing a line
     disease: str
     number_outbreaks: int
     locations: Optional[List[str]] = []
@@ -268,24 +273,28 @@ async def save_outbreak_data(
     data: OutbreakData,
     current_user: dict = Depends(get_current_user)
 ):
-    """Save outbreak data — one location per disease line from the grid UI.
+    """Save outbreak data — one DB row per location line.
 
+    RISP may submit several lines for the same disease (different locations).
     Uses UPDATE/INSERT only (no DELETE): db_manager_user lacks DELETE privilege.
-    Extra historical rows for the same disease/period are zeroed via UPDATE.
+    Rows for this period that are not in the payload are soft-cleared.
     """
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        
+
         user_id = current_user.get('id')
         country = current_user.get('country')
         is_soi = _resolve_is_soi(country)
         default_program = 'soi' if is_soi else 'risp'
-        
+
         if not data.diseases or len(data.diseases) == 0:
             return {"message": "No outbreak data to save"}
 
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        year_s = str(data.year)
+        quarter = data.quarter
+        touched_ids: List[int] = []
 
         for disease_data in data.diseases:
             loc = (disease_data.location or "").strip() or None
@@ -299,16 +308,6 @@ async def save_outbreak_data(
 
             program = disease_data.program if disease_data.program in ('risp', 'soi') else default_program
             visibility = disease_data.visibility if disease_data.visibility in ('private', 'public') else 'public'
-
-            cursor.execute(
-                """
-                SELECT id FROM risp_outbreaks
-                WHERE user_id = %s AND year = %s AND quarter = %s AND disease_name = %s
-                ORDER BY id
-                """,
-                (user_id, str(data.year), data.quarter, disease_data.disease),
-            )
-            existing_ids = [row["id"] if isinstance(row, dict) else row[0] for row in (cursor.fetchall() or [])]
 
             clear_only = disease_data.number_outbreaks <= 0 and not areas
             data_values = (
@@ -330,7 +329,46 @@ async def save_outbreak_data(
                 visibility,
             )
 
-            if existing_ids:
+            row_id = None
+
+            # Prefer explicit id when the client is editing an existing line
+            if disease_data.id:
+                cursor.execute(
+                    """
+                    SELECT id FROM risp_outbreaks
+                    WHERE id = %s AND user_id = %s AND year = %s AND quarter = %s
+                    LIMIT 1
+                    """,
+                    (disease_data.id, user_id, year_s, quarter),
+                )
+                found = cursor.fetchone()
+                if found:
+                    row_id = found["id"] if isinstance(found, dict) else found[0]
+
+            if row_id is None:
+                match_sql = """
+                    SELECT id FROM risp_outbreaks
+                    WHERE user_id = %s AND year = %s AND quarter = %s AND disease_name = %s
+                """
+                match_params: list = [user_id, year_s, quarter, disease_data.disease]
+                if disease_data.district_id is not None:
+                    match_sql += " AND district_id = %s"
+                    match_params.append(disease_data.district_id)
+                elif loc:
+                    match_sql += " AND location = %s"
+                    match_params.append(loc)
+                else:
+                    match_sql += (
+                        " AND (district_id IS NULL OR district_id = 0)"
+                        " AND (location IS NULL OR location = '')"
+                    )
+                match_sql += " ORDER BY id LIMIT 1"
+                cursor.execute(match_sql, tuple(match_params))
+                found = cursor.fetchone()
+                if found:
+                    row_id = found["id"] if isinstance(found, dict) else found[0]
+
+            if row_id is not None:
                 cursor.execute(
                     """
                     UPDATE risp_outbreaks SET
@@ -354,22 +392,9 @@ async def save_outbreak_data(
                       updated_at = %s
                     WHERE id = %s AND user_id = %s
                     """,
-                    data_values + (now, now, existing_ids[0], user_id),
+                    data_values + (now, now, row_id, user_id),
                 )
-                # Soft-clear sibling rows (e.g. former multi-location splits)
-                if len(existing_ids) > 1:
-                    placeholders = ", ".join(["%s"] * (len(existing_ids) - 1))
-                    cursor.execute(
-                        f"""
-                        UPDATE risp_outbreaks SET
-                          number_outbreaks = 0,
-                          locations = %s,
-                          location = NULL,
-                          updated_at = %s
-                        WHERE user_id = %s AND id IN ({placeholders})
-                        """,
-                        (json.dumps([]), now, user_id, *existing_ids[1:]),
-                    )
+                touched_ids.append(int(row_id))
             elif not clear_only:
                 cursor.execute(
                     """
@@ -387,20 +412,52 @@ async def save_outbreak_data(
                     (
                         user_id,
                         country,
-                        str(data.year),
-                        data.quarter,
+                        year_s,
+                        quarter,
                         disease_data.disease,
                     )
                     + data_values
                     + (now, now),
                 )
-        
+                new_id = cursor.lastrowid
+                if new_id:
+                    touched_ids.append(int(new_id))
+
+        # Soft-clear any other rows for this period that were not in the payload
+        cursor.execute(
+            """
+            SELECT id FROM risp_outbreaks
+            WHERE user_id = %s AND year = %s AND quarter = %s
+            """,
+            (user_id, year_s, quarter),
+        )
+        all_ids = [
+            int(row["id"] if isinstance(row, dict) else row[0])
+            for row in (cursor.fetchall() or [])
+        ]
+        orphan_ids = [i for i in all_ids if i not in set(touched_ids)]
+        if orphan_ids:
+            placeholders = ", ".join(["%s"] * len(orphan_ids))
+            cursor.execute(
+                f"""
+                UPDATE risp_outbreaks SET
+                  number_outbreaks = 0,
+                  locations = %s,
+                  location = NULL,
+                  district_id = NULL,
+                  province_id = NULL,
+                  updated_at = %s
+                WHERE user_id = %s AND id IN ({placeholders})
+                """,
+                (json.dumps([]), now, user_id, *orphan_ids),
+            )
+
         connection.commit()
         cursor.close()
         connection.close()
-        
+
         return {"message": "Outbreak data saved successfully"}
-        
+
     except Exception as e:
         print(f"Error saving outbreak data: {str(e)}")
         print(f"Data received: {data}")

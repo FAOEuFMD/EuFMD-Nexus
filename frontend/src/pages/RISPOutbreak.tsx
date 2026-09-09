@@ -23,6 +23,9 @@ import { useSoiDistricts } from '../hooks/useSoiDistricts';
 import SoiDistrictPicker from '../components/RISP/SoiDistrictPicker';
 import type { SoiDistrict } from '../hooks/useSoiDistricts';
 
+/** RISP may report the same disease at a few locations without using Excel. */
+const MAX_RISP_LINES_PER_DISEASE = 3;
+
 const RISPOutbreak: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -113,6 +116,7 @@ const RISPOutbreak: React.FC = () => {
   ];
 
   const emptyOutbreakFields = () => ({
+    recordId: null as number | null,
     numberOutbreaks: "" as string | number,
     selectedSpecies: [] as string[],
     selectedStatus: [] as string[],
@@ -129,24 +133,33 @@ const RISPOutbreak: React.FC = () => {
     outbreaksAdditionalInfo: "",
   });
 
+  const makeDiseaseLine = (
+    disease: (typeof diseaseOptions)[number],
+    lineIndex: number,
+    outbreakOverrides: Partial<ReturnType<typeof emptyOutbreakFields>> = {}
+  ) => ({
+    id: disease.id,
+    lineKey: `${disease.id}-${lineIndex}-${Math.random().toString(36).slice(2, 8)}`,
+    name: disease.name,
+    isSpeciesModalOpen: false,
+    isSelectedModalOpen: false,
+    isSerotypeModalOpen: false,
+    isControlMeasuresModalOpen: false,
+    isLocationModalOpen: false,
+    outbreakData: {
+      diseaseId: disease.id,
+      diseaseName: disease.name,
+      country: user?.country || "",
+      ...emptyOutbreakFields(),
+      ...outbreakOverrides,
+      year: parseInt(selectedYear, 10),
+      quarter: selectedQuarter,
+    },
+  });
+
   // Create state for each disease with modals and data
-  const [diseases, setDiseases] = useState(
-    diseaseOptions.map(disease => ({
-      ...disease,
-      isSpeciesModalOpen: false,
-      isSelectedModalOpen: false,
-      isSerotypeModalOpen: false,
-      isControlMeasuresModalOpen: false,
-      isLocationModalOpen: false,
-      outbreakData: {
-        diseaseId: disease.id,
-        diseaseName: disease.name,
-        country: user?.country || "",
-        ...emptyOutbreakFields(),
-        year: parseInt(selectedYear),
-        quarter: selectedQuarter
-      }
-    }))
+  const [diseases, setDiseases] = useState(() =>
+    diseaseOptions.map((disease, i) => makeDiseaseLine(disease, i))
   );
 
   const showPopover = (index: number) => {
@@ -181,118 +194,169 @@ const RISPOutbreak: React.FC = () => {
     const loadPreviousData = async () => {
       try {
         console.log('loadPreviousData: Starting to load data for', selectedYear, selectedQuarter);
-        
-        // Reset form first
-        setDiseases(prevDiseases => 
-          prevDiseases.map(disease => ({
-            ...disease,
-            outbreakData: {
-              diseaseId: disease.outbreakData.diseaseId,
-              diseaseName: disease.name,
-              country: user?.country || "",
-              ...emptyOutbreakFields(),
-              numberOutbreaks: 0,
-              year: parseInt(selectedYear),
-              quarter: selectedQuarter
-            }
-          }))
+
+        const response = await rispService.getOutbreaks(
+          parseInt(selectedYear, 10),
+          selectedQuarter,
+          user?.country || ''
         );
 
-        const response = await rispService.getOutbreaks(parseInt(selectedYear), selectedQuarter, user?.country || "");
-        
-        if (response.data && response.data.length > 0) {
-          console.log("Loading outbreak data:", response.data);
-
-          // One grid row per disease — keep first id (ORDER BY disease_name, id).
-          // Extra historical split rows may still exist; skip duplicates.
-          setDiseases(prevDiseases => {
-            const newDiseases = prevDiseases.map(disease => ({
-              ...disease,
-              outbreakData: {
-                diseaseId: disease.outbreakData.diseaseId,
-                diseaseName: disease.name,
-                country: user?.country || "",
-                ...emptyOutbreakFields(),
-                numberOutbreaks: 0,
-                year: parseInt(selectedYear),
-                quarter: selectedQuarter
-              }
-            }));
-            const seenDiseases = new Set<string>();
-
-            for (const record of response.data) {
-              const diseaseKey = (record.disease_name || "").trim();
-              if (!diseaseKey || seenDiseases.has(diseaseKey)) continue;
-              seenDiseases.add(diseaseKey);
-
-              const disease = newDiseases.find(d =>
-                d.name.split(' - ')[0].trim() === diseaseKey
-              );
-              if (!disease) continue;
-
-              try {
-                const locsRaw = record.locations;
-                let locs: string[] = [];
-                if (Array.isArray(locsRaw)) locs = locsRaw;
-                else if (typeof locsRaw === 'string') {
-                  try { locs = JSON.parse(locsRaw || '[]'); } catch { locs = []; }
-                }
-                if (record.location) locs = [record.location];
-                locs = (locs || []).slice(0, 1);
-
-                const parseJsonArray = (value: any): string[] => {
-                  if (Array.isArray(value)) return value;
-                  if (typeof value === 'string') {
-                    try { return JSON.parse(value || '[]'); } catch { return []; }
-                  }
-                  return [];
-                };
-
-                disease.outbreakData = {
-                  diseaseId: disease.outbreakData.diseaseId,
-                  diseaseName: disease.name,
-                  country: user?.country || "",
-                  numberOutbreaks: Number(record.number_outbreaks) || 0,
-                  selectedLocation: locs,
-                  borderingCountry: record.bordering_country || "",
-                  selectedStatus: parseJsonArray(record.status),
-                  selectedSerotype: parseJsonArray(record.serotype),
-                  selectedSpecies: parseJsonArray(record.species),
-                  selectedControlMeasures: parseJsonArray(record.control_measures),
-                  dateSuspected: record.date_suspected
-                    ? String(record.date_suspected).slice(0, 10)
-                    : "",
-                  dateConfirmed: record.date_confirmed
-                    ? String(record.date_confirmed).slice(0, 10)
-                    : "",
-                  latitude: record.latitude ?? "",
-                  longitude: record.longitude ?? "",
-                  districtId: record.district_id ?? null,
-                  provinceId: record.province_id ?? null,
-                  outbreaksAdditionalInfo: record.additional_info || "",
-                  year: parseInt(selectedYear),
-                  quarter: selectedQuarter
-                };
-              } catch (e) {
-                console.error("Error parsing JSON for disease:", disease.name, e);
-              }
+        const parseJsonArray = (value: unknown): string[] => {
+          if (Array.isArray(value)) return value as string[];
+          if (typeof value === 'string') {
+            try {
+              return JSON.parse(value || '[]');
+            } catch {
+              return [];
             }
-            return newDiseases;
+          }
+          return [];
+        };
+
+        const recordToOverrides = (record: any) => {
+          const locsRaw = record.locations;
+          let locs: string[] = [];
+          if (Array.isArray(locsRaw)) locs = locsRaw;
+          else if (typeof locsRaw === 'string') {
+            try {
+              locs = JSON.parse(locsRaw || '[]');
+            } catch {
+              locs = [];
+            }
+          }
+          if (record.location) locs = [record.location];
+          locs = (locs || []).slice(0, 1);
+
+          return {
+            recordId: record.id ?? null,
+            numberOutbreaks: Number(record.number_outbreaks) || 0,
+            selectedLocation: locs,
+            borderingCountry: record.bordering_country || '',
+            selectedStatus: parseJsonArray(record.status),
+            selectedSerotype: parseJsonArray(record.serotype),
+            selectedSpecies: parseJsonArray(record.species),
+            selectedControlMeasures: parseJsonArray(record.control_measures),
+            dateSuspected: record.date_suspected
+              ? String(record.date_suspected).slice(0, 10)
+              : '',
+            dateConfirmed: record.date_confirmed
+              ? String(record.date_confirmed).slice(0, 10)
+              : '',
+            latitude: record.latitude ?? '',
+            longitude: record.longitude ?? '',
+            districtId: record.district_id ?? null,
+            provinceId: record.province_id ?? null,
+            outbreaksAdditionalInfo: record.additional_info || '',
+          };
+        };
+
+        const records = Array.isArray(response.data) ? response.data : [];
+        const activeRecords = records.filter((record: any) => {
+          const n = Number(record.number_outbreaks) || 0;
+          return n > 0 || record.location || record.district_id;
+        });
+
+        if (isSoi) {
+          // SOI: one grid row per disease (first matching record)
+          const lines = diseaseOptions.map((disease, i) => {
+            const key = disease.name.split(' - ')[0].trim();
+            const record = activeRecords.find(
+              (r: any) => (r.disease_name || '').trim() === key
+            );
+            return makeDiseaseLine(disease, i, record ? recordToOverrides(record) : {});
           });
-        } else {
-          console.log("No outbreak data found for this period");
+          setDiseases(lines);
+          return;
         }
+
+        // RISP: one or more lines per disease (max 3), preserve all locations
+        const byDisease = new Map<string, any[]>();
+        for (const record of activeRecords) {
+          const key = (record.disease_name || '').trim();
+          if (!key) continue;
+          const list = byDisease.get(key) || [];
+          if (list.length < MAX_RISP_LINES_PER_DISEASE) {
+            list.push(record);
+            byDisease.set(key, list);
+          }
+        }
+
+        const lines: ReturnType<typeof makeDiseaseLine>[] = [];
+        diseaseOptions.forEach((disease) => {
+          const key = disease.name.split(' - ')[0].trim();
+          const recs = byDisease.get(key) || [];
+          if (recs.length === 0) {
+            lines.push(makeDiseaseLine(disease, 0));
+          } else {
+            recs.forEach((record, lineIdx) => {
+              lines.push(makeDiseaseLine(disease, lineIdx, recordToOverrides(record)));
+            });
+          }
+        });
+        setDiseases(lines);
       } catch (error) {
-        console.error("Error loading outbreak data:", error);
+        console.error('Error loading outbreak data:', error);
       }
     };
 
     if (user?.country) {
-      console.log('useEffect triggered - Loading previous data for year/quarter:', selectedYear, selectedQuarter, 'country:', user?.country);
+      console.log(
+        'useEffect triggered - Loading previous data for year/quarter:',
+        selectedYear,
+        selectedQuarter,
+        'country:',
+        user?.country
+      );
       loadPreviousData();
     }
-  }, [selectedYear, selectedQuarter, user?.country, bulkReloadKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on period / country / bulk upload
+  }, [selectedYear, selectedQuarter, user?.country, bulkReloadKey, isSoi]);
 
+  const countLinesForDisease = (diseaseName: string) =>
+    diseases.filter((d) => d.name === diseaseName).length;
+
+  const addLocationLine = (index: number) => {
+    if (isSoi) return;
+    const source = diseases[index];
+    if (!source) return;
+    if (countLinesForDisease(source.name) >= MAX_RISP_LINES_PER_DISEASE) {
+      alert(`You can add at most ${MAX_RISP_LINES_PER_DISEASE} locations for the same disease.`);
+      return;
+    }
+    const opt = diseaseOptions.find((d) => d.id === source.id);
+    if (!opt) return;
+
+    const newLine = makeDiseaseLine(opt, countLinesForDisease(source.name), {
+      numberOutbreaks: source.outbreakData.numberOutbreaks || 1,
+      selectedSpecies: [...(source.outbreakData.selectedSpecies || [])],
+      selectedStatus: [...(source.outbreakData.selectedStatus || [])],
+      selectedSerotype: [...(source.outbreakData.selectedSerotype || [])],
+      selectedControlMeasures: [...(source.outbreakData.selectedControlMeasures || [])],
+      // Leave location empty so the user picks a different one
+      selectedLocation: [],
+      borderingCountry: '',
+      recordId: null,
+    });
+
+    setDiseases((prev) => {
+      const next = [...prev];
+      // Insert after the last line of this disease
+      let insertAt = index;
+      while (insertAt + 1 < next.length && next[insertAt + 1].name === source.name) {
+        insertAt += 1;
+      }
+      next.splice(insertAt + 1, 0, newLine);
+      return next;
+    });
+  };
+
+  const removeLocationLine = (index: number) => {
+    if (isSoi) return;
+    const target = diseases[index];
+    if (!target) return;
+    if (countLinesForDisease(target.name) <= 1) return;
+    setDiseases((prev) => prev.filter((_, i) => i !== index));
+  };
   // Generic field update function similar to vaccination page
   const handleFieldUpdate = (index: number, field: string, value: any) => {
     setDiseases(prevDiseases => {
@@ -470,11 +534,17 @@ const RISPOutbreak: React.FC = () => {
         lonRaw === '' || lonRaw === null || lonRaw === undefined
           ? null
           : Number(lonRaw);
+      const locList = (disease.outbreakData.selectedLocation || []).slice(0, 1);
+      const displayLoc =
+        !isSoi && locList.length
+          ? formatLocationsForDisplay(locList, disease.outbreakData.borderingCountry || '')
+          : locList;
       return {
+        id: disease.outbreakData.recordId ?? undefined,
         disease: disease.outbreakData.diseaseName.split(' - ')[0].trim(),
         number_outbreaks: parseInt(String(disease.outbreakData.numberOutbreaks)) || 0,
-        locations: (disease.outbreakData.selectedLocation || []).slice(0, 1),
-        location: (disease.outbreakData.selectedLocation || [])[0] || null,
+        locations: displayLoc,
+        location: displayLoc[0] || null,
         bordering_country: disease.outbreakData.borderingCountry || "",
         status: disease.outbreakData.selectedStatus || [],
         serotype: disease.outbreakData.selectedSerotype || [],
@@ -505,7 +575,7 @@ const RISPOutbreak: React.FC = () => {
     console.log('Data being submitted:', diseasesToSubmit);
 
     // Validation - check for diseases with outbreaks > 0
-    const errors = diseasesToSubmit.reduce((acc: string[], diseaseData) => {
+    const errors = diseasesToSubmit.reduce((acc: string[], diseaseData, idx) => {
       // Only validate if there are outbreaks
       if (diseaseData.number_outbreaks > 0) {
         const missing = [];
@@ -516,12 +586,28 @@ const RISPOutbreak: React.FC = () => {
         if (!diseaseData.control_measures.length) missing.push('Control Measures');
 
         if (missing.length > 0) {
-          acc.push(`${diseaseData.disease}: Missing ${missing.join(', ')}`);
+          const locHint = diseaseData.location ? ` @ ${diseaseData.location}` : ` (line ${idx + 1})`;
+          acc.push(`${diseaseData.disease}${locHint}: Missing ${missing.join(', ')}`);
         }
       }
       return acc;
     }, []);
 
+    // RISP: two lines of the same disease must not share the same location
+    if (!isSoi) {
+      const seen = new Map<string, string>();
+      for (const row of diseasesToSubmit) {
+        if (row.number_outbreaks <= 0 || !row.location) continue;
+        const key = `${row.disease}::${row.location}`;
+        if (seen.has(key)) {
+          errors.push(
+            `${row.disease}: location "${row.location}" is used on more than one line — pick different locations or remove a line.`
+          );
+        } else {
+          seen.set(key, row.location);
+        }
+      }
+    }
     if (errors.length > 0) {
       alert('Please fill in all required fields before proceeding:\n\n' + errors.join('\n'));
       setSaving(false);
@@ -566,7 +652,7 @@ const RISPOutbreak: React.FC = () => {
             setBulkReloadKey((k) => k + 1);
           }
         }}
-        pageHint="In this section, report FAST disease outbreaks for the selected quarter. An outbreak is one or more cases in an epidemiological unit (see WOAH glossary). Use one location per disease line (e.g. National); for many locations use Excel bulk upload."
+        pageHint="In this section, report FAST disease outbreaks for the selected quarter. An outbreak is one or more cases in an epidemiological unit (see WOAH glossary). Use one location per line. For RISP you can add up to 3 location lines for the same disease; for many more rows use Excel bulk upload."
       />
 
       <div className="flex gap-2.5 items-center px-7" style={{ maxWidth: '300px' }}>
@@ -653,10 +739,40 @@ const RISPOutbreak: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="border border-gray-300 m-0 p-0">
-                  {diseases.map((disease, index) => (
-                    <tr key={disease.id}>
+                  {diseases.map((disease, index) => {
+                    const linesForDisease = countLinesForDisease(disease.name);
+                    const isExtraLine =
+                      !isSoi &&
+                      diseases.findIndex((d) => d.name === disease.name) !== index;
+                    return (
+                    <tr key={disease.lineKey}>
                       <td className="p-4" style={{ width: '170px' }}>
-                        <p>{disease.name}</p>
+                        <p className="font-medium">{disease.name}</p>
+                        {isExtraLine && (
+                          <p className="text-xs text-gray-500 mt-0.5">Additional location</p>
+                        )}
+                        {!isSoi && !isNoOutbreaks(disease.outbreakData) && (
+                          <div className="mt-2 flex flex-col gap-1">
+                            {!isExtraLine && linesForDisease < MAX_RISP_LINES_PER_DISEASE && (
+                              <button
+                                type="button"
+                                className="text-xs text-green-700 hover:underline text-left"
+                                onClick={() => addLocationLine(index)}
+                              >
+                                + Add location
+                              </button>
+                            )}
+                            {linesForDisease > 1 && (
+                              <button
+                                type="button"
+                                className="text-xs text-red-600 hover:underline text-left"
+                                onClick={() => removeLocationLine(index)}
+                              >
+                                Remove line
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4" style={{ width: '170px' }}>
                         <NumberInput
@@ -996,7 +1112,8 @@ const RISPOutbreak: React.FC = () => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
