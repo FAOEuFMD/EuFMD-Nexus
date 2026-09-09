@@ -6,6 +6,7 @@ from io import BytesIO
 from datetime import date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import httpx
 import openpyxl
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -80,6 +81,17 @@ MARKET_PRODUCTS = ["live", "meat"]
 
 RISP_EMPTY_ROWS = 50
 
+# countriesnow.space often expects English exonyms
+_COUNTRY_ALIASES_FOR_STATES = {
+    "türkiye": "Turkey",
+    "turkiye": "Turkey",
+    "turkey": "Turkey",
+    "iran (islamic republic of)": "Iran",
+    "russian federation": "Russia",
+    "syria": "Syria",
+    "syrian arab republic": "Syria",
+}
+
 HEADER_FILL = PatternFill("solid", fgColor="2E7D32")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
 DATE_CELL_FORMAT = "yyyy-mm-dd"
@@ -122,8 +134,40 @@ def _fetch_soi_districts(cursor, country_id: int) -> List[Dict[str, Any]]:
     return list(cursor.fetchall() or [])
 
 
+def _fetch_risp_admin_regions(country: Optional[str]) -> List[str]:
+    """Same source as the RISP form (countriesnow states) for Excel region dropdowns."""
+    if not country or not str(country).strip():
+        return []
+
+    candidates = [str(country).strip()]
+    alias = _COUNTRY_ALIASES_FOR_STATES.get(candidates[0].lower())
+    if alias and alias not in candidates:
+        candidates.append(alias)
+
+    for name in candidates:
+        try:
+            with httpx.Client(timeout=20.0) as client:
+                response = client.post(
+                    "https://countriesnow.space/api/v0.1/countries/states",
+                    json={"country": name},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                states = (payload.get("data") or {}).get("states") or []
+                names = [s.get("name") for s in states if s.get("name")]
+                if names:
+                    return names
+        except Exception as exc:
+            print(f"Could not load admin regions for '{name}': {exc}")
+    return []
+
+
 def _write_list_column(ws: Worksheet, col: int, values: List[str]) -> str:
     """Write values down a column on a hidden sheet; return absolute range ref."""
+    if not values:
+        ws.cell(row=1, column=col, value="")
+        letter = get_column_letter(col)
+        return f"'{ws.title}'!${letter}$1:${letter}$1"
     for row_idx, value in enumerate(values, start=1):
         ws.cell(row=row_idx, column=col, value=value)
     letter = get_column_letter(col)
@@ -213,10 +257,20 @@ def _build_lists_sheet(wb: openpyxl.Workbook) -> Worksheet:
     return ws
 
 
+def _add_instructions_sheet(wb: openpyxl.Workbook, lines: List[str]) -> None:
+    ws = wb.create_sheet("Instructions", 0)
+    ws["A1"] = "How to fill this template"
+    ws["A1"].font = Font(bold=True, size=12)
+    for idx, line in enumerate(lines, start=3):
+        ws.cell(row=idx, column=1, value=line)
+    ws.column_dimensions["A"].width = 100
+
+
 def build_outbreaks_workbook(
     *,
     is_soi: bool,
     districts: List[Dict[str, Any]],
+    admin_regions: List[str],
     year: Optional[str],
     quarter: Optional[str],
 ) -> openpyxl.Workbook:
@@ -224,26 +278,61 @@ def build_outbreaks_workbook(
     data_ws = wb.active
     data_ws.title = "Outbreaks"
 
-    headers = [
-        "year",
-        "quarter",
-        "disease",
-        "number_outbreaks",
-        "location",
-        "province",
-        "district",
-        "date_suspected",
-        "date_confirmed",
-        "latitude",
-        "longitude",
-        "species",
-        "status",
-        "serotype",
-        "control_measures",
-        "comments",
-        "province_id",
-        "district_id",
-    ]
+    if is_soi:
+        headers = [
+            "year",
+            "quarter",
+            "disease",
+            "number_outbreaks",
+            "province",
+            "district",
+            "date_suspected",
+            "date_confirmed",
+            "latitude",
+            "longitude",
+            "species",
+            "status",
+            "serotype",
+            "control_measures",
+            "comments",
+        ]
+        _add_instructions_sheet(
+            wb,
+            [
+                "SOI: each row is a district in your country (province + district pre-filled).",
+                "Fill disease and outbreak fields only for districts you are reporting.",
+                "Do not rename province/district — upload matches them to the official list by name.",
+                "Leave unused district rows blank (no disease) — they are ignored on upload.",
+            ],
+        )
+    else:
+        headers = [
+            "year",
+            "quarter",
+            "disease",
+            "number_outbreaks",
+            "location",
+            "region",
+            "date_suspected",
+            "date_confirmed",
+            "latitude",
+            "longitude",
+            "species",
+            "status",
+            "serotype",
+            "control_measures",
+            "comments",
+        ]
+        _add_instructions_sheet(
+            wb,
+            [
+                "RISP: choose location = National, Within 50km from the border, Far from the border, or Specify region.",
+                "If location is National / Far from the border / Within 50km… leave region blank.",
+                "If location is Specify region, pick the region from the region dropdown (official list).",
+                "Do not type free-text district names — use the dropdown only.",
+            ],
+        )
+
     _style_header_row(data_ws, headers)
     col = {h: get_column_letter(i + 1) for i, h in enumerate(headers)}
 
@@ -251,11 +340,8 @@ def build_outbreaks_workbook(
         for row_idx, d in enumerate(districts, start=2):
             data_ws.cell(row=row_idx, column=1, value=year or "")
             data_ws.cell(row=row_idx, column=2, value=quarter or "")
-            data_ws.cell(row=row_idx, column=5, value=d["district_name"])
-            data_ws.cell(row=row_idx, column=6, value=d["province_name"])
-            data_ws.cell(row=row_idx, column=7, value=d["district_name"])
-            data_ws.cell(row=row_idx, column=17, value=d["province_id"])
-            data_ws.cell(row=row_idx, column=18, value=d["district_id"])
+            data_ws.cell(row=row_idx, column=5, value=d["province_name"])
+            data_ws.cell(row=row_idx, column=6, value=d["district_name"])
         row_start, row_end = 2, len(districts) + 1
     else:
         for row_idx in range(2, RISP_EMPTY_ROWS + 2):
@@ -271,6 +357,8 @@ def build_outbreaks_workbook(
 
     def add_list(header_key: str, options: List[str], *, allow_blank: bool = True) -> None:
         nonlocal list_col
+        if header_key not in col:
+            return
         range_ref = _write_list_column(lists_ws, list_col, options)
         validations.append((col[header_key], range_ref, allow_blank))
         list_col += 1
@@ -279,14 +367,14 @@ def build_outbreaks_workbook(
     add_list("quarter", QUARTERS)
     if not is_soi:
         add_list("location", OUTBREAK_RISP_LOCATIONS)
+        if admin_regions:
+            add_list("region", admin_regions, allow_blank=True)
     add_list("species", SPECIES_OPTIONS)
     add_list("status", OUTBREAK_STATUS_OPTIONS)
     add_list("serotype", FMD_SEROTYPES, allow_blank=True)
     add_list("control_measures", CONTROL_MEASURES)
 
     for letter, range_ref, allow_blank in validations:
-        if letter == col["location"] and is_soi:
-            continue
         _apply_list_validation(data_ws, letter, row_start, row_end, range_ref, allow_blank=allow_blank)
 
     _apply_date_columns(
@@ -296,13 +384,6 @@ def build_outbreaks_workbook(
         row_end,
     )
 
-    # Lock geo id columns for SOI (read-only guidance via instructions)
-    if is_soi:
-        for row_idx in range(row_start, row_end + 1):
-            for key in ("province_id", "district_id"):
-                cell = data_ws[f"{col[key]}{row_idx}"]
-                cell.fill = PatternFill("solid", fgColor="F3F4F6")
-
     _autosize_columns(data_ws)
     return wb
 
@@ -311,30 +392,62 @@ def build_vaccination_workbook(
     *,
     is_soi: bool,
     districts: List[Dict[str, Any]],
+    admin_regions: List[str],
     year: Optional[str],
 ) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     data_ws = wb.active
     data_ws.title = "Vaccination"
 
-    headers = [
-        "year",
-        "disease",
-        "status",
-        "vaccination_type",
-        "species",
-        "location",
-        "province",
-        "district",
-        "q1",
-        "q2",
-        "q3",
-        "q4",
-        "coverage",
-        "vaccine_details",
-        "province_id",
-        "district_id",
-    ]
+    if is_soi:
+        headers = [
+            "year",
+            "disease",
+            "status",
+            "vaccination_type",
+            "species",
+            "province",
+            "district",
+            "q1",
+            "q2",
+            "q3",
+            "q4",
+            "coverage",
+            "vaccine_details",
+        ]
+        _add_instructions_sheet(
+            wb,
+            [
+                "SOI: each row is a district (province + district pre-filled).",
+                "Fill vaccination fields only for districts you are reporting.",
+                "Do not rename province/district — upload matches them by name.",
+            ],
+        )
+    else:
+        headers = [
+            "year",
+            "disease",
+            "status",
+            "vaccination_type",
+            "species",
+            "location",
+            "region",
+            "q1",
+            "q2",
+            "q3",
+            "q4",
+            "coverage",
+            "vaccine_details",
+        ]
+        _add_instructions_sheet(
+            wb,
+            [
+                "RISP: choose location = National or Specify region.",
+                "If National, leave region blank.",
+                "If Specify region, pick from the region dropdown only (no free text).",
+            ],
+        )
+
     _style_header_row(data_ws, headers)
     col = {h: get_column_letter(i + 1) for i, h in enumerate(headers)}
 
@@ -343,11 +456,8 @@ def build_vaccination_workbook(
     if is_soi and districts:
         for row_idx, d in enumerate(districts, start=2):
             data_ws.cell(row=row_idx, column=1, value=year or "")
-            data_ws.cell(row=row_idx, column=6, value=d["district_name"])
-            data_ws.cell(row=row_idx, column=7, value=d["province_name"])
-            data_ws.cell(row=row_idx, column=8, value=d["district_name"])
-            data_ws.cell(row=row_idx, column=15, value=d["province_id"])
-            data_ws.cell(row=row_idx, column=16, value=d["district_id"])
+            data_ws.cell(row=row_idx, column=6, value=d["province_name"])
+            data_ws.cell(row=row_idx, column=7, value=d["district_name"])
         row_start, row_end = 2, len(districts) + 1
     else:
         for row_idx in range(2, RISP_EMPTY_ROWS + 2):
@@ -361,6 +471,8 @@ def build_vaccination_workbook(
 
     def add_list(header_key: str, options: List[str], *, allow_blank: bool = True) -> None:
         nonlocal list_col
+        if header_key not in col:
+            return
         range_ref = _write_list_column(lists_ws, list_col, options)
         validations.append((col[header_key], range_ref, allow_blank))
         list_col += 1
@@ -371,16 +483,11 @@ def build_vaccination_workbook(
     add_list("species", SPECIES_OPTIONS)
     if not is_soi:
         add_list("location", VACCINATION_RISP_LOCATIONS)
+        if admin_regions:
+            add_list("region", admin_regions, allow_blank=True)
 
     for letter, range_ref, allow_blank in validations:
-        if letter == col["location"] and is_soi:
-            continue
         _apply_list_validation(data_ws, letter, row_start, row_end, range_ref, allow_blank=allow_blank)
-
-    if is_soi:
-        for row_idx in range(row_start, row_end + 1):
-            for key in ("province_id", "district_id"):
-                data_ws[f"{col[key]}{row_idx}"].fill = PatternFill("solid", fgColor="F3F4F6")
 
     _autosize_columns(data_ws)
     return wb
@@ -390,11 +497,11 @@ def build_marketprice_workbook(
     *,
     is_soi: bool,
     districts: List[Dict[str, Any]],
+    admin_regions: List[str],
     year: Optional[str],
     quarter: Optional[str],
 ) -> openpyxl.Workbook:
-    # is_soi / districts unused: market prices are capital vs elsewhere, not per district
-    _ = (is_soi, districts)
+    _ = (is_soi, districts, admin_regions)
     wb = openpyxl.Workbook()
     data_ws = wb.active
     data_ws.title = "Market prices"
@@ -448,6 +555,7 @@ def generate_template_response(
     *,
     is_soi: bool,
     districts: List[Dict[str, Any]],
+    admin_regions: List[str],
     year: Optional[str],
     quarter: Optional[str],
     country: Optional[str],
@@ -457,9 +565,20 @@ def generate_template_response(
         raise HTTPException(status_code=404, detail=f"Unknown template category: {category}")
 
     if category == "vaccination":
-        wb = builder(is_soi=is_soi, districts=districts, year=year)
+        wb = builder(
+            is_soi=is_soi,
+            districts=districts,
+            admin_regions=admin_regions,
+            year=year,
+        )
     else:
-        wb = builder(is_soi=is_soi, districts=districts, year=year, quarter=quarter)
+        wb = builder(
+            is_soi=is_soi,
+            districts=districts,
+            admin_regions=admin_regions,
+            year=year,
+            quarter=quarter,
+        )
 
     suffix = "soi" if is_soi else "risp"
     country_bit = (country or "country").replace(" ", "_")[:40]

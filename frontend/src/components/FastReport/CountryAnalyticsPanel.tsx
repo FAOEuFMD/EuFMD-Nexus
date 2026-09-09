@@ -19,27 +19,56 @@ interface CountryAnalyticsPanelProps {
 }
 
 const PLOT_LAYOUT = {
-  // Top room for title + legend; bottom room for rotated period ticks
-  margin: { t: 72, b: 72, l: 52, r: 12 },
+  // Extra top room so title sits clear of the legend; bottom for angled quarter labels
+  margin: { t: 110, b: 100, l: 56, r: 16 },
   hovermode: 'closest' as const,
   showlegend: true,
   legend: {
     orientation: 'h' as const,
     yanchor: 'bottom' as const,
-    y: 1.08,
+    y: 1.02,
     xanchor: 'left' as const,
     x: 0,
     font: { size: 11 },
+    tracegroupgap: 8,
   },
   xaxis: {
-    tickangle: -45,
+    tickangle: -55,
     automargin: true,
-    tickfont: { size: 10 },
+    tickfont: { size: 9 },
+    ticklabeloverflow: 'allow' as const,
+    // Push rotated labels away from the axis line
+    ticks: 'outside' as const,
+    ticklen: 6,
+    ticklabelstandoff: 10,
   },
   font: { size: 11 },
 };
 
+const PLOT_TITLE = {
+  font: { size: 13 },
+  // Leave space between title and legend underneath
+  y: 0.98,
+  yanchor: 'bottom' as const,
+  pad: { t: 4, b: 22 },
+};
+
 const PLOT_CONFIG = { responsive: true, displayModeBar: false };
+
+/** Thin category ticks when history is long so quarter labels stay readable. */
+function xAxisForPeriods(periods: string[]) {
+  if (periods.length <= 16) {
+    return { ...PLOT_LAYOUT.xaxis };
+  }
+  const every = periods.length > 28 ? 3 : 2;
+  const tickvals = periods.filter((_, i) => i % every === 0);
+  return {
+    ...PLOT_LAYOUT.xaxis,
+    tickmode: 'array' as const,
+    tickvals,
+    ticktext: tickvals,
+  };
+}
 
 function formatNewsDate(raw?: string | null): string {
   if (!raw) return '';
@@ -120,17 +149,19 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
     }
 
     const outbreakEl = outbreakChartRef.current;
+    const periods = traces[0]?.x ?? [];
     Plotly.newPlot(
       outbreakEl,
       traces,
       {
         ...PLOT_LAYOUT,
+        xaxis: xAxisForPeriods(periods),
         yaxis: {
           title: { text: 'Outbreaks', standoff: 8, font: { size: 11 } },
           automargin: true,
           tickfont: { size: 10 },
         },
-        title: { text: 'Outbreaks over time', font: { size: 13 } },
+        title: { ...PLOT_TITLE, text: 'Outbreaks over time' },
       },
       PLOT_CONFIG
     );
@@ -151,18 +182,20 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
       return;
     }
 
+    const periods = traces[0]?.x ?? [];
     Plotly.newPlot(
       vaccinationEl,
       traces,
       {
         ...PLOT_LAYOUT,
         barmode: 'group',
+        xaxis: xAxisForPeriods(periods),
         yaxis: {
           title: { text: 'Doses', standoff: 8, font: { size: 11 } },
           automargin: true,
           tickfont: { size: 10 },
         },
-        title: { text: 'Vaccination doses over time', font: { size: 13 } },
+        title: { ...PLOT_TITLE, text: 'Vaccination doses over time' },
       },
       PLOT_CONFIG
     );
@@ -278,7 +311,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
         {!outbreakStats.hasData ? (
           <p className="text-sm text-gray-500">No outbreak records for this country.</p>
         ) : (
-          <div ref={outbreakChartRef} className="w-full" style={{ minHeight: 300 }} />
+          <div ref={outbreakChartRef} className="w-full" style={{ minHeight: 340 }} />
         )}
       </div>
 
@@ -287,7 +320,7 @@ const CountryAnalyticsPanel: React.FC<CountryAnalyticsPanelProps> = ({
         {!vaccinationStats.hasData ? (
           <p className="text-sm text-gray-500">No vaccination doses recorded.</p>
         ) : (
-          <div ref={vaccinationChartRef} className="w-full" style={{ minHeight: 300 }} />
+          <div ref={vaccinationChartRef} className="w-full" style={{ minHeight: 340 }} />
         )}
       </div>
 

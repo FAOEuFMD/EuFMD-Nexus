@@ -117,8 +117,10 @@ def _resolve_district(
     country_id: int,
     district_id: Optional[int],
     district_name: Optional[str],
-    province_id: Optional[int],
+    province_id: Optional[int] = None,
+    province_name: Optional[str] = None,
 ) -> Tuple[Optional[int], Optional[int], Optional[str]]:
+    """Resolve district/province IDs. Prefer names; accept legacy IDs from older templates."""
     if district_id:
         cursor.execute(
             """
@@ -133,7 +135,6 @@ def _resolve_district(
         row = cursor.fetchone()
         if row:
             return row["district_id"], row["province_id"], row["district_name"]
-        return district_id, province_id, district_name
 
     if not district_name:
         return None, province_id, None
@@ -143,17 +144,51 @@ def _resolve_district(
         SELECT d.id AS district_id, d.name AS district_name, p.id AS province_id
         FROM districts d
         JOIN provinces p ON p.id = d.province_id
-        WHERE p.country_id = %s AND d.name = %s
+        WHERE p.country_id = %s AND LOWER(d.name) = LOWER(%s)
     """
     if province_id:
         query += " AND p.id = %s"
         params.append(province_id)
+    elif province_name:
+        query += " AND LOWER(p.name) = LOWER(%s)"
+        params.append(province_name)
     query += " ORDER BY d.id LIMIT 1"
     cursor.execute(query, tuple(params))
     row = cursor.fetchone()
     if row:
         return row["district_id"], row["province_id"], row["district_name"]
     return None, province_id, district_name
+
+
+def _normalize_risp_location(
+    location: Optional[str],
+    region: Optional[str],
+    *,
+    allow_specify: bool,
+    presets: List[str],
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    RISP Excel: location is a preset; region is required only for Specify region.
+    Returns (stored_location, error_message).
+    """
+    if not location:
+        if region:
+            # Region filled without preset — treat as specify-region shorthand
+            return region, None
+        return None, None
+
+    if location == "Specify region":
+        if not allow_specify:
+            return None, "Specify region is not valid for this template"
+        if not region:
+            return None, "region is required when location is Specify region"
+        return region, None
+
+    if location in presets:
+        return location, None
+
+    # Legacy / free value in location column (e.g. old files or state name directly)
+    return location, None
 
 
 def _import_outbreaks(
@@ -197,27 +232,52 @@ def _import_outbreaks(
             number_outbreaks = 0
 
         location = _cell_str(_get_cell(ws, row_idx, headers, "location"))
+        region = _cell_str(_get_cell(ws, row_idx, headers, "region"))
         district_name = _cell_str(_get_cell(ws, row_idx, headers, "district"))
+        province_name = _cell_str(_get_cell(ws, row_idx, headers, "province"))
+        # Legacy templates may still include IDs
         province_id = _cell_int(_get_cell(ws, row_idx, headers, "province_id"))
         district_id = _cell_int(_get_cell(ws, row_idx, headers, "district_id"))
 
         if is_soi and country_id:
             resolved_district_id, resolved_province_id, resolved_name = _resolve_district(
-                cursor, country_id, district_id, district_name or location, province_id
+                cursor,
+                country_id,
+                district_id,
+                district_name or location,
+                province_id,
+                province_name,
             )
             if not resolved_district_id:
                 errors.append(
                     {
                         "row": row_idx,
-                        "error": f"Could not match district '{district_name or location}' for your country",
+                        "error": (
+                            f"Could not match district "
+                            f"'{district_name or location or ''}'"
+                            f"{f' in province {province_name}' if province_name else ''} "
+                            f"for your country"
+                        ),
                     }
                 )
                 continue
             district_id = resolved_district_id
             province_id = resolved_province_id
             location = resolved_name or district_name or location
-        elif not location and district_name:
-            location = district_name
+        else:
+            location, loc_error = _normalize_risp_location(
+                location,
+                region,
+                allow_specify=True,
+                presets=risp_templates.OUTBREAK_RISP_LOCATIONS,
+            )
+            if loc_error:
+                errors.append({"row": row_idx, "error": loc_error})
+                continue
+            if not location and district_name:
+                location = district_name
+            province_id = None
+            district_id = None
 
         areas = [location] if location else []
         status = _split_list_field(_get_cell(ws, row_idx, headers, "status"))
@@ -348,27 +408,51 @@ def _import_vaccinations(
         )
 
         location = _cell_str(_get_cell(ws, row_idx, headers, "location"))
+        region = _cell_str(_get_cell(ws, row_idx, headers, "region"))
         district_name = _cell_str(_get_cell(ws, row_idx, headers, "district"))
+        province_name = _cell_str(_get_cell(ws, row_idx, headers, "province"))
         province_id = _cell_int(_get_cell(ws, row_idx, headers, "province_id"))
         district_id = _cell_int(_get_cell(ws, row_idx, headers, "district_id"))
 
         if is_soi and country_id:
             resolved_district_id, resolved_province_id, resolved_name = _resolve_district(
-                cursor, country_id, district_id, district_name or location, province_id
+                cursor,
+                country_id,
+                district_id,
+                district_name or location,
+                province_id,
+                province_name,
             )
             if not resolved_district_id:
                 errors.append(
                     {
                         "row": row_idx,
-                        "error": f"Could not match district '{district_name or location}' for your country",
+                        "error": (
+                            f"Could not match district "
+                            f"'{district_name or location or ''}'"
+                            f"{f' in province {province_name}' if province_name else ''} "
+                            f"for your country"
+                        ),
                     }
                 )
                 continue
             district_id = resolved_district_id
             province_id = resolved_province_id
             location = resolved_name or district_name or location
-        elif not location and district_name:
-            location = district_name
+        else:
+            location, loc_error = _normalize_risp_location(
+                location,
+                region,
+                allow_specify=True,
+                presets=risp_templates.VACCINATION_RISP_LOCATIONS,
+            )
+            if loc_error:
+                errors.append({"row": row_idx, "error": loc_error})
+                continue
+            if not location and district_name:
+                location = district_name
+            province_id = None
+            district_id = None
 
         areas = [location] if location else []
         q1 = _cell_int(_get_cell(ws, row_idx, headers, "q1")) or 0

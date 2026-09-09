@@ -156,13 +156,13 @@ interface CountryOutbreakBox {
   position?: [number, number];
 }
 
-/** Default Fast Report frame — SE Europe / neighbourhood, slightly south of geographic Europe mid. */
-const EUROPE_MAP_CENTER: [number, number] = [42, 28];
-const EUROPE_DEFAULT_ZOOM = 5;
+/** Default Fast Report frame — SE Europe / neighbourhood; north trimmed (no Scandinavia). */
+const EUROPE_MAP_CENTER: [number, number] = [40, 26];
+const EUROPE_DEFAULT_ZOOM = 5.5;
 /** If fitBounds would pull out farther than this, keep the Europe frame instead. */
-const EUROPE_MIN_FIT_ZOOM = 4.5;
-/** Trim far north so Balkans / Black Sea sit nearer the viewport centre. */
-const EUROPE_FRAME_BOUNDS = L.latLngBounds([32, -10], [62, 45]);
+const EUROPE_MIN_FIT_ZOOM = 5;
+/** Northern Europe cut off so Balkans / Black Sea / Near East dominate the view. */
+const EUROPE_FRAME_BOUNDS = L.latLngBounds([33, -8], [54, 44]);
 
 const MapController: React.FC<{
   countries: string[];
@@ -217,8 +217,8 @@ const MapController: React.FC<{
         if (preferEuropeFrame && map.getZoom() < EUROPE_MIN_FIT_ZOOM) {
           map.fitBounds(EUROPE_FRAME_BOUNDS, {
             animate: false,
-            paddingTopLeft: [24, 48],
-            paddingBottomRight: [24, 8],
+            paddingTopLeft: [24, 12],
+            paddingBottomRight: [24, 28],
           });
         }
         return;
@@ -228,8 +228,8 @@ const MapController: React.FC<{
     if (preferEuropeFrame) {
       map.fitBounds(EUROPE_FRAME_BOUNDS, {
         animate: false,
-        paddingTopLeft: [24, 48],
-        paddingBottomRight: [24, 8],
+        paddingTopLeft: [24, 12],
+        paddingBottomRight: [24, 28],
       });
     } else {
       map.setView(EUROPE_MAP_CENTER, EUROPE_DEFAULT_ZOOM, { animate: false });
@@ -413,7 +413,7 @@ const FastReport: React.FC = () => {
   const diseaseLayerMatch = useCallback(
     (disease: string) => {
       const layers = diseaseLayers[disease];
-      return !layers || layers.outbreaks || layers.vaccination || layers.status;
+      return !layers || layers.outbreaks || layers.vaccination;
     },
     [diseaseLayers]
   );
@@ -1396,15 +1396,6 @@ const FastReport: React.FC = () => {
                               className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
                             />
                             <span className="text-sm text-gray-700">Vaccination</span>
-                          </label>
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={diseaseLayers[disease]?.status || false}
-                              onChange={() => toggleLayer(disease, 'status')}
-                              className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
-                            />
-                            <span className="text-sm text-gray-700">Disease Status</span>
                           </label>
                           {disease === 'FMD' && (
                             <label className="flex items-center space-x-2 cursor-pointer">

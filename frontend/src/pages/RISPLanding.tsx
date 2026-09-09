@@ -444,14 +444,6 @@ const RISPLanding: React.FC = () => {
         
         {/* Share Information Button - Moved to the right */}
         <div className="flex justify-end space-x-2">
-          <a
-            href="/RISP_Template.xlsx"
-            download
-            className="nav-btn"
-            style={{ textDecoration: 'none', display: 'inline-block' }}
-          >
-            Download Template
-          </a>
           <Link to="/risp/outbreak">
             <button className="nav-btn">Share Information</button>
           </Link>
