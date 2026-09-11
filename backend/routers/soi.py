@@ -106,7 +106,7 @@ async def _main(query: str, params=None):
 
 @router.get("/outbreaks")
 async def get_outbreaks():
-    """Outbreak points for the SOI map (db_manager.risp_outbreaks)."""
+    """Outbreak points for the SOI map / raw table (db_manager.risp_outbreaks, program=soi)."""
     try:
         rows = await _main(
             f"""
@@ -114,6 +114,10 @@ async def get_outbreaks():
               o.country AS Country,
               p.name AS Province,
               d.name AS District,
+              o.location AS Location,
+              o.year AS Year,
+              o.quarter AS Quarter,
+              o.number_outbreaks AS Outbreaks,
               o.additional_info AS Epi_Unit,
               o.latitude AS Latitude,
               o.longitude AS Longitude,
@@ -121,13 +125,15 @@ async def get_outbreaks():
               o.species AS Species,
               o.serotype AS Serotype,
               o.status AS StatusJson,
+              o.control_measures AS ControlMeasures,
               o.date_suspected AS Date_Suspected,
               o.date_confirmed AS Date_Confirmed
             FROM risp_outbreaks o
             LEFT JOIN provinces p ON p.id = o.province_id
             LEFT JOIN districts d ON d.id = o.district_id
             WHERE {OB_ACTIVE}
-            ORDER BY o.date_confirmed DESC, o.date_suspected DESC
+              AND (o.program = 'soi' OR o.program IS NULL OR o.program = '')
+            ORDER BY o.date_confirmed DESC, o.date_suspected DESC, o.id DESC
             """
         )
         data = []
@@ -138,12 +144,20 @@ async def get_outbreaks():
                     "Country": r.get("Country"),
                     "Province": r.get("Province"),
                     "District": r.get("District"),
+                    "Location": r.get("Location") or r.get("District"),
+                    "Year": r.get("Year"),
+                    "Quarter": r.get("Quarter"),
+                    "Outbreaks": r.get("Outbreaks"),
                     "Epi_Unit": r.get("Epi_Unit"),
                     "Latitude": float(r["Latitude"]) if r.get("Latitude") is not None else None,
                     "Longitude": float(r["Longitude"]) if r.get("Longitude") is not None else None,
                     "Disease": r.get("Disease"),
                     "Species": _first_json(r.get("Species")),
                     "Serotype": _first_json(r.get("Serotype")),
+                    "Status": ", ".join(str(x) for x in _parse_json_list(r.get("StatusJson"))),
+                    "Control_Measures": ", ".join(
+                        str(x) for x in _parse_json_list(r.get("ControlMeasures"))
+                    ),
                     "Date_Suspected": str(r["Date_Suspected"]) if r.get("Date_Suspected") else None,
                     "Date_Confirmed": str(r["Date_Confirmed"]) if r.get("Date_Confirmed") else None,
                     "Confirmation_Type": conf,
@@ -158,7 +172,7 @@ async def get_outbreaks():
 
 @router.get("/vaccination")
 async def get_vaccination():
-    """Vaccination rows for SOI choropleth (needs Country + Province)."""
+    """Vaccination rows for SOI choropleth / raw table (needs Country + Province)."""
     try:
         rows = await _main(
             f"""
@@ -166,9 +180,12 @@ async def get_vaccination():
               v.country AS Country,
               p.name AS Province,
               d.name AS District,
+              v.location AS Location,
               v.year AS Year,
               v.q1, v.q2, v.q3, v.q4,
               v.disease_name AS Disease,
+              v.status AS Status,
+              v.vaccination_type AS Vaccination_Type,
               v.vaccine_details AS Vaccination_Campaign,
               v.created_at AS Vaccination_Date,
               v.total AS Vaccination_Doses,
@@ -178,6 +195,7 @@ async def get_vaccination():
             LEFT JOIN provinces p ON p.id = v.province_id
             LEFT JOIN districts d ON d.id = v.district_id
             WHERE {VACC_ACTIVE}
+              AND (v.program = 'soi' OR v.program IS NULL OR v.program = '')
             ORDER BY v.year DESC, v.id DESC
             """
         )
@@ -188,12 +206,15 @@ async def get_vaccination():
                     "Country": r.get("Country"),
                     "Province": r.get("Province"),
                     "District": r.get("District"),
+                    "Location": r.get("Location") or r.get("District"),
                     "Year": r.get("Year"),
                     "Q1": r.get("q1"),
                     "Q2": r.get("q2"),
                     "Q3": r.get("q3"),
                     "Q4": r.get("q4"),
                     "Disease": r.get("Disease"),
+                    "Status": r.get("Status"),
+                    "Vaccination_Type": r.get("Vaccination_Type"),
                     "Vaccination_Campaign": r.get("Vaccination_Campaign"),
                     "Vaccination_Date": str(r["Vaccination_Date"])[:10] if r.get("Vaccination_Date") else None,
                     "Vaccination_Doses": r.get("Vaccination_Doses"),
@@ -221,6 +242,7 @@ async def get_marketprice():
                    price_min, price_max, price_avg, reference
             FROM risp_marketprice mp
             WHERE {MP_ACTIVE}
+              AND (mp.program = 'soi' OR mp.program IS NULL OR mp.program = '')
             ORDER BY year DESC, quarter DESC, country
             """
         )
@@ -248,6 +270,94 @@ async def get_marketprice():
             g[f"{prefix}_Max"] = r.get("price_max")
             g[f"{prefix}_Avg"] = r.get("price_avg")
         return {"data": list(grouped.values())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/raw/marketprice")
+async def get_raw_marketprice():
+    """Flat market-price rows for the SOI Raw data table / Excel download."""
+    try:
+        rows = await _main(
+            f"""
+            SELECT country, year, quarter, species, market_level, product,
+                   price_min, price_max, price_avg, reference
+            FROM risp_marketprice mp
+            WHERE {MP_ACTIVE}
+              AND (mp.program = 'soi' OR mp.program IS NULL OR mp.program = '')
+            ORDER BY year DESC, quarter DESC, country, species, market_level, product
+            """
+        )
+        data = [
+            {
+                "Country": r.get("country"),
+                "Year": r.get("year"),
+                "Quarter": r.get("quarter"),
+                "Species": r.get("species"),
+                "Market_Level": r.get("market_level"),
+                "Product": r.get("product"),
+                "Price_Min": r.get("price_min"),
+                "Price_Max": r.get("price_max"),
+                "Price_Avg": r.get("price_avg"),
+                "Reference": r.get("reference"),
+            }
+            for r in rows
+        ]
+        return {"data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/raw/surveillance")
+async def get_raw_surveillance():
+    """Surveillance rows for SOI countries (risp_surveillance has no program column)."""
+    try:
+        # Match SOI portal country filter list (Nexus name_un + common aliases)
+        soi_countries = (
+            "Armenia",
+            "Azerbaijan",
+            "Georgia",
+            "Iran (Islamic Republic of)",
+            "Iran",
+            "Iraq",
+            "Pakistan",
+            "Russian Federation",
+            "Russia",
+            "Türkiye",
+            "Turkey",
+        )
+        placeholders = ", ".join(["%s"] * len(soi_countries))
+        rows = await _main(
+            f"""
+            SELECT country, year, quarter, disease_name,
+                   CAST(passive_surveillance AS UNSIGNED) AS passive_surveillance,
+                   active_surveillance, details, created_at
+            FROM risp_surveillance
+            WHERE country IN ({placeholders})
+            ORDER BY year DESC, quarter DESC, country, disease_name
+            """,
+            soi_countries,
+        )
+        data = []
+        for r in rows:
+            active = _parse_json_list(r.get("active_surveillance"))
+            data.append(
+                {
+                    "Country": r.get("country"),
+                    "Year": r.get("year"),
+                    "Quarter": r.get("quarter"),
+                    "Disease": r.get("disease_name"),
+                    "Passive_Surveillance": "Yes" if r.get("passive_surveillance") else "No",
+                    "Active_Surveillance": ", ".join(str(x) for x in active) if active else "",
+                    "Details": r.get("details") or "",
+                    "Created_At": str(r["created_at"])[:19] if r.get("created_at") else None,
+                }
+            )
+        return {"data": data}
     except HTTPException:
         raise
     except Exception as e:
