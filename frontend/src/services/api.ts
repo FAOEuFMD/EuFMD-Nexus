@@ -214,6 +214,10 @@ export const apiService = {
     
     getSummary: () =>
       api.get('/api/fast-report/summary'),
+
+    /** Admin-only: last completed quarter FAST executive DOCX */
+    downloadQuarterlyReport: () =>
+      api.get('/api/fast-report/quarterly-report.docx', { responseType: 'blob' }),
   },
 
   // Diagnostic Support endpoints

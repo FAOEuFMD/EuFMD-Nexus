@@ -8,6 +8,7 @@ import VaccineRiskView from '../components/VaccineRiskView';
 import EconomicImpactView from '../components/EconomicImpactView';
 import SurveillanceQualityView from '../components/SurveillanceQualityView';
 import VaccinationOutbreakDynamics from '../components/VaccinationOutbreakDynamics';
+import SoiRawDataView from '../components/SoiRawDataView';
 import { useAuthStore } from '../stores/authStore';
 import { diseaseOptions } from '../services/risp/rispService';
 import {
@@ -125,7 +126,7 @@ const RISPSOI: React.FC = () => {
   const location = useLocation();
   const { user } = useAuthStore();
   const userSoiCountry = useMemo(() => matchSoiCountryName(user?.country), [user?.country]);
-  type DashboardTab = 'spatial' | 'vaccine' | 'economic' | 'surveillance';
+  type DashboardTab = 'spatial' | 'vaccine' | 'economic' | 'surveillance' | 'raw';
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('spatial');
 
   const [filterCountry, setFilterCountry] = useState<string>('all');
@@ -442,6 +443,17 @@ const RISPSOI: React.FC = () => {
                   />
                 </div>
               )}
+              {/* Raw Data Tab Content */}
+              {dashboardTab === 'raw' && (
+                <div className="p-3 h-full overflow-y-auto" style={{ minHeight: '24rem' }} key={`raw-${location.key}`}>
+                  <SoiRawDataView
+                    filterCountry={filterCountry}
+                    filterDisease={filterDisease}
+                    filterDateFrom={filterDateFrom}
+                    filterDateTo={filterDateTo}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Right Sidebar: 2-column layout with tabs + filters */}
@@ -455,6 +467,7 @@ const RISPSOI: React.FC = () => {
                     { key: 'vaccine' as DashboardTab, label: '💉 Vaccine' },
                     { key: 'economic' as DashboardTab, label: '💰 Economic' },
                     { key: 'surveillance' as DashboardTab, label: '🔬 Surveillance' },
+                    { key: 'raw' as DashboardTab, label: '📋 Raw data' },
                   ]).map(tab => (
                     <button
                       key={tab.key}

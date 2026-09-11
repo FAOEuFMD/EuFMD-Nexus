@@ -36,6 +36,8 @@ import {
   buildNewsOnlyInfoBoxes,
   groupBeaconNewsByCountry,
 } from '../utils/fastReport/beaconNews';
+import { useAuthStore } from '../stores/authStore';
+import { apiService } from '../services/api';
 
 async function loadUnCountryBoundaries(iso3Codes: string[]) {
   const codes =
@@ -273,6 +275,8 @@ const FitToGeoJson: React.FC<{
 };
 
 const FastReport: React.FC = () => {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FastReportData[]>([]);
@@ -280,6 +284,7 @@ const FastReport: React.FC = () => {
   const [infurData, setInfurData] = useState<InfurOutbreakPoint[]>([]);
   const [infurLoading, setInfurLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'now' | 'historical'>('now');
+  const [reportGenerating, setReportGenerating] = useState(false);
   const [countryCoordinates, setCountryCoordinates] = useState<CountryCoordinates>({});
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedQuarter, setSelectedQuarter] = useState<string>('all');
@@ -333,6 +338,35 @@ const FastReport: React.FC = () => {
     setSelectedCountry(null);
     setSelectedGeoName(null);
     setSelectedFastReportCountry(null);
+  }, []);
+
+  const handleGenerateQuarterlyReport = useCallback(async () => {
+    setReportGenerating(true);
+    try {
+      const response = await apiService.fastReport.downloadQuarterlyReport();
+      const disposition = response.headers?.['content-disposition'] as string | undefined;
+      const match = disposition?.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || 'FAST_Quarterly_Report.docx';
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data
+          ?.detail ||
+        (err instanceof Error ? err.message : 'Report generation failed');
+      alert(typeof message === 'string' ? message : 'Report generation failed');
+    } finally {
+      setReportGenerating(false);
+    }
   }, []);
 
   const availableYears = useMemo(() => {
@@ -1076,29 +1110,42 @@ const FastReport: React.FC = () => {
               </p>
             )}
           </div>
-          <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewMode('now')}
-              className={`px-4 py-2 text-sm font-medium ${
-                viewMode === 'now'
-                  ? 'bg-[#15736d] text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Now
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('historical')}
-              className={`px-4 py-2 text-sm font-medium border-l border-gray-300 ${
-                viewMode === 'historical'
-                  ? 'bg-[#15736d] text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Historical
-            </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setViewMode('now')}
+                className={`px-4 py-2 text-sm font-medium ${
+                  viewMode === 'now'
+                    ? 'bg-[#15736d] text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Now
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('historical')}
+                className={`px-4 py-2 text-sm font-medium border-l border-gray-300 ${
+                  viewMode === 'historical'
+                    ? 'bg-[#15736d] text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Historical
+              </button>
+            </div>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleGenerateQuarterlyReport}
+                disabled={reportGenerating}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border-2 border-[#1d4ed8] text-[#1d4ed8] bg-white hover:bg-blue-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                title="Download DOCX for the last completed calendar quarter (FAST + INFUR)"
+              >
+                {reportGenerating ? 'Generating…' : 'Generate Quarterly FAST Report'}
+              </button>
+            )}
           </div>
         </div>
         {viewMode === 'now' && (

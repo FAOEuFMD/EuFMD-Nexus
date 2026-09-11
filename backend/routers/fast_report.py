@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi.responses import StreamingResponse
 from typing import List, Dict, Any, Optional
 import ast
+import io
 import httpx
 from datetime import datetime
 from models import FastReportEntry, ResponseModel
@@ -567,3 +569,27 @@ async def get_beacon_news(
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/quarterly-report.docx")
+async def download_quarterly_fast_report(current_user: dict = Depends(get_current_user)):
+    """
+    Admin-only: generate the quarterly FAST executive DOCX for the last completed
+    calendar quarter (FAST_Report + WAHIS INFUR).
+    """
+    role = (current_user.get("role") or current_user.get("user_role") or "").lower()
+    if role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+    try:
+        from services.fast_quarterly_report import generate_quarterly_fast_docx
+
+        docx_bytes, year, quarter = await generate_quarterly_fast_docx()
+        filename = f"FAST_Quarterly_Report_{year}_Q{quarter}.docx"
+        return StreamingResponse(
+            io.BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")
